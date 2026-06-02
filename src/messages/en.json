@@ -1,0 +1,146 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "income": "Add Income",
+    "expense": "Add Expense",
+    "dailyReport": "Daily Report",
+    "monthlyReport": "Monthly Report",
+    "balance": "Balance",
+    "debts": "Debts",
+    "logout": "Logout"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "todayIncome": "Today's Income",
+    "todayExpense": "Today's Expense",
+    "todayProfit": "Today's Profit",
+    "monthIncome": "Month Income",
+    "monthExpense": "Month Expense",
+    "monthProfit": "Month Profit",
+    "cashBalance": "Cash",
+    "terminalBalance": "Terminal",
+    "bankBalance": "QR / Bank",
+    "debtBalance": "Debts",
+    "totalBalance": "Total Balance"
+  },
+  "income": {
+    "title": "Add Income",
+    "amount": "Amount",
+    "paymentMethod": "Payment Method",
+    "category": "Category",
+    "comment": "Comment",
+    "date": "Date",
+    "submit": "Save",
+    "success": "Income added",
+    "methods": {
+      "cash": "Cash",
+      "terminal": "Terminal",
+      "qr": "QR Code",
+      "transfer": "Transfer",
+      "debt": "Debt"
+    },
+    "categories": {
+      "game_time": "Game Time",
+      "food": "Food",
+      "drinks": "Drinks",
+      "other": "Other"
+    }
+  },
+  "expense": {
+    "title": "Add Expense",
+    "amount": "Amount",
+    "category": "Category",
+    "paymentSource": "Payment Source",
+    "comment": "Comment",
+    "date": "Date",
+    "submit": "Save",
+    "success": "Expense added",
+    "sources": {
+      "cash": "Cash",
+      "terminal": "Terminal",
+      "bank": "Bank"
+    },
+    "categories": {
+      "rent": "Rent",
+      "salary": "Salary",
+      "electricity": "Electricity",
+      "internet": "Internet",
+      "repair": "Repair",
+      "cleaning": "Cleaning",
+      "food_drinks": "Food / Drinks",
+      "marketing": "Marketing",
+      "equipment": "Equipment",
+      "tax": "Tax",
+      "other": "Other"
+    }
+  },
+  "dailyReport": {
+    "title": "Daily Report",
+    "date": "Date",
+    "income": "Income",
+    "expense": "Expense",
+    "profit": "Profit",
+    "noData": "No data"
+  },
+  "monthlyReport": {
+    "title": "Monthly Report",
+    "selectMonth": "Select Month",
+    "income": "Income",
+    "expense": "Expense",
+    "profit": "Profit",
+    "byCategory": "By Category",
+    "byMethod": "By Payment Method",
+    "export": "Export Excel",
+    "exportCsv": "Export CSV"
+  },
+  "balance": {
+    "title": "Balance",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "correction": "Correction",
+    "amount": "Amount",
+    "account": "Account",
+    "comment": "Comment",
+    "submit": "Apply",
+    "movements": "Movement History",
+    "success": "Operation completed"
+  },
+  "debts": {
+    "title": "Debts",
+    "addDebt": "Add Debt",
+    "customerName": "Customer Name",
+    "amount": "Amount",
+    "comment": "Comment",
+    "date": "Date",
+    "status": "Status",
+    "unpaid": "Unpaid",
+    "paid": "Paid",
+    "markPaid": "Mark as Paid",
+    "paymentMethod": "Payment Method",
+    "submit": "Save",
+    "success": "Debt updated"
+  },
+  "auth": {
+    "login": "Login",
+    "email": "Email",
+    "password": "Password",
+    "loginError": "Invalid email or password",
+    "title": "Sign in"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "confirm": "Confirm",
+    "search": "Search",
+    "total": "Total",
+    "currency": "UZS",
+    "sum": "sum",
+    "error": "Error",
+    "success": "Success",
+    "required": "Required field",
+    "invalidAmount": "Enter a valid amount"
+  }
+}

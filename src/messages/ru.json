@@ -1,0 +1,146 @@
+{
+  "nav": {
+    "dashboard": "Главная",
+    "income": "Добавить доход",
+    "expense": "Добавить расход",
+    "dailyReport": "Ежедневный отчёт",
+    "monthlyReport": "Месячный отчёт",
+    "balance": "Баланс",
+    "debts": "Долги",
+    "logout": "Выйти"
+  },
+  "dashboard": {
+    "title": "Панель управления",
+    "todayIncome": "Доход сегодня",
+    "todayExpense": "Расход сегодня",
+    "todayProfit": "Прибыль сегодня",
+    "monthIncome": "Доход за месяц",
+    "monthExpense": "Расход за месяц",
+    "monthProfit": "Прибыль за месяц",
+    "cashBalance": "Наличные",
+    "terminalBalance": "Терминал",
+    "bankBalance": "QR / Банк",
+    "debtBalance": "Долги",
+    "totalBalance": "Общий баланс"
+  },
+  "income": {
+    "title": "Добавить доход",
+    "amount": "Сумма",
+    "paymentMethod": "Способ оплаты",
+    "category": "Категория",
+    "comment": "Комментарий",
+    "date": "Дата",
+    "submit": "Сохранить",
+    "success": "Доход добавлен",
+    "methods": {
+      "cash": "Наличные",
+      "terminal": "Терминал",
+      "qr": "QR-код",
+      "transfer": "Перевод",
+      "debt": "Долг"
+    },
+    "categories": {
+      "game_time": "Игровое время",
+      "food": "Еда",
+      "drinks": "Напитки",
+      "other": "Другое"
+    }
+  },
+  "expense": {
+    "title": "Добавить расход",
+    "amount": "Сумма",
+    "category": "Категория",
+    "paymentSource": "Источник оплаты",
+    "comment": "Комментарий",
+    "date": "Дата",
+    "submit": "Сохранить",
+    "success": "Расход добавлен",
+    "sources": {
+      "cash": "Наличные",
+      "terminal": "Терминал",
+      "bank": "Банк"
+    },
+    "categories": {
+      "rent": "Аренда",
+      "salary": "Зарплата",
+      "electricity": "Электричество",
+      "internet": "Интернет",
+      "repair": "Ремонт",
+      "cleaning": "Уборка",
+      "food_drinks": "Еда / Напитки",
+      "marketing": "Маркетинг",
+      "equipment": "Оборудование",
+      "tax": "Налог",
+      "other": "Другое"
+    }
+  },
+  "dailyReport": {
+    "title": "Ежедневный отчёт",
+    "date": "Дата",
+    "income": "Доход",
+    "expense": "Расход",
+    "profit": "Прибыль",
+    "noData": "Нет данных"
+  },
+  "monthlyReport": {
+    "title": "Месячный отчёт",
+    "selectMonth": "Выберите месяц",
+    "income": "Доход",
+    "expense": "Расход",
+    "profit": "Прибыль",
+    "byCategory": "По категориям",
+    "byMethod": "По способу оплаты",
+    "export": "Экспорт Excel",
+    "exportCsv": "Экспорт CSV"
+  },
+  "balance": {
+    "title": "Баланс",
+    "deposit": "Пополнение",
+    "withdraw": "Снятие",
+    "correction": "Корректировка",
+    "amount": "Сумма",
+    "account": "Счёт",
+    "comment": "Комментарий",
+    "submit": "Применить",
+    "movements": "История движений",
+    "success": "Операция выполнена"
+  },
+  "debts": {
+    "title": "Долги",
+    "addDebt": "Добавить долг",
+    "customerName": "Имя клиента",
+    "amount": "Сумма",
+    "comment": "Комментарий",
+    "date": "Дата",
+    "status": "Статус",
+    "unpaid": "Не оплачено",
+    "paid": "Оплачено",
+    "markPaid": "Отметить оплаченным",
+    "paymentMethod": "Способ оплаты при погашении",
+    "submit": "Сохранить",
+    "success": "Долг обновлён"
+  },
+  "auth": {
+    "login": "Войти",
+    "email": "Email",
+    "password": "Пароль",
+    "loginError": "Неверный email или пароль",
+    "title": "Вход в систему"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "confirm": "Подтвердить",
+    "search": "Поиск",
+    "total": "Итого",
+    "currency": "сум",
+    "sum": "сум",
+    "error": "Ошибка",
+    "success": "Успешно",
+    "required": "Обязательное поле",
+    "invalidAmount": "Введите корректную сумму"
+  }
+}

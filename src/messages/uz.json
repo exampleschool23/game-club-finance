@@ -1,0 +1,146 @@
+{
+  "nav": {
+    "dashboard": "Bosh sahifa",
+    "income": "Daromad qo'shish",
+    "expense": "Xarajat qo'shish",
+    "dailyReport": "Kunlik hisobot",
+    "monthlyReport": "Oylik hisobot",
+    "balance": "Balans",
+    "debts": "Qarzlar",
+    "logout": "Chiqish"
+  },
+  "dashboard": {
+    "title": "Boshqaruv paneli",
+    "todayIncome": "Bugungi daromad",
+    "todayExpense": "Bugungi xarajat",
+    "todayProfit": "Bugungi foyda",
+    "monthIncome": "Oylik daromad",
+    "monthExpense": "Oylik xarajat",
+    "monthProfit": "Oylik foyda",
+    "cashBalance": "Naqd pul",
+    "terminalBalance": "Terminal",
+    "bankBalance": "QR / Bank",
+    "debtBalance": "Qarzlar",
+    "totalBalance": "Umumiy balans"
+  },
+  "income": {
+    "title": "Daromad qo'shish",
+    "amount": "Miqdor",
+    "paymentMethod": "To'lov usuli",
+    "category": "Kategoriya",
+    "comment": "Izoh",
+    "date": "Sana",
+    "submit": "Saqlash",
+    "success": "Daromad qo'shildi",
+    "methods": {
+      "cash": "Naqd pul",
+      "terminal": "Terminal",
+      "qr": "QR-kod",
+      "transfer": "O'tkazma",
+      "debt": "Qarz"
+    },
+    "categories": {
+      "game_time": "O'yin vaqti",
+      "food": "Ovqat",
+      "drinks": "Ichimliklar",
+      "other": "Boshqa"
+    }
+  },
+  "expense": {
+    "title": "Xarajat qo'shish",
+    "amount": "Miqdor",
+    "category": "Kategoriya",
+    "paymentSource": "To'lov manbai",
+    "comment": "Izoh",
+    "date": "Sana",
+    "submit": "Saqlash",
+    "success": "Xarajat qo'shildi",
+    "sources": {
+      "cash": "Naqd pul",
+      "terminal": "Terminal",
+      "bank": "Bank"
+    },
+    "categories": {
+      "rent": "Ijara",
+      "salary": "Maosh",
+      "electricity": "Elektr",
+      "internet": "Internet",
+      "repair": "Ta'mirlash",
+      "cleaning": "Tozalash",
+      "food_drinks": "Ovqat / Ichimliklar",
+      "marketing": "Marketing",
+      "equipment": "Jihozlar",
+      "tax": "Soliq",
+      "other": "Boshqa"
+    }
+  },
+  "dailyReport": {
+    "title": "Kunlik hisobot",
+    "date": "Sana",
+    "income": "Daromad",
+    "expense": "Xarajat",
+    "profit": "Foyda",
+    "noData": "Ma'lumot yo'q"
+  },
+  "monthlyReport": {
+    "title": "Oylik hisobot",
+    "selectMonth": "Oy tanlang",
+    "income": "Daromad",
+    "expense": "Xarajat",
+    "profit": "Foyda",
+    "byCategory": "Kategoriya bo'yicha",
+    "byMethod": "To'lov usuli bo'yicha",
+    "export": "Excel eksport",
+    "exportCsv": "CSV eksport"
+  },
+  "balance": {
+    "title": "Balans",
+    "deposit": "Kirim",
+    "withdraw": "Chiqim",
+    "correction": "Tuzatish",
+    "amount": "Miqdor",
+    "account": "Hisob",
+    "comment": "Izoh",
+    "submit": "Qo'llash",
+    "movements": "Harakatlar tarixi",
+    "success": "Amaliyot bajarildi"
+  },
+  "debts": {
+    "title": "Qarzlar",
+    "addDebt": "Qarz qo'shish",
+    "customerName": "Mijoz ismi",
+    "amount": "Miqdor",
+    "comment": "Izoh",
+    "date": "Sana",
+    "status": "Holat",
+    "unpaid": "To'lanmagan",
+    "paid": "To'langan",
+    "markPaid": "To'langan deb belgilash",
+    "paymentMethod": "To'lov usuli",
+    "submit": "Saqlash",
+    "success": "Qarz yangilandi"
+  },
+  "auth": {
+    "login": "Kirish",
+    "email": "Email",
+    "password": "Parol",
+    "loginError": "Noto'g'ri email yoki parol",
+    "title": "Tizimga kirish"
+  },
+  "common": {
+    "loading": "Yuklanmoqda...",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "delete": "O'chirish",
+    "edit": "Tahrirlash",
+    "confirm": "Tasdiqlash",
+    "search": "Qidirish",
+    "total": "Jami",
+    "currency": "so'm",
+    "sum": "so'm",
+    "error": "Xato",
+    "success": "Muvaffaqiyatli",
+    "required": "Majburiy maydon",
+    "invalidAmount": "To'g'ri miqdor kiriting"
+  }
+}
