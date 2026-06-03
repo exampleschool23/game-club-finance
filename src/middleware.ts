@@ -25,17 +25,17 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getSession() reads from cookie — no network call, instant
+  const { data: { session } } = await supabase.auth.getSession();
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
+  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
 
-  if (!user && !isAuthPage) {
+  if (!session && !isAuthPage && !isAuthCallback) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (user && isAuthPage) {
+  if (session && isAuthPage) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

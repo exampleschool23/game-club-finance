@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 
 const LANGUAGES = [
@@ -9,12 +10,13 @@ const LANGUAGES = [
 ];
 
 export function LanguageSwitcher() {
-  const [, startTransition] = useTransition();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
   function switchLocale(locale: string) {
+    document.cookie = `locale=${locale}; path=/; max-age=31536000`;
     startTransition(() => {
-      document.cookie = `locale=${locale}; path=/; max-age=31536000`;
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -28,10 +30,11 @@ export function LanguageSwitcher() {
         <button
           key={lang.code}
           onClick={() => switchLocale(lang.code)}
-          className={`text-xs px-2 py-1 rounded font-medium transition-colors ${
+          disabled={isPending}
+          className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors disabled:opacity-60 ${
             current === lang.code
               ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              : 'text-slate-300 hover:bg-white/10 hover:text-white'
           }`}
         >
           {lang.label}

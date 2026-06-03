@@ -8,6 +8,9 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
+
+  // getUser() verifies the JWT with Supabase Auth (secure)
+  // Layout only runs on first load / hard refresh, not on client navigations
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
