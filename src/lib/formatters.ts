@@ -50,3 +50,15 @@ export function formatDateOnly(value: string | Date | null | undefined): string 
     year: 'numeric',
   }).format(date);
 }
+
+/**
+ * Format an ISO date for compact date picker controls.
+ * Output: "03/06/2026"
+ */
+export function formatDatePickerValue(value: string | null | undefined): string {
+  if (!value) return '-';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return '-';
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
+}

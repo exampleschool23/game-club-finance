@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import {
   Banknote,
   Calendar,
+  ChevronDown,
   Clock3,
   CreditCard,
   Edit3,
@@ -20,7 +21,7 @@ import { createClient } from '@/lib/supabase/client';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
 import { formatCurrency, todayIso } from '@/lib/utils';
-import { formatDateTime } from '@/lib/formatters';
+import { formatDateOnly, formatDatePickerValue, formatDateTime } from '@/lib/formatters';
 import type { DailyCashEntry, UserRole } from '@/types';
 
 interface CashFormData {
@@ -29,6 +30,11 @@ interface CashFormData {
   terminal_income: string;
   card_income: string;
   comment: string;
+}
+
+interface BarSummary {
+  sales: number;
+  profit: number;
 }
 
 const emptyForm = (date = todayIso()): CashFormData => ({
@@ -128,6 +134,7 @@ export default function DailyCashPage() {
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => new Date());
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+  const [barSummary, setBarSummary] = useState<BarSummary>({ sales: 0, profit: 0 });
 
   const fetchExisting = useCallback(
     async (date: string) => {
@@ -136,19 +143,39 @@ export default function DailyCashPage() {
       setMessage('');
       setError('');
 
-      const { data, error: fetchError } = await supabase
-        .from('daily_cash_entries')
-        .select('*')
-        .eq('date', date)
-        .maybeSingle();
+      const [cashRes, barRes] = await Promise.all([
+        supabase
+          .from('daily_cash_entries')
+          .select('*')
+          .eq('date', date)
+          .maybeSingle(),
+        supabase
+          .from('daily_stock_counts')
+          .select('bar_income,bar_profit')
+          .eq('date', date),
+      ]);
 
-      if (fetchError) {
-        setError(fetchError.message);
+      const { data, error: fetchError } = cashRes;
+
+      if (fetchError || barRes.error) {
+        setError(fetchError?.message ?? barRes.error?.message ?? tc('error'));
         setEntry(null);
         setForm(emptyForm(date));
+        setBarSummary({ sales: 0, profit: 0 });
         setLoading(false);
         return;
       }
+
+      const stockRows = (barRes.data ?? []) as Array<{ bar_income: number | null; bar_profit: number | null }>;
+      setBarSummary(
+        stockRows.reduce(
+          (acc, row) => ({
+            sales: acc.sales + Number(row.bar_income ?? 0),
+            profit: acc.profit + Number(row.bar_profit ?? 0),
+          }),
+          { sales: 0, profit: 0 },
+        ),
+      );
 
       const cashEntry = data as DailyCashEntry | null;
       setEntry(cashEntry);
@@ -222,6 +249,7 @@ export default function DailyCashPage() {
   );
 
   const total = calculateGameClubIncome(values);
+  const netProfit = total + barSummary.profit;
   const editable = entry ? canEditEntryForRole(currentRole, entry.created_at, now) : true;
   const locked = Boolean(entry && !editable);
   const deadline = entry ? getEditDeadline(entry.created_at) : null;
@@ -328,18 +356,24 @@ export default function DailyCashPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full sm:w-56">
             <label className="mb-2 block text-sm font-semibold text-gray-700">{t('date')}</label>
-            <div className="relative">
-              <Calendar
-                size={17}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
-              />
+            <label className="relative block h-11 w-full cursor-pointer sm:w-[300px]">
               <input
                 type="date"
-                className="h-12 w-full rounded-lg border border-gray-200 bg-white pl-11 pr-4 font-semibold text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 value={form.date}
+                onClick={(event) => event.currentTarget.showPicker?.()}
                 onChange={(event) => setField('date', event.target.value)}
               />
-            </div>
+              <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+                <Calendar size={17} className="shrink-0 text-gray-500" />
+                <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(form.date)}</span>
+                <span className="hidden h-5 w-px bg-gray-200 sm:block" />
+                <span className="hidden min-w-0 flex-1 truncate font-semibold text-gray-700 sm:block">
+                  {formatDateOnly(form.date)}
+                </span>
+                <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
+              </span>
+            </label>
           </div>
 
           {entry && deadline && editable && (
@@ -425,6 +459,27 @@ export default function DailyCashPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
               <TrendingUp size={22} className="text-green-600" />
             </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-500">{t('barSales')}</p>
+            <p className="mt-2 text-2xl font-bold text-gray-950">
+              {formatCurrency(barSummary.sales)} <span className="text-sm font-semibold text-gray-500">UZS</span>
+            </p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-500">{t('barProfit')}</p>
+            <p className="mt-2 text-2xl font-bold text-green-600">
+              {formatCurrency(barSummary.profit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
+            </p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <p className="text-sm font-semibold text-gray-500">{t('netProfit')}</p>
+            <p className="mt-2 text-2xl font-bold text-primary-600">
+              {formatCurrency(netProfit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
+            </p>
           </div>
         </div>
 

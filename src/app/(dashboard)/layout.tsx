@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient, getServerProfile } from '@/lib/supabase/server';
+import { getServerProfile, getServerUser } from '@/lib/supabase/server';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 
 export default async function DashboardLayout({
@@ -7,13 +7,9 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  const user = await getServerUser();
 
-  // getSession() reads from the cookie — no Supabase Auth network call.
-  // Security is enforced by middleware (which does getUser-level validation).
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session) {
+  if (!user) {
     redirect('/login');
   }
 
@@ -24,7 +20,7 @@ export default async function DashboardLayout({
   return (
     <DashboardShell
       role={profile?.role ?? 'viewer'}
-      fullName={profile?.full_name ?? session.user.email ?? ''}
+      fullName={profile?.full_name ?? user.email ?? ''}
     >
       {children}
     </DashboardShell>

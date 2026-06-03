@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDateTime, formatDateOnly } from './formatters';
+import { formatDateTime, formatDateOnly, formatDatePickerValue } from './formatters';
 
 describe('formatDateTime', () => {
   it('formats a full ISO datetime string', () => {
@@ -39,5 +39,15 @@ describe('formatDateOnly', () => {
 
   it('returns "-" for an invalid string', () => {
     expect(formatDateOnly('bad')).toBe('-');
+  });
+});
+
+describe('formatDatePickerValue', () => {
+  it('formats an ISO date for compact date controls', () => {
+    expect(formatDatePickerValue('2026-06-03')).toBe('03/06/2026');
+  });
+
+  it('returns "-" for invalid input', () => {
+    expect(formatDatePickerValue('bad')).toBe('-');
   });
 });

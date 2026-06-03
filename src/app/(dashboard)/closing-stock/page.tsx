@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, todayIso } from '@/lib/utils';
-import { formatDateOnly } from '@/lib/formatters';
+import { formatDateOnly, formatDatePickerValue } from '@/lib/formatters';
 import {
   calculateClosingStockDefaults,
   calculateStockCountSummary,
@@ -23,11 +23,24 @@ import {
   TrendingUp,
   Upload,
 } from 'lucide-react';
-import type { Product } from '@/types';
+import type { Product, UserRole } from '@/types';
 
 interface PurchaseQuantity {
   product_id: string;
   quantity: number;
+}
+
+interface StockCountRow {
+  product_id: string;
+  previous_stock: number;
+  added_today: number;
+  closing_stock: number;
+  sale_price: number;
+  cost_price: number;
+  products?:
+    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'is_active' | 'created_at' | 'updated_at'>
+    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'is_active' | 'created_at' | 'updated_at'>[]
+    | null;
 }
 
 interface RowData {
@@ -56,6 +69,7 @@ function initials(name: string) {
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
+  const today = todayIso();
   const [date, setDate] = useState(todayIso());
   const [rows, setRows] = useState<RowData[]>([]);
   const [query, setQuery] = useState('');
@@ -63,10 +77,59 @@ export default function ClosingStockPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+  const isHistoricalDate = date < today;
+  const isOwner = currentRole === 'owner';
+  const isReadOnly = isHistoricalDate && !isOwner;
 
   const loadData = useCallback(async (selectedDate: string) => {
     setLoading(true);
+    setError('');
+    setSuccess('');
     const supabase = createClient();
+    const readOnlyDate = selectedDate < todayIso();
+
+    if (readOnlyDate) {
+      const { data, error: countsError } = await supabase
+        .from('daily_stock_counts')
+        .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,created_at,updated_at)')
+        .eq('date', selectedDate)
+        .order('updated_at', { ascending: false });
+
+      if (countsError) {
+        setError(countsError.message);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      setRows(
+        ((data as StockCountRow[]) ?? []).map((count) => {
+          const relation = Array.isArray(count.products) ? count.products[0] : count.products;
+          const product: Product = {
+            id: relation?.id ?? count.product_id,
+            name: relation?.name ?? t('unknownProduct'),
+            category: relation?.category ?? null,
+            sale_price: Number(count.sale_price ?? 0),
+            cost_price: Number(count.cost_price ?? 0),
+            current_stock: relation?.current_stock ?? Number(count.closing_stock ?? 0),
+            low_stock_threshold: relation?.low_stock_threshold ?? null,
+            is_active: relation?.is_active ?? false,
+            created_at: relation?.created_at ?? '',
+            updated_at: relation?.updated_at ?? '',
+          };
+
+          return {
+            product,
+            previousStock: String(count.previous_stock ?? 0),
+            addedToday: String(count.added_today ?? 0),
+            closingStock: String(count.closing_stock ?? 0),
+          };
+        }),
+      );
+      setLoading(false);
+      return;
+    }
 
     const [productsRes, countsRes, purchasesRes] = await Promise.all([
       supabase.from('products').select('*').eq('is_active', true).order('name'),
@@ -107,7 +170,7 @@ export default function ClosingStockPage() {
       }),
     );
     setLoading(false);
-  }, [tc]);
+  }, [t, tc]);
 
   useEffect(() => {
     loadData(date).catch((err) => {
@@ -115,6 +178,28 @@ export default function ClosingStockPage() {
       setLoading(false);
     });
   }, [date, loadData]);
+
+  useEffect(() => {
+    async function loadCurrentRole() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user?.id) {
+        setCurrentRole(null);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      setCurrentRole((data?.role as UserRole | undefined) ?? null);
+    }
+
+    loadCurrentRole().catch(() => setCurrentRole(null));
+  }, []);
 
   function updateRow(index: number, field: 'previousStock' | 'addedToday' | 'closingStock', value: string) {
     setRows((prev) => {
@@ -157,6 +242,11 @@ export default function ClosingStockPage() {
   }, [rows]);
 
   async function handleSave() {
+    if (isReadOnly) {
+      setError(t('readOnlyBody'));
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
@@ -227,25 +317,33 @@ export default function ClosingStockPage() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <label className="flex min-h-11 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm">
-            <Calendar size={17} className="text-gray-500" />
+          <label className="relative block h-11 w-full cursor-pointer sm:w-[300px]">
             <input
               type="date"
-              className="w-[128px] bg-transparent text-gray-900 outline-none"
+              max={today}
+              className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
               value={date}
+              onClick={(event) => event.currentTarget.showPicker?.()}
               onChange={(event) => {
                 setDate(event.target.value);
                 setSuccess('');
                 setError('');
               }}
             />
-            <span className="hidden min-w-[118px] sm:inline">{formatDateOnly(date)}</span>
-            <ChevronDown size={16} className="text-gray-400" />
+            <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+              <Calendar size={17} className="shrink-0 text-gray-500" />
+              <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(date)}</span>
+              <span className="hidden h-5 w-px bg-gray-200 sm:block" />
+              <span className="hidden min-w-0 flex-1 truncate font-semibold text-gray-700 sm:block">
+                {formatDateOnly(date)}
+              </span>
+              <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
+            </span>
           </label>
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || loading}
+            disabled={saving || loading || isReadOnly}
             className="btn-secondary flex min-h-11 items-center justify-center gap-2 border border-gray-200 bg-white"
           >
             <Save size={16} />
@@ -254,7 +352,7 @@ export default function ClosingStockPage() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || loading}
+            disabled={saving || loading || isReadOnly}
             className="btn-primary flex min-h-11 items-center justify-center gap-2 px-5"
           >
             <Package size={16} />
@@ -267,8 +365,12 @@ export default function ClosingStockPage() {
         <div className="flex gap-3">
           <Info size={20} className="mt-0.5 flex-shrink-0 text-primary-600" />
           <div>
-            <p className="font-semibold text-gray-900">{t('infoTitle')}</p>
-            <p className="mt-1 text-sm text-gray-600">{t('infoBody')}</p>
+            <p className="font-semibold text-gray-900">
+              {isReadOnly ? t('readOnlyTitle') : isHistoricalDate ? t('ownerHistoricalEditTitle') : t('infoTitle')}
+            </p>
+            <p className="mt-1 text-sm text-gray-600">
+              {isReadOnly ? t('readOnlyBody') : isHistoricalDate ? t('ownerHistoricalEditBody') : t('infoBody')}
+            </p>
           </div>
         </div>
       </div>
@@ -329,7 +431,13 @@ export default function ClosingStockPage() {
                     <th className="px-4 py-4 text-right">{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className="px-4 py-4 text-center">{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className="px-4 py-4 text-center">{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
-                    <th className="px-4 py-4 text-center">{t('closingStock')}<br /><span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">{t('youEnter')}</span></th>
+                    <th className="px-4 py-4 text-center">
+                      {t('closingStock')}
+                      <br />
+                      <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
+                        {isReadOnly ? t('snapshot') : t('youEnter')}
+                      </span>
+                    </th>
                     <th className="px-4 py-4 text-center">{t('soldQty')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className="px-4 py-4 text-right">{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className="px-5 py-4 text-right">{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
@@ -363,14 +471,18 @@ export default function ClosingStockPage() {
                         <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.previousStock)}</td>
                         <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.addedToday)}</td>
                         <td className="px-4 py-4">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            className="input-field mx-auto h-10 w-32 text-center font-semibold"
-                            value={row.closingStock}
-                            onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
-                          />
+                          {isReadOnly ? (
+                            <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="input-field mx-auto h-10 w-32 text-center font-semibold"
+                              value={row.closingStock}
+                              onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
+                            />
+                          )}
                         </td>
                         <td className="px-4 py-4 text-center font-semibold text-gray-900">{summary.soldQuantity}</td>
                         <td className="px-4 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barIncome)}</td>

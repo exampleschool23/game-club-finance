@@ -26,7 +26,7 @@ import { DashboardBarChart } from '@/components/dashboard/DashboardBarChart';
 import { PaymentMethodChart } from '@/components/dashboard/PaymentMethodChart';
 import { IncomeTrendChart } from '@/components/dashboard/IncomeTrendChart';
 import { IncomeCategoryChart } from '@/components/dashboard/IncomeCategoryChart';
-import { LowStockTable } from '@/components/dashboard/LowStockTable';
+import { ExpensesByCategoryChart } from '@/components/dashboard/ExpensesByCategoryChart';
 import {
   RecentTransactionsTable,
   type RecentTransactionRow,
@@ -78,13 +78,8 @@ interface DashboardData {
   totals: DashboardTotals;
   previousTotals: DashboardTotals;
   trend: TrendRow[];
-  lowStockRows: Array<{
-    id: string;
-    product: string;
-    stockLeft: number;
-    minimumStock: number;
-    status: string;
-  }>;
+  lowStockCount: number;
+  expenseCategories: Array<{ category: string; value: number }>;
   recentTransactions: RecentTransactionRow[];
 }
 
@@ -92,7 +87,8 @@ const emptyData: DashboardData = {
   totals: emptyDashboardTotals,
   previousTotals: emptyDashboardTotals,
   trend: [],
-  lowStockRows: [],
+  lowStockCount: 0,
+  expenseCategories: [],
   recentTransactions: [],
 };
 
@@ -264,16 +260,17 @@ export default function DashboardPage() {
       date: formatShortDate(row.date),
     }));
 
-    const lowStockRows = products
-      .filter((product) => product.current_stock <= (product.low_stock_threshold ?? 5))
-      .slice(0, 8)
-      .map((product) => ({
-        id: product.id,
-        product: product.name,
-        stockLeft: product.current_stock,
-        minimumStock: product.low_stock_threshold ?? 5,
-        status: product.current_stock === 0 ? 'Out' : 'Low',
-      }));
+    const lowStockCount = products.filter(
+      (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
+    ).length;
+
+    const expenseCategories = Array.from(
+      expenseRows.reduce((categoryMap, row) => {
+        categoryMap.set(row.category, (categoryMap.get(row.category) ?? 0) + Number(row.amount ?? 0));
+        return categoryMap;
+      }, new Map<string, number>()),
+      ([category, value]) => ({ category, value }),
+    ).sort((a, b) => b.value - a.value);
 
     const transactions: RecentTransactionRow[] = [
       ...cashRows.flatMap((row) => {
@@ -352,7 +349,8 @@ export default function DashboardPage() {
       totals,
       previousTotals,
       trend,
-      lowStockRows,
+      lowStockCount,
+      expenseCategories,
       recentTransactions: transactions,
     });
     setLoading(false);
@@ -477,7 +475,7 @@ export default function DashboardPage() {
           icon={Boxes}
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
-          helper={t('lowStockAlertsCount', { count: data.lowStockRows.length })}
+          helper={t('lowStockAlertsCount', { count: data.lowStockCount })}
         />
       </div>
 
@@ -498,7 +496,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <DashboardBarChart title={`${t('incomeVsExpenses')} (${periodLabel})`} data={incomeExpenseData} />
             <PaymentMethodChart
               title={`${t('incomeByPaymentMethod')} (${periodLabel})`}
@@ -508,8 +506,8 @@ export default function DashboardPage() {
             <IncomeTrendChart data={data.trend} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1.2fr_1fr]">
-            <LowStockTable rows={data.lowStockRows} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <ExpensesByCategoryChart data={data.expenseCategories} total={totals.totalExpenses} />
             <RecentTransactionsTable rows={data.recentTransactions} />
             <IncomeCategoryChart data={categoryData} total={totals.totalIncome} />
           </div>
