@@ -258,7 +258,9 @@
     "inactive": "Inactive",
     "submit": "Save Product",
     "success": "Product saved",
-    "editProduct": "Edit Product"
+    "editProduct": "Edit Product",
+    "deleteProduct": "Delete Product",
+    "deleteConfirm": "Delete this product? This cannot be undone."
   },
   "expenses": {
     "title": "Expenses",

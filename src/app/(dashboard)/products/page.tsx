@@ -8,7 +8,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/utils';
-import { ArrowDown, ArrowUp, Lock, Package, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
 import type { Product, UserRole } from '@/types';
 
 interface ProductForm {
@@ -35,6 +35,10 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
 
+function isForeignKeyDeleteError(error: { message?: string; code?: string } | null | undefined) {
+  return error?.code === '23503' || error?.message?.includes('violates foreign key constraint') || false;
+}
+
 export default function ProductsPage() {
   const t = useTranslations('products');
   const tc = useTranslations('common');
@@ -43,6 +47,7 @@ export default function ProductsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
 
@@ -68,11 +73,36 @@ export default function ProductsPage() {
     const ordered = await supabase
       .from('products')
       .select('*')
+      .eq('is_deleted', false)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
 
-    if (!isMissingSortOrder(ordered.error)) {
+    if (!ordered.error) {
       setProducts(ordered.data ?? []);
+      return;
+    }
+
+    if (isMissingSortOrder(ordered.error)) {
+      const named = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('name', { ascending: true });
+
+      if (!named.error) {
+        setProducts(named.data ?? []);
+        return;
+      }
+    }
+
+    const orderedWithoutDeletedFilter = await supabase
+      .from('products')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true });
+
+    if (!orderedWithoutDeletedFilter.error) {
+      setProducts(orderedWithoutDeletedFilter.data ?? []);
       return;
     }
 
@@ -166,6 +196,50 @@ export default function ProductsPage() {
       setModalOpen(false);
       await loadProducts();
     }
+  }
+
+  async function handleDelete() {
+    if (!editingId || !isOwner) return;
+    if (!window.confirm(t('deleteConfirm'))) return;
+
+    setDeleting(true);
+    setError('');
+
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', editingId);
+
+    if (deleteError) {
+      if (!isForeignKeyDeleteError(deleteError)) {
+        setDeleting(false);
+        setError(deleteError.message);
+        return;
+      }
+
+      const { error: softDeleteError } = await supabase
+        .from('products')
+        .update({
+          is_deleted: true,
+          is_active: false,
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingId);
+
+      setDeleting(false);
+
+      if (softDeleteError) {
+        setError(softDeleteError.message);
+        return;
+      }
+    } else {
+      setDeleting(false);
+    }
+
+    setModalOpen(false);
+    await loadProducts();
   }
 
   async function moveProduct(productId: string, direction: -1 | 1) {
@@ -409,13 +483,25 @@ export default function ProductsPage() {
 
               {error && <p className="text-sm text-danger-500">{error}</p>}
             </div>
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
-              <button className="btn-secondary flex-1" onClick={() => setModalOpen(false)}>
-                {tc('cancel')}
-              </button>
-              <button className="btn-primary flex-1" onClick={handleSave} disabled={saving}>
-                {saving ? tc('saving') : tc('save')}
-              </button>
+            <div className="flex flex-col gap-3 border-t border-gray-100 px-6 py-4 sm:flex-row sm:items-center">
+              {editingId && isOwner && (
+                <button
+                  className="btn-danger flex min-h-10 items-center justify-center gap-2 sm:mr-auto"
+                  onClick={handleDelete}
+                  disabled={saving || deleting}
+                >
+                  <Trash2 size={16} />
+                  {deleting ? tc('loading') : t('deleteProduct')}
+                </button>
+              )}
+              <div className="flex gap-3 sm:ml-auto">
+                <button className="btn-secondary flex-1 sm:flex-none" onClick={() => setModalOpen(false)} disabled={deleting}>
+                  {tc('cancel')}
+                </button>
+                <button className="btn-primary flex-1 sm:flex-none" onClick={handleSave} disabled={saving || deleting}>
+                  {saving ? tc('saving') : tc('save')}
+                </button>
+              </div>
             </div>
           </div>
         </div>

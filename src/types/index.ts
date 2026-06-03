@@ -79,6 +79,8 @@ export interface Product {
   low_stock_threshold: number | null;
   sort_order?: number | null;
   is_active: boolean;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }

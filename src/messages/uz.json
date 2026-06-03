@@ -258,7 +258,9 @@
     "inactive": "Nofaol",
     "submit": "Saqlash",
     "success": "Mahsulot saqlandi",
-    "editProduct": "Mahsulotni tahrirlash"
+    "editProduct": "Mahsulotni tahrirlash",
+    "deleteProduct": "Mahsulotni o'chirish",
+    "deleteConfirm": "Bu mahsulot o'chirilsinmi? Bu amalni qaytarib bo'lmaydi."
   },
   "expenses": {
     "title": "Xarajatlar",
