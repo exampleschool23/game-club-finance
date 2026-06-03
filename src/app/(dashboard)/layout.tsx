@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getServerProfile } from '@/lib/supabase/server';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 
 export default async function DashboardLayout({
@@ -9,24 +9,22 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createClient();
 
-  // getUser() verifies the JWT with Supabase Auth (secure)
-  // Layout only runs on first load / hard refresh, not on client navigations
-  const { data: { user } } = await supabase.auth.getUser();
+  // getSession() reads from the cookie — no Supabase Auth network call.
+  // Security is enforced by middleware (which does getUser-level validation).
+  const { data: { session } } = await supabase.auth.getSession();
 
-  if (!user) {
+  if (!session) {
     redirect('/login');
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, role')
-    .eq('id', user.id)
-    .single();
+  // getServerProfile is cached with React cache() — one DB query per request
+  // even if multiple server components call it.
+  const profile = await getServerProfile();
 
   return (
     <DashboardShell
       role={profile?.role ?? 'viewer'}
-      fullName={profile?.full_name ?? user.email ?? ''}
+      fullName={profile?.full_name ?? session.user.email ?? ''}
     >
       {children}
     </DashboardShell>

@@ -1,22 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getServerProfile } from '@/lib/supabase/server';
 import { getTranslations } from 'next-intl/server';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export default async function SettingsPage() {
-  const t = await getTranslations('settings');
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [t, profile, supabase] = await Promise.all([
+    getTranslations('settings'),
+    getServerProfile(),
+    createClient(),
+  ]);
 
-  const { data: profile } = user
-    ? await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', user.id)
-        .maybeSingle()
-    : { data: null };
+  const { data: { session } } = await supabase.auth.getSession();
 
   return (
     <div className="max-w-xl">
@@ -39,7 +33,7 @@ export default async function SettingsPage() {
           <div className="space-y-1 text-sm">
             <p className="text-gray-700">
               <span className="font-medium">{t('emailLabel')}: </span>
-              {user?.email ?? '—'}
+              {session?.user.email ?? '—'}
             </p>
             {profile?.full_name && (
               <p className="text-gray-700">
