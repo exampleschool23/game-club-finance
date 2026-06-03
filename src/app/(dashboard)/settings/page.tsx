@@ -38,18 +38,18 @@ export default async function SettingsPage() {
           </h2>
           <div className="space-y-1 text-sm">
             <p className="text-gray-700">
-              <span className="font-medium">Email: </span>
+              <span className="font-medium">{t('emailLabel')}: </span>
               {user?.email ?? '—'}
             </p>
             {profile?.full_name && (
               <p className="text-gray-700">
-                <span className="font-medium">Name: </span>
+                <span className="font-medium">{t('nameLabel')}: </span>
                 {profile.full_name}
               </p>
             )}
             {profile?.role && (
               <p className="text-gray-700">
-                <span className="font-medium">Role: </span>
+                <span className="font-medium">{t('roleLabel')}: </span>
                 <span className="capitalize">{profile.role}</span>
               </p>
             )}

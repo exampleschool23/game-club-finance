@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ElementType, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import {
   Banknote,
   Calendar,
@@ -131,6 +132,8 @@ function PaymentCard({
 }
 
 export default function DailyCashPage() {
+  const t = useTranslations('dailyCash');
+  const tc = useTranslations('common');
   const [form, setForm] = useState<CashFormData>(emptyForm());
   const [entry, setEntry] = useState<DailyCashEntry | null>(null);
   const [createdByName, setCreatedByName] = useState('Admin');
@@ -244,7 +247,7 @@ export default function DailyCashPage() {
     event.preventDefault();
 
     if (locked) {
-      setError('This entry is locked. Admins can only edit entries within 15 minutes.');
+      setError(t('entryLocked'));
       return;
     }
 
@@ -280,7 +283,7 @@ export default function DailyCashPage() {
       return;
     }
 
-    setMessage(entry ? 'Entry updated.' : 'Entry saved.');
+    setMessage(entry ? t('entryUpdated') : t('entrySaved'));
     await fetchExisting(form.date);
   }
 
@@ -306,7 +309,7 @@ export default function DailyCashPage() {
 
     setEntry(null);
     setForm(emptyForm(form.date));
-    setMessage('Entry deleted.');
+    setMessage(t('entryDeleted'));
   }
 
   function handleReset() {
@@ -319,16 +322,16 @@ export default function DailyCashPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-normal text-gray-950">Daily Cash Entry</h1>
+          <h1 className="text-3xl font-bold tracking-normal text-gray-950">{t('title')}</h1>
           <p className="mt-2 text-base text-gray-600">
-            Record today's game club income by payment method.
+            {t('subtitle')}
           </p>
         </div>
         <Link
           href="/reports"
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
         >
-          Reports
+          {t('reports')}
           <TrendingUp size={16} className="text-primary-600" />
         </Link>
       </div>
@@ -339,7 +342,7 @@ export default function DailyCashPage() {
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full sm:w-56">
-            <label className="mb-2 block text-sm font-semibold text-gray-700">Date</label>
+            <label className="mb-2 block text-sm font-semibold text-gray-700">{t('date')}</label>
             <div className="relative">
               <Calendar
                 size={17}
@@ -358,10 +361,10 @@ export default function DailyCashPage() {
             <div className="flex items-center gap-3 rounded-full bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">
               <Clock3 size={17} />
               {currentRole === 'owner' ? (
-                <span>Owner access: you can edit this entry anytime</span>
+                <span>{t('ownerAccessEdit')}</span>
               ) : (
                 <>
-                  <span>You can edit this entry until {formatTime(deadline)}</span>
+                  <span>{t('editUntil', { time: formatTime(deadline) })}</span>
                   <span className="rounded-full bg-green-100 px-2 py-1">{formatRemaining(remainingMs)}</span>
                 </>
               )}
@@ -374,10 +377,10 @@ export default function DailyCashPage() {
             <Info size={21} className="mt-0.5 shrink-0 text-primary-600" />
             <div>
               <p className="font-semibold text-primary-900">
-                This page is only for Game Club income.
+                {t('gameClubOnly')}
               </p>
               <p className="mt-1 text-sm text-primary-800">
-                Bar sales are calculated from Closing Stock.
+                {t('barSalesNote')}
               </p>
             </div>
           </div>
@@ -385,20 +388,20 @@ export default function DailyCashPage() {
 
         {locked && (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
-            This entry is locked. Admins can only edit entries within 15 minutes.
+            {t('entryLocked')}
           </div>
         )}
 
         <div className="mt-8">
-          <h2 className="text-lg font-bold text-gray-950">Income by Payment Method</h2>
+          <h2 className="text-lg font-bold text-gray-950">{t('incomeByMethod')}</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Enter total income from game club time and services.
+            {t('enterIncome')}
           </p>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <PaymentCard
-            label="Cash"
+            label={t('cash')}
             value={form.cash_income}
             disabled={disabled}
             onChange={(value) => setField('cash_income', value)}
@@ -407,7 +410,7 @@ export default function DailyCashPage() {
             iconClassName="text-green-600"
           />
           <PaymentCard
-            label="Terminal"
+            label={t('terminal')}
             value={form.terminal_income}
             disabled={disabled}
             onChange={(value) => setField('terminal_income', value)}
@@ -416,7 +419,7 @@ export default function DailyCashPage() {
             iconClassName="text-blue-600"
           />
           <PaymentCard
-            label="Card"
+            label={t('card')}
             value={form.card_income}
             disabled={disabled}
             onChange={(value) => setField('card_income', value)}
@@ -429,7 +432,7 @@ export default function DailyCashPage() {
         <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-gray-600">Total Game Club Income</p>
+              <p className="text-sm font-semibold text-gray-600">{t('totalGameClubIncome')}</p>
               <p className="mt-2 text-3xl font-bold text-green-600">
                 {formatCurrency(total)} UZS
               </p>
@@ -442,12 +445,12 @@ export default function DailyCashPage() {
 
         <div className="mt-6">
           <label className="mb-2 block text-sm font-semibold text-gray-700">
-            Comment (optional)
+            {t('commentOptional')}
           </label>
           <textarea
             className="h-24 w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400"
             maxLength={300}
-            placeholder="Add any notes about today's income..."
+            placeholder={t('commentPlaceholder')}
             value={form.comment}
             disabled={disabled}
             onChange={(event) => setField('comment', event.target.value)}
@@ -466,7 +469,7 @@ export default function DailyCashPage() {
             onClick={handleReset}
           >
             <RefreshCcw size={18} />
-            Reset
+            {t('reset')}
           </button>
           <button
             type="submit"
@@ -474,7 +477,7 @@ export default function DailyCashPage() {
             disabled={disabled}
           >
             <Save size={18} />
-            {saving ? 'Saving...' : 'Save Entry'}
+            {saving ? tc('saving') : t('saveEntry')}
           </button>
         </div>
       </form>
@@ -483,9 +486,9 @@ export default function DailyCashPage() {
         <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-gray-950">Today's Entry</h2>
+              <h2 className="text-xl font-bold text-gray-950">{t('todayEntry')}</h2>
               <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
-                Saved
+                {t('savedBadge')}
               </span>
             </div>
 
@@ -497,7 +500,7 @@ export default function DailyCashPage() {
                   onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
                 >
                   <Edit3 size={16} />
-                  Edit
+                  {tc('edit')}
                 </button>
                 <button
                   type="button"
@@ -506,7 +509,7 @@ export default function DailyCashPage() {
                   onClick={handleDelete}
                 >
                   <Trash2 size={16} />
-                  Delete
+                  {tc('delete')}
                 </button>
               </div>
             )}
@@ -514,25 +517,25 @@ export default function DailyCashPage() {
 
           <div className="mt-6 grid grid-cols-1 divide-y divide-gray-100 rounded-lg border border-gray-200 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
             <div className="p-4">
-              <p className="text-sm font-medium text-gray-500">Cash</p>
+              <p className="text-sm font-medium text-gray-500">{t('cash')}</p>
               <p className="mt-1 text-lg font-bold text-gray-950">
                 {formatCurrency(entry.cash_income)} <span className="text-sm font-medium">UZS</span>
               </p>
             </div>
             <div className="p-4">
-              <p className="text-sm font-medium text-gray-500">Terminal</p>
+              <p className="text-sm font-medium text-gray-500">{t('terminal')}</p>
               <p className="mt-1 text-lg font-bold text-gray-950">
                 {formatCurrency(entry.terminal_income)} <span className="text-sm font-medium">UZS</span>
               </p>
             </div>
             <div className="p-4">
-              <p className="text-sm font-medium text-gray-500">Card</p>
+              <p className="text-sm font-medium text-gray-500">{t('card')}</p>
               <p className="mt-1 text-lg font-bold text-gray-950">
                 {formatCurrency(entry.card_income)} <span className="text-sm font-medium">UZS</span>
               </p>
             </div>
             <div className="p-4">
-              <p className="text-sm font-medium text-gray-500">Total</p>
+              <p className="text-sm font-medium text-gray-500">{t('total')}</p>
               <p className="mt-1 text-lg font-bold text-green-600">
                 {formatCurrency(
                   calculateGameClubIncome({
@@ -547,13 +550,13 @@ export default function DailyCashPage() {
           </div>
 
           <div className="mt-4 flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-600 sm:flex-row sm:items-center sm:justify-between">
-            <span>Created: {formatDateTime(entry.created_at)}</span>
-            <span>by {createdByName}</span>
+            <span>{t('createdLabel')} {formatDateTime(entry.created_at)}</span>
+            <span>{t('byLabel')} {createdByName}</span>
             {deadline && editable && (
               <span>
                 {currentRole === 'owner'
-                  ? 'Owner access: editable anytime'
-                  : `You can edit this entry until ${formatDateTime(deadline.toISOString())}`}
+                  ? t('ownerEditable')
+                  : t('editUntil', { time: formatDateTime(deadline.toISOString()) })}
               </span>
             )}
           </div>
@@ -566,13 +569,13 @@ export default function DailyCashPage() {
             <div className="flex items-center gap-3">
               <Clock3 size={20} className={editable ? 'text-amber-500' : 'text-gray-500'} />
               <div>
-                <p className="font-bold text-gray-950">15 Minute Edit Window</p>
+                <p className="font-bold text-gray-950">{t('editWindowTitle')}</p>
                 <p className="mt-1 text-sm text-gray-600">
                   {editable
                     ? currentRole === 'owner'
-                      ? 'Owners can edit or delete daily cash entries without the 15 minute limit.'
-                      : `Admins can edit or delete this entry within 15 minutes of saving. ${formatRemaining(remainingMs)} remaining.`
-                    : 'This entry is locked. Admins can only edit entries within 15 minutes.'}
+                      ? t('ownerEditNote')
+                      : t('adminEditNote', { remaining: formatRemaining(remainingMs) })
+                    : t('entryLocked')}
                 </p>
               </div>
             </div>

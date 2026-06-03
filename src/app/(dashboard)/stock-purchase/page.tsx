@@ -212,11 +212,11 @@ export default function StockPurchasePage() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <button className="btn-secondary flex min-h-11 items-center justify-center gap-2 border border-gray-200 bg-white px-5">
             <Upload size={17} />
-            Import from Excel
+            {t('importFromExcel')}
           </button>
           <button className="btn-primary flex min-h-11 items-center justify-center gap-2 px-5">
             <Plus size={18} />
-            Add New Purchase
+            {t('addNewPurchase')}
           </button>
         </div>
       </div>
@@ -227,7 +227,7 @@ export default function StockPurchasePage() {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
               <ShoppingCart size={18} />
             </span>
-            <h2 className="text-lg font-bold text-gray-900">Add Stock Purchase</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('addStockPurchase')}</h2>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -277,12 +277,12 @@ export default function StockPurchasePage() {
                   onChange={(event) => set('quantity', event.target.value)}
                   required
                 />
-                <span className="text-sm font-semibold text-gray-600">pcs</span>
+                <span className="text-sm font-semibold text-gray-600">{t('pcs')}</span>
               </div>
             </div>
 
             <div>
-              <label className="label">{t('costPrice')} (per pcs) <span className="text-danger-500">*</span></label>
+              <label className="label">{t('costPrice')} ({t('perPcs')}) <span className="text-danger-500">*</span></label>
               <div className="flex h-11 items-center gap-3 rounded-lg border border-gray-200 bg-white px-3">
                 <Coins size={17} className="text-purple-600" />
                 <input
@@ -299,7 +299,7 @@ export default function StockPurchasePage() {
             </div>
 
             <div>
-              <label className="label">{t('salePrice')} (per pcs)</label>
+              <label className="label">{t('salePrice')} ({t('perPcs')})</label>
               <div className="flex h-11 items-center gap-3 rounded-lg border border-gray-200 bg-success-50/40 px-3">
                 <Coins size={17} className="text-success-600" />
                 <input
@@ -340,7 +340,7 @@ export default function StockPurchasePage() {
                 <input
                   type="text"
                   className="min-w-0 flex-1 bg-transparent text-gray-900 outline-none"
-                  placeholder="Optional comment about this purchase..."
+                  placeholder={t('commentPlaceholder')}
                   value={form.comment}
                   onChange={(event) => set('comment', event.target.value)}
                 />
@@ -351,19 +351,19 @@ export default function StockPurchasePage() {
           <div className="mt-4 rounded-lg border border-success-100 bg-success-50/70 p-4">
             <div className="mb-3 flex items-center gap-2">
               <CheckCircle size={20} className="text-success-600" />
-              <h3 className="font-bold text-success-800">Purchase Summary</h3>
+              <h3 className="font-bold text-success-800">{t('purchaseSummary')}</h3>
             </div>
             <div className="grid gap-3 text-center sm:grid-cols-3">
               <div>
-                <p className="text-xs font-medium text-gray-600">Total Cost</p>
+                <p className="text-xs font-medium text-gray-600">{t('totalCost')}</p>
                 <p className="mt-1 break-words font-bold text-gray-900">{formatCurrency(totalCost)} {tc('currency')}</p>
               </div>
               <div className="sm:border-x sm:border-success-200">
-                <p className="text-xs font-medium text-gray-600">Total Sale Value</p>
+                <p className="text-xs font-medium text-gray-600">{t('totalSaleValue')}</p>
                 <p className="mt-1 break-words font-bold text-gray-900">{formatCurrency(totalSaleValue)} {tc('currency')}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-600">Estimated Profit</p>
+                <p className="text-xs font-medium text-gray-600">{t('estimatedProfit')}</p>
                 <p className={`mt-1 break-words font-bold ${estimatedProfit >= 0 ? 'text-success-700' : 'text-danger-600'}`}>
                   {formatCurrency(estimatedProfit)} {tc('currency')}
                 </p>
@@ -371,7 +371,7 @@ export default function StockPurchasePage() {
             </div>
             {selectedProduct && quantity > 0 && costPrice > 0 && (
               <div className="mt-3 rounded-md bg-white/70 px-3 py-2 text-center text-sm font-medium text-success-800">
-                New average buy price: {formatCurrency(projectedAverageCost)} {tc('currency')}
+                {t('newAverageBuyPrice')} {formatCurrency(projectedAverageCost)} {tc('currency')}
               </div>
             )}
           </div>
@@ -382,7 +382,7 @@ export default function StockPurchasePage() {
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1.8fr]">
             <button type="button" onClick={resetForm} className="btn-secondary flex min-h-11 items-center justify-center gap-2 border border-gray-200 bg-white">
               <RefreshCcw size={16} />
-              Reset
+              {t('reset')}
             </button>
             <button type="submit" className="btn-primary flex min-h-11 items-center justify-center gap-2" disabled={saving}>
               <Check size={17} />
@@ -397,10 +397,10 @@ export default function StockPurchasePage() {
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
                 <Package size={18} />
               </span>
-              <h2 className="text-lg font-bold text-gray-900">Product Information</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t('productInfo')}</h2>
             </div>
             <span className="rounded-full bg-success-50 px-3 py-1 text-xs font-bold text-success-700">
-              {selectedProduct?.is_active ? 'In Stock' : 'Select Product'}
+              {selectedProduct?.is_active ? t('inStock') : t('selectProduct')}
             </span>
           </div>
 
@@ -413,43 +413,43 @@ export default function StockPurchasePage() {
                 <div className="min-w-0">
                   <h3 className="break-words text-xl font-bold text-gray-900">{selectedProduct.name}</h3>
                   <p className="mt-3 text-sm text-gray-600">
-                    Sale Price: <span className="font-bold text-success-600">{formatCurrency(salePrice)} {tc('currency')}</span>
+                    {t('salePriceLabel')} <span className="font-bold text-success-600">{formatCurrency(salePrice)} {tc('currency')}</span>
                   </p>
                   {salePriceChanged && (
                     <p className="mt-1 text-xs font-medium text-primary-600">
-                      Current saved price: {formatCurrency(savedSalePrice)} {tc('currency')}
+                      {t('currentSavedPrice')} {formatCurrency(savedSalePrice)} {tc('currency')}
                     </p>
                   )}
                   <p className="mt-2 text-sm text-gray-600">
-                    Cost Price: <span className="font-bold text-danger-600">{formatCurrency(selectedProduct.cost_price)} {tc('currency')}</span>
+                    {t('costPriceLabel')} <span className="font-bold text-danger-600">{formatCurrency(selectedProduct.cost_price)} {tc('currency')}</span>
                   </p>
                 {quantity > 0 && costPrice > 0 && (
                   <p className="mt-2 text-sm text-gray-600">
-                    New Avg Cost: <span className="font-bold text-primary-600">{formatCurrency(projectedAverageCost)} {tc('currency')}</span>
+                    {t('newAvgCost')} <span className="font-bold text-primary-600">{formatCurrency(projectedAverageCost)} {tc('currency')}</span>
                   </p>
                 )}
               </div>
               </div>
 
               <div className="mt-6 grid gap-4 rounded-lg border border-purple-100 bg-purple-50/30 p-4 sm:grid-cols-2">
-                <InfoTile label="Current Stock" value={`${selectedProduct.current_stock} pcs`} color="text-primary-700" />
-                <InfoTile label="Low Stock Alert" value={`${selectedProduct.low_stock_threshold ?? 5} pcs`} color="text-warning-700" />
-                <InfoTile label="Stock Value" value={`${formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} ${tc('currency')}`} color="text-success-700" />
-                <InfoTile label="Last Purchase" value={purchases.find((purchase) => purchase.product_id === selectedProduct.id)?.date ? formatDate(purchases.find((purchase) => purchase.product_id === selectedProduct.id)!.date) : '-'} color="text-purple-700" />
+                <InfoTile label={t('currentStock')} value={`${selectedProduct.current_stock} ${t('pcs')}`} color="text-primary-700" />
+                <InfoTile label={t('lowStockAlert')} value={`${selectedProduct.low_stock_threshold ?? 5} ${t('pcs')}`} color="text-warning-700" />
+                <InfoTile label={t('stockValue')} value={`${formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} ${tc('currency')}`} color="text-success-700" />
+                <InfoTile label={t('lastPurchase')} value={purchases.find((purchase) => purchase.product_id === selectedProduct.id)?.date ? formatDate(purchases.find((purchase) => purchase.product_id === selectedProduct.id)!.date) : '-'} color="text-purple-700" />
               </div>
             </>
           ) : (
             <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-              Select a product to see stock and price details.
+              {t('selectProductHint')}
             </div>
           )}
 
           <div className="mt-5 rounded-lg border border-primary-100 bg-primary-50/40 p-4">
-            <h3 className="font-bold text-gray-900">How it works</h3>
+            <h3 className="font-bold text-gray-900">{t('howItWorks')}</h3>
             <ul className="mt-3 space-y-2 text-sm text-gray-700">
-              <li className="flex gap-2"><Check size={16} className="mt-0.5 text-primary-600" />Adding stock increases your inventory</li>
-              <li className="flex gap-2"><Check size={16} className="mt-0.5 text-primary-600" />Use Closing Stock page at end of day</li>
-              <li className="flex gap-2"><Check size={16} className="mt-0.5 text-primary-600" />Profit is calculated from sale and cost price</li>
+              <li className="flex gap-2"><Check size={16} className="mt-0.5 text-primary-600" />{t('hintStock')}</li>
+              <li className="flex gap-2"><Check size={16} className="mt-0.5 text-primary-600" />{t('hintClosing')}</li>
+              <li className="flex gap-2"><Check size={16} className="mt-0.5 text-primary-600" />{t('hintProfit')}</li>
             </ul>
           </div>
         </aside>
@@ -464,14 +464,14 @@ export default function StockPurchasePage() {
               <input
                 type="search"
                 className="input-field h-10 pl-9"
-                placeholder="Search purchases..."
+                placeholder={t('searchPlaceholder')}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
             <button className="btn-secondary flex min-h-10 items-center justify-center gap-2 border border-gray-200 bg-white">
               <Filter size={16} />
-              Filters
+              {t('filters')}
             </button>
           </div>
         </div>
@@ -487,11 +487,11 @@ export default function StockPurchasePage() {
                   <th className="px-4 py-3 text-left">{t('date')}</th>
                   <th className="px-4 py-3 text-left">{t('product')}</th>
                   <th className="px-4 py-3 text-center">{t('quantity')}</th>
-                  <th className="px-4 py-3 text-right">{t('costPrice')} (per pcs)</th>
-                  <th className="px-4 py-3 text-right">{t('salePrice')} (per pcs)</th>
-                  <th className="px-4 py-3 text-right">Total Cost</th>
-                  <th className="px-4 py-3 text-center">Payment</th>
-                  <th className="px-4 py-3 text-center">Actions</th>
+                  <th className="px-4 py-3 text-right">{t('costPrice')} ({t('perPcs')})</th>
+                  <th className="px-4 py-3 text-right">{t('salePrice')} ({t('perPcs')})</th>
+                  <th className="px-4 py-3 text-right">{t('totalCostHeader')}</th>
+                  <th className="px-4 py-3 text-center">{t('payment')}</th>
+                  <th className="px-4 py-3 text-center">{tc('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -509,7 +509,7 @@ export default function StockPurchasePage() {
                         <span className="font-bold text-gray-900">{purchase.products?.name ?? '-'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center font-semibold">{purchase.quantity} pcs</td>
+                    <td className="px-4 py-3 text-center font-semibold">{purchase.quantity} {t('pcs')}</td>
                     <td className="px-4 py-3 text-right font-semibold">{formatCurrency(purchase.cost_price)} {tc('currency')}</td>
                     <td className="px-4 py-3 text-right font-semibold">{formatCurrency(purchase.sale_price ?? purchase.products?.sale_price ?? 0)} {tc('currency')}</td>
                     <td className="px-4 py-3 text-right font-bold">{formatCurrency(purchase.quantity * purchase.cost_price)} {tc('currency')}</td>
