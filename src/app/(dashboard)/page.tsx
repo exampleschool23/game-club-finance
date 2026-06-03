@@ -15,6 +15,7 @@ import {
   UserRoundCheck,
   WalletCards,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, todayIso } from '@/lib/utils';
 import { useDashboardDate } from '@/components/layout/DashboardShell';
@@ -127,6 +128,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const t = useTranslations('dashboard');
 
   const range = useMemo(() => getDashboardRange(period, selectedDate || todayIso()), [period, selectedDate]);
 
@@ -285,7 +287,7 @@ export default function DashboardPage() {
             ? {
                 id: `cash-${row.date}`,
                 type: 'Income' as const,
-                description: 'Game Club Cash income',
+                description: t('cashIncomeDesc'),
                 amount: row.cash_income,
                 time: formatTime(createdAt),
               }
@@ -294,7 +296,7 @@ export default function DashboardPage() {
             ? {
                 id: `terminal-${row.date}`,
                 type: 'Income' as const,
-                description: 'Game Club Terminal income',
+                description: t('terminalIncomeDesc'),
                 amount: row.terminal_income,
                 time: formatTime(createdAt),
               }
@@ -303,7 +305,7 @@ export default function DashboardPage() {
             ? {
                 id: `card-${row.date}`,
                 type: 'Income' as const,
-                description: 'Game Club Card income',
+                description: t('cardIncomeDesc'),
                 amount: row.card_income,
                 time: formatTime(createdAt),
               }
@@ -315,7 +317,7 @@ export default function DashboardPage() {
             {
               id: `bar-${range.from}-${range.to}`,
               type: 'Income' as const,
-              description: 'Bar sales from stock',
+              description: t('barSalesDesc'),
               amount: stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0),
               time: stockRows[0]?.updated_at ? formatTime(stockRows[0].updated_at) : '23:59',
             },
@@ -332,8 +334,8 @@ export default function DashboardPage() {
         id: `purchase-${row.id}`,
         type: 'Purchase' as const,
         description: productName(row.products)
-          ? `Product purchase - ${productName(row.products)}`
-          : 'Product purchase',
+          ? `${t('productPurchaseDesc')} - ${productName(row.products)}`
+          : t('productPurchaseDesc'),
         amount: (row.quantity ?? 0) * (row.cost_price ?? 0),
         time: formatTime(row.created_at),
       })),
@@ -341,8 +343,8 @@ export default function DashboardPage() {
         id: `debt-payment-${row.id}`,
         type: 'Debt Payment' as const,
         description: debtNameById.get(row.debt_id)
-          ? `${debtNameById.get(row.debt_id)} payment`
-          : 'Debt payment',
+          ? `${debtNameById.get(row.debt_id)} ${t('debtPaymentSuffix')}`
+          : t('debtPayment'),
         amount: row.amount,
         time: formatTime(row.created_at),
       })),
@@ -358,7 +360,7 @@ export default function DashboardPage() {
       recentTransactions: transactions,
     });
     setLoading(false);
-  }, [range]);
+  }, [range, t]);
 
   useEffect(() => {
     fetchDashboard().catch((fetchError) => {
@@ -387,40 +389,42 @@ export default function DashboardPage() {
 
   const { totals, previousTotals } = data;
 
+  const periodLabel = period === 'today' ? t('today') : period === 'week' ? t('thisWeek') : t('thisMonth');
+
   const incomeComparisonLabel =
-    period === 'today' ? 'vs yesterday' : period === 'week' ? 'vs last week' : 'vs last month';
+    period === 'today' ? t('vsYesterday') : period === 'week' ? t('vsLastWeek') : t('vsLastMonth');
 
   const incomeExpenseData = [
-    { name: 'Game Club Income', value: totals.gameClubIncome, fill: '#2563eb' },
-    { name: 'Bar Income', value: totals.barIncome, fill: '#f97316' },
-    { name: 'Total Expenses', value: totals.totalExpenses, fill: '#ef4444' },
-    { name: 'Net Profit', value: totals.netProfit, fill: '#22c55e' },
+    { name: t('gameClubIncome'), value: totals.gameClubIncome, fill: '#2563eb' },
+    { name: t('barIncome'), value: totals.barIncome, fill: '#f97316' },
+    { name: t('totalExpenses'), value: totals.totalExpenses, fill: '#ef4444' },
+    { name: t('netProfit'), value: totals.netProfit, fill: '#22c55e' },
   ];
 
   const paymentData = [
-    { name: 'Cash', value: totals.cashIncome, color: '#22c55e' },
-    { name: 'Terminal', value: totals.terminalIncome, color: '#2563eb' },
-    { name: 'Card', value: totals.cardIncome, color: '#7c3aed' },
+    { name: t('cash'), value: totals.cashIncome, color: '#22c55e' },
+    { name: t('terminal'), value: totals.terminalIncome, color: '#2563eb' },
+    { name: t('card'), value: totals.cardIncome, color: '#7c3aed' },
   ];
 
   const categoryData = [
-    { name: 'Game Club', value: totals.gameClubIncome, color: '#2563eb' },
-    { name: 'Bar', value: totals.barIncome, color: '#f97316' },
+    { name: t('gameClub'), value: totals.gameClubIncome, color: '#2563eb' },
+    { name: t('bar'), value: totals.barIncome, color: '#f97316' },
   ];
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-normal text-gray-950">Dashboard</h1>
-          <p className="mt-1 text-base text-gray-600">Overview of your game club finance</p>
+          <h1 className="text-3xl font-bold tracking-normal text-gray-950">{t('title')}</h1>
+          <p className="mt-1 text-base text-gray-600">{t('subtitle')}</p>
         </div>
         <Link
           href="/reports"
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
         >
           <Settings2 size={17} className="text-primary-600" />
-          View Full Reports
+          {t('viewFullReports')}
         </Link>
       </div>
 
@@ -432,7 +436,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <MetricCard
-          label="Game Club Income"
+          label={t('gameClubIncome')}
           amount={totals.gameClubIncome}
           icon={Gamepad2}
           iconBgClassName="bg-blue-100"
@@ -440,7 +444,7 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.gameClubIncome, previousTotals.gameClubIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label="Bar Income"
+          label={t('barIncome')}
           amount={totals.barIncome}
           icon={ShoppingBag}
           iconBgClassName="bg-orange-100"
@@ -448,7 +452,7 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label="Total Income"
+          label={t('totalIncome')}
           amount={totals.totalIncome}
           icon={Banknote}
           iconBgClassName="bg-green-100"
@@ -456,7 +460,7 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.totalIncome, previousTotals.totalIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label="Total Expenses"
+          label={t('totalExpenses')}
           amount={totals.totalExpenses}
           icon={Receipt}
           iconBgClassName="bg-red-100"
@@ -464,7 +468,7 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.totalExpenses, previousTotals.totalExpenses), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label="Net Profit"
+          label={t('netProfit')}
           amount={totals.netProfit}
           icon={ChartNoAxesCombined}
           iconBgClassName="bg-purple-100"
@@ -472,12 +476,12 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.netProfit, previousTotals.netProfit), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label="Inventory Value"
+          label={t('inventoryValue')}
           amount={totals.inventoryValue}
           icon={Boxes}
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
-          helper={`${data.lowStockRows.length} low stock alerts`}
+          helper={t('lowStockAlertsCount', { count: data.lowStockRows.length })}
         />
       </div>
 
@@ -487,21 +491,21 @@ export default function DashboardPage() {
           href="/reports"
           className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
         >
-          View Full Reports
+          {t('viewFullReports')}
           <TrendingUp size={16} className="text-primary-600" />
         </Link>
       </section>
 
       {loading ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">
-          Loading dashboard...
+          {t('loading')}
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <DashboardBarChart title={`Income vs Expenses (${period === 'today' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'})`} data={incomeExpenseData} />
+            <DashboardBarChart title={`${t('incomeVsExpenses')} (${periodLabel})`} data={incomeExpenseData} />
             <PaymentMethodChart
-              title={`Income by Payment Method (${period === 'today' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'})`}
+              title={`${t('incomeByPaymentMethod')} (${periodLabel})`}
               data={paymentData}
               total={totals.gameClubIncome}
             />
@@ -517,7 +521,7 @@ export default function DashboardPage() {
           <SummaryStrip
             items={[
               {
-                label: 'Cash Balance',
+                label: t('cashBalance'),
                 value: totals.cashIncome,
                 icon: Banknote,
                 iconBgClassName: 'bg-green-100',
@@ -525,7 +529,7 @@ export default function DashboardPage() {
                 isCurrency: true,
               },
               {
-                label: 'Terminal Balance',
+                label: t('terminalBalance'),
                 value: totals.terminalIncome,
                 icon: WalletCards,
                 iconBgClassName: 'bg-blue-100',
@@ -533,7 +537,7 @@ export default function DashboardPage() {
                 isCurrency: true,
               },
               {
-                label: 'Card Income',
+                label: t('cardIncome'),
                 value: totals.cardIncome,
                 icon: CreditCard,
                 iconBgClassName: 'bg-purple-100',
@@ -541,18 +545,18 @@ export default function DashboardPage() {
                 isCurrency: true,
               },
               {
-                label: 'Active Debts',
+                label: t('activeDebts'),
                 value: totals.activeDebts,
-                helper: `${totals.activeDebtCount} people`,
+                helper: t('peopleCount', { count: totals.activeDebtCount }),
                 icon: UserRoundCheck,
                 iconBgClassName: 'bg-orange-100',
                 iconClassName: 'text-orange-600',
                 isCurrency: true,
               },
               {
-                label: "Today's Profit Margin",
+                label: t('profitMargin'),
                 value: `${totals.profitMargin}%`,
-                helper: totals.profitMargin >= 0 ? 'Good' : 'Needs attention',
+                helper: totals.profitMargin >= 0 ? t('good') : t('needsAttention'),
                 icon: TrendingUp,
                 iconBgClassName: 'bg-green-100',
                 iconClassName: 'text-green-600',

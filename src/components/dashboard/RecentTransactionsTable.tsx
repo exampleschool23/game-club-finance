@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowDown, ArrowUp, CircleDollarSign } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils';
 
 export interface RecentTransactionRow {
@@ -22,26 +23,35 @@ function iconFor(type: RecentTransactionRow['type']) {
 }
 
 export function RecentTransactionsTable({ rows }: RecentTransactionsTableProps) {
+  const t = useTranslations('dashboard');
+
+  function typeLabel(type: RecentTransactionRow['type']): string {
+    if (type === 'Income') return t('income');
+    if (type === 'Expense') return t('expense');
+    if (type === 'Purchase') return t('purchase');
+    return t('debtPayment');
+  }
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-gray-950">Recent Transactions</h2>
+        <h2 className="text-base font-bold text-gray-950">{t('recentTransactions')}</h2>
       </div>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-gray-100 text-xs font-bold uppercase text-gray-500">
-              <th className="py-3 text-left">Type</th>
-              <th className="py-3 text-left">Description</th>
-              <th className="py-3 text-right">Amount</th>
-              <th className="py-3 text-right">Time</th>
+              <th className="py-3 text-left">{t('type')}</th>
+              <th className="py-3 text-left">{t('description')}</th>
+              <th className="py-3 text-right">{t('amount')}</th>
+              <th className="py-3 text-right">{t('time')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-8 text-center text-gray-500">
-                  No recent transactions
+                  {t('noRecentTransactions')}
                 </td>
               </tr>
             ) : (
@@ -52,7 +62,7 @@ export function RecentTransactionsTable({ rows }: RecentTransactionsTableProps) 
                       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100">
                         {iconFor(row.type)}
                       </span>
-                      {row.type}
+                      {typeLabel(row.type)}
                     </span>
                   </td>
                   <td className="py-3 font-medium text-gray-900">{row.description}</td>

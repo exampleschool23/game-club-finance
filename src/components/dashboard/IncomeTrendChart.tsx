@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils';
 
 interface IncomeTrendChartProps {
@@ -23,19 +24,21 @@ function formatAxis(value: number): string {
 }
 
 export function IncomeTrendChart({ data }: IncomeTrendChartProps) {
+  const t = useTranslations('dashboard');
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <h2 className="text-base font-bold text-gray-950">Income Trend</h2>
+      <h2 className="text-base font-bold text-gray-950">{t('incomeTrend')}</h2>
       <div className="mt-4 h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid stroke="#e5e7eb" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#475569' }} />
             <YAxis tickFormatter={formatAxis} tick={{ fontSize: 12, fill: '#475569' }} width={42} />
-            <Tooltip formatter={(value) => [`${formatCurrency(Number(value))} UZS`, 'Amount']} />
+            <Tooltip formatter={(value) => [`${formatCurrency(Number(value))} UZS`, t('amount')]} />
             <Legend />
-            <Bar dataKey="income" name="Income" fill="#2563eb" radius={[5, 5, 0, 0]} />
-            <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[5, 5, 0, 0]} />
+            <Bar dataKey="income" name={t('income')} fill="#2563eb" radius={[5, 5, 0, 0]} />
+            <Bar dataKey="expenses" name={t('expenses')} fill="#ef4444" radius={[5, 5, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

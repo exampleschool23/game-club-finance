@@ -1,6 +1,7 @@
 'use client';
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils';
 
 interface IncomeCategoryChartProps {
@@ -9,9 +10,11 @@ interface IncomeCategoryChartProps {
 }
 
 export function IncomeCategoryChart({ data, total }: IncomeCategoryChartProps) {
+  const t = useTranslations('dashboard');
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <h2 className="text-base font-bold text-gray-950">Income by Category</h2>
+      <h2 className="text-base font-bold text-gray-950">{t('incomeByCategory')}</h2>
       <div className="mt-4 grid min-h-72 grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_0.9fr]">
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
@@ -21,14 +24,14 @@ export function IncomeCategoryChart({ data, total }: IncomeCategoryChartProps) {
                   <Cell key={item.name} fill={item.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => [`${formatCurrency(Number(value))} UZS`, 'Amount']} />
+              <Tooltip formatter={(value) => [`${formatCurrency(Number(value))} UZS`, t('amount')]} />
             </PieChart>
           </ResponsiveContainer>
         </div>
         <div className="space-y-3">
           <div className="rounded-lg bg-gray-50 p-3 text-center">
             <p className="text-xl font-bold text-gray-950">{formatCurrency(total)}</p>
-            <p className="text-xs font-medium text-gray-500">Total</p>
+            <p className="text-xs font-medium text-gray-500">{t('total')}</p>
           </div>
           {data.map((item) => {
             const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;

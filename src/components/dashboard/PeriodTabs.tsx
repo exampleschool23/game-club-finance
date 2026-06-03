@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarDays, CalendarRange, Calendar } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 export type DashboardPeriod = 'today' | 'week' | 'month';
@@ -10,13 +11,15 @@ interface PeriodTabsProps {
   onChange: (value: DashboardPeriod) => void;
 }
 
-const tabs = [
-  { value: 'today' as const, label: 'Today', icon: CalendarDays },
-  { value: 'week' as const, label: 'This Week', icon: CalendarRange },
-  { value: 'month' as const, label: 'This Month', icon: Calendar },
-];
-
 export function PeriodTabs({ value, onChange }: PeriodTabsProps) {
+  const t = useTranslations('dashboard');
+
+  const tabs = [
+    { value: 'today' as const, label: t('today'), icon: CalendarDays },
+    { value: 'week' as const, label: t('thisWeek'), icon: CalendarRange },
+    { value: 'month' as const, label: t('thisMonth'), icon: Calendar },
+  ];
+
   return (
     <div className="flex flex-wrap gap-2">
       {tabs.map((tab) => {
