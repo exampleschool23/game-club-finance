@@ -55,6 +55,14 @@ export function calculateSoldQuantity(
   return Math.max(0, previousStock + addedToday - closingStock);
 }
 
+export function calculateClosingStockFromSold(
+  previousStock: number,
+  addedToday: number,
+  soldQuantity: number,
+): number {
+  return Math.max(0, previousStock + addedToday - soldQuantity);
+}
+
 export function calculateBarIncome(soldQuantity: number, salePrice: number): number {
   return soldQuantity * salePrice;
 }

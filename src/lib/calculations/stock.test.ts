@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateSoldQuantity,
+  calculateClosingStockFromSold,
   calculateBarIncome,
   calculateBarCost,
   calculateBarProfit,
@@ -21,6 +22,17 @@ describe('calculateSoldQuantity', () => {
 
   it('returns 0 when nothing was sold', () => {
     expect(calculateSoldQuantity(50, 10, 60)).toBe(0);
+  });
+});
+
+describe('calculateClosingStockFromSold', () => {
+  it('calculates ending stock from previous stock, added stock and sold quantity', () => {
+    expect(calculateClosingStockFromSold(20, 50, 0)).toBe(70);
+    expect(calculateClosingStockFromSold(20, 50, 7)).toBe(63);
+  });
+
+  it('does not allow ending stock to become negative', () => {
+    expect(calculateClosingStockFromSold(20, 50, 80)).toBe(0);
   });
 });
 

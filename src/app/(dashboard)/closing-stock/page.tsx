@@ -7,6 +7,7 @@ import { formatCurrency, todayIso } from '@/lib/utils';
 import { formatDateOnly, formatDatePickerValue } from '@/lib/formatters';
 import {
   calculateClosingStockDefaults,
+  calculateClosingStockFromSold,
   recalculateFutureStockCounts,
   calculateStockCountSummary,
 } from '@/lib/calculations/stock';
@@ -51,6 +52,7 @@ interface StockCountRow {
   previous_stock: number;
   added_today: number;
   closing_stock: number;
+  sold_quantity: number;
   sale_price: number;
   cost_price: number;
   products?:
@@ -64,6 +66,7 @@ interface RowData {
   previousStock: string;
   addedToday: string;
   closingStock: string;
+  soldQuantity: string;
 }
 
 function parseNum(value: string): number {
@@ -225,7 +228,9 @@ export default function ClosingStockPage() {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
+  const isAdmin = currentRole === 'admin';
   const isReadOnly = isHistoricalDate && !isOwner;
+  const usesSoldEntry = isAdmin && !isReadOnly;
 
   const buildEditableRows = useCallback(
     (
@@ -257,6 +262,7 @@ export default function ClosingStockPage() {
           previousStock: existing ? String(existing.previous_stock) : String(previousStock),
           addedToday: existing ? String(existing.added_today) : String(defaults.addedToday),
           closingStock: existing ? String(existing.closing_stock) : String(previousClosing === undefined ? defaults.closingStock : previousStock + addedToday),
+          soldQuantity: existing ? String(existing.sold_quantity ?? 0) : '0',
         };
       }));
     },
@@ -273,7 +279,7 @@ export default function ClosingStockPage() {
     if (readOnlyDate) {
       const countsWithOrder = await supabase
         .from('daily_stock_counts')
-        .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
+        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
 
@@ -283,7 +289,7 @@ export default function ClosingStockPage() {
       if (isMissingSortOrder(countsWithOrder.error)) {
         const countsWithoutOrder = await supabase
           .from('daily_stock_counts')
-          .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
+          .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
           .eq('date', selectedDate)
           .order('updated_at', { ascending: false });
 
@@ -350,6 +356,7 @@ export default function ClosingStockPage() {
             previousStock: String(count.previous_stock ?? 0),
             addedToday: String(count.added_today ?? 0),
             closingStock: String(count.closing_stock ?? 0),
+            soldQuantity: String(count.sold_quantity ?? 0),
           }];
         })),
       );
@@ -414,7 +421,33 @@ export default function ClosingStockPage() {
   function updateRow(index: number, field: 'previousStock' | 'addedToday' | 'closingStock', value: string) {
     setRows((prev) => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
+      const nextRow = { ...copy[index], [field]: value };
+      nextRow.soldQuantity = String(calculateStockCountSummary({
+        previousStock: parseNum(nextRow.previousStock),
+        addedToday: parseNum(nextRow.addedToday),
+        closingStock: parseNum(nextRow.closingStock),
+        salePrice: nextRow.product.sale_price,
+        costPrice: nextRow.product.cost_price,
+      }).soldQuantity);
+      copy[index] = nextRow;
+      return copy;
+    });
+  }
+
+  function updateSoldQuantity(index: number, value: string) {
+    setRows((prev) => {
+      const copy = [...prev];
+      const current = copy[index];
+      const closingStock = calculateClosingStockFromSold(
+        parseNum(current.previousStock),
+        parseNum(current.addedToday),
+        parseNum(value),
+      );
+      copy[index] = {
+        ...current,
+        soldQuantity: value,
+        closingStock: String(closingStock),
+      };
       return copy;
     });
   }
@@ -659,10 +692,22 @@ export default function ClosingStockPage() {
                       {t('closingStock')}
                       <br />
                       <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
-                        {isReadOnly ? t('snapshot') : t('youEnter')}
+                        {isReadOnly ? t('snapshot') : usesSoldEntry ? t('calculated') : t('youEnter')}
                       </span>
                     </th>
-                    <th className="px-4 py-4 text-center">{t('soldQty')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className="px-4 py-4 text-center">
+                      {t('soldQty')}
+                      <br />
+                      <span className="font-normal normal-case">({t('pcs')})</span>
+                      {usesSoldEntry && (
+                        <>
+                          <br />
+                          <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
+                            {t('youEnter')}
+                          </span>
+                        </>
+                      )}
+                    </th>
                     <th className="px-4 py-4 text-right">{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className="px-5 py-4 text-right">{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                   </tr>
@@ -695,7 +740,7 @@ export default function ClosingStockPage() {
                         <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.previousStock)}</td>
                         <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.addedToday)}</td>
                         <td className="px-4 py-4">
-                          {isReadOnly ? (
+                          {isReadOnly || usesSoldEntry ? (
                             <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
                           ) : (
                             <input
@@ -708,7 +753,20 @@ export default function ClosingStockPage() {
                             />
                           )}
                         </td>
-                        <td className="px-4 py-4 text-center font-semibold text-gray-900">{summary.soldQuantity}</td>
+                        <td className="px-4 py-4">
+                          {usesSoldEntry ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="input-field mx-auto h-10 w-28 text-center font-semibold"
+                              value={row.soldQuantity}
+                              onChange={(event) => updateSoldQuantity(originalIndex, event.target.value)}
+                            />
+                          ) : (
+                            <p className="text-center font-semibold text-gray-900">{summary.soldQuantity}</p>
+                          )}
+                        </td>
                         <td className="px-4 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barIncome)}</td>
                         <td className="px-5 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barProfit)}</td>
                       </tr>

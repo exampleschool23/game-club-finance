@@ -169,6 +169,7 @@
     "importFromExcel": "Import from Excel",
     "costBasis": "Cost Basis",
     "youEnter": "You enter",
+    "calculated": "Calculated",
     "snapshot": "Saved",
     "unknownProduct": "Unknown product",
     "totalRow": "Total ({count} products)",

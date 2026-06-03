@@ -169,6 +169,7 @@
     "importFromExcel": "Импорт из Excel",
     "costBasis": "Себестоимость",
     "youEnter": "Вы вводите",
+    "calculated": "Рассчитано",
     "snapshot": "Сохранено",
     "unknownProduct": "Неизвестный товар",
     "totalRow": "Итого ({count} товаров)",

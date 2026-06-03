@@ -169,6 +169,7 @@
     "importFromExcel": "Exceldan import",
     "costBasis": "Xarid narxi",
     "youEnter": "Siz kiritasiz",
+    "calculated": "Hisoblangan",
     "snapshot": "Saqlangan",
     "unknownProduct": "Noma'lum mahsulot",
     "totalRow": "Jami ({count} mahsulot)",
