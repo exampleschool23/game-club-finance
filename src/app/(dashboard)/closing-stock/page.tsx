@@ -82,6 +82,34 @@ export default function ClosingStockPage() {
   const isOwner = currentRole === 'owner';
   const isReadOnly = isHistoricalDate && !isOwner;
 
+  const buildEditableRows = useCallback(
+    (products: Product[], counts: Array<Record<string, number | string>>, purchases: PurchaseQuantity[]) => {
+      const purchasesByProduct = purchases.reduce<Record<string, number>>(
+        (acc, purchase) => {
+          acc[purchase.product_id] = (acc[purchase.product_id] ?? 0) + Number(purchase.quantity ?? 0);
+          return acc;
+        },
+        {},
+      );
+
+      return products.map((product) => {
+        const existing = counts.find((count) => count.product_id === product.id);
+        const defaults = calculateClosingStockDefaults({
+          currentStock: product.current_stock,
+          purchasedToday: purchasesByProduct[product.id] ?? 0,
+        });
+
+        return {
+          product,
+          previousStock: existing ? String(existing.previous_stock) : String(defaults.previousStock),
+          addedToday: existing ? String(existing.added_today) : String(defaults.addedToday),
+          closingStock: existing ? String(existing.closing_stock) : String(defaults.closingStock),
+        };
+      });
+    },
+    [],
+  );
+
   const loadData = useCallback(async (selectedDate: string) => {
     setLoading(true);
     setError('');
@@ -99,6 +127,30 @@ export default function ClosingStockPage() {
       if (countsError) {
         setError(countsError.message);
         setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      if ((data?.length ?? 0) === 0 && currentRole === 'owner') {
+        const [productsRes, purchasesRes] = await Promise.all([
+          supabase.from('products').select('*').eq('is_active', true).order('name'),
+          supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
+        ]);
+
+        if (productsRes.error || purchasesRes.error) {
+          setError(productsRes.error?.message ?? purchasesRes.error?.message ?? tc('error'));
+          setRows([]);
+          setLoading(false);
+          return;
+        }
+
+        setRows(
+          buildEditableRows(
+            (productsRes.data ?? []) as Product[],
+            [],
+            ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+          ),
+        );
         setLoading(false);
         return;
       }
@@ -144,33 +196,15 @@ export default function ClosingStockPage() {
       return;
     }
 
-    const products = productsRes.data ?? [];
-    const counts = countsRes.data ?? [];
-    const purchasesByProduct = ((purchasesRes.data as PurchaseQuantity[]) ?? []).reduce<Record<string, number>>(
-      (acc, purchase) => {
-        acc[purchase.product_id] = (acc[purchase.product_id] ?? 0) + Number(purchase.quantity ?? 0);
-        return acc;
-      },
-      {},
-    );
-
     setRows(
-      products.map((product) => {
-        const existing = counts.find((count) => count.product_id === product.id);
-        const defaults = calculateClosingStockDefaults({
-          currentStock: product.current_stock,
-          purchasedToday: purchasesByProduct[product.id] ?? 0,
-        });
-        return {
-          product,
-          previousStock: existing ? String(existing.previous_stock) : String(defaults.previousStock),
-          addedToday: existing ? String(existing.added_today) : String(defaults.addedToday),
-          closingStock: existing ? String(existing.closing_stock) : String(defaults.closingStock),
-        };
-      }),
+      buildEditableRows(
+        (productsRes.data ?? []) as Product[],
+        (countsRes.data ?? []) as Array<Record<string, number | string>>,
+        ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+      ),
     );
     setLoading(false);
-  }, [t, tc]);
+  }, [buildEditableRows, currentRole, t, tc]);
 
   useEffect(() => {
     loadData(date).catch((err) => {

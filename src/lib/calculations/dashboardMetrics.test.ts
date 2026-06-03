@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildIncomeTrend,
+  buildPeriodTrend,
   calculateDashboardTotals,
   getDashboardRange,
   getPreviousDashboardRange,
@@ -116,6 +117,50 @@ describe('dashboard metrics', () => {
     expect(trend[6]).toEqual({ date: '2026-06-03', income: 10_000, expenses: 500 });
   });
 
+  it('builds a month trend from the selected month range, including early-month data', () => {
+    const range = getDashboardRange('month', '2026-06-03');
+    const trend = buildPeriodTrend(
+      range,
+      [{ date: '2026-06-03', cash_income: 5_000_000, terminal_income: 775_000, card_income: 1_840_000 }],
+      [{ date: '2026-06-03', bar_income: 126_000, bar_profit: 60_000, bar_cost: 66_000, sold_quantity: 3 }],
+      [
+        { id: 'e1', date: '2026-06-03', amount: 1_000_000, category: 'equipment', comment: null, created_at: '2026-06-03T10:00:00Z' },
+        { id: 'e2', date: '2026-06-03', amount: 120_000, category: 'cleaning', comment: null, created_at: '2026-06-03T11:00:00Z' },
+      ],
+    );
+
+    expect(trend).toHaveLength(30);
+    expect(trend[0]).toEqual({ date: '2026-06-01', income: 0, expenses: 0 });
+    expect(trend[2]).toEqual({ date: '2026-06-03', income: 7_741_000, expenses: 1_120_000 });
+    expect(trend[29]).toEqual({ date: '2026-06-30', income: 0, expenses: 0 });
+  });
+
+  it('builds a week trend for the exact selected dashboard week', () => {
+    const range = getDashboardRange('week', '2026-06-03');
+    const trend = buildPeriodTrend(
+      range,
+      [{ date: '2026-06-01', cash_income: 100, terminal_income: 200, card_income: 300 }],
+      [],
+      [{ id: 'e1', date: '2026-06-07', amount: 50, category: 'other', comment: null, created_at: '2026-06-07T10:00:00Z' }],
+    );
+
+    expect(trend).toHaveLength(7);
+    expect(trend[0]).toEqual({ date: '2026-06-01', income: 600, expenses: 0 });
+    expect(trend[6]).toEqual({ date: '2026-06-07', income: 0, expenses: 50 });
+  });
+
+  it('builds a today trend for only the selected date', () => {
+    const range = getDashboardRange('today', '2026-06-03');
+    const trend = buildPeriodTrend(
+      range,
+      [{ date: '2026-06-03', cash_income: 1_000, terminal_income: 0, card_income: 0 }],
+      [],
+      [],
+    );
+
+    expect(trend).toEqual([{ date: '2026-06-03', income: 1_000, expenses: 0 }]);
+  });
+
   it('uses local dates instead of UTC conversion for ranges', () => {
     const localDate = new Date(2026, 5, 3, 1, 0, 0);
 
@@ -127,6 +172,10 @@ describe('dashboard metrics', () => {
     expect(getDashboardRange('week', '2026-06-03')).toEqual({
       from: '2026-06-01',
       to: '2026-06-07',
+    });
+    expect(getDashboardRange('month', '2026-06-03')).toEqual({
+      from: '2026-06-01',
+      to: '2026-06-30',
     });
     expect(getPreviousDashboardRange({ from: '2026-06-01', to: '2026-06-07' })).toEqual({
       from: '2026-05-25',

@@ -33,13 +33,11 @@ import {
 } from '@/components/dashboard/RecentTransactionsTable';
 import { SummaryStrip } from '@/components/dashboard/SummaryStrip';
 import {
-  addDays,
-  buildIncomeTrend,
+  buildPeriodTrend,
   calculateDashboardTotals,
   emptyDashboardTotals,
   getDashboardRange,
   getPreviousDashboardRange,
-  localIsoDate,
   parseLocalIsoDate,
   percentChange,
   type DailyCashRow,
@@ -130,7 +128,6 @@ export default function DashboardPage() {
 
     const supabase = createClient();
     const previousRange = getPreviousDashboardRange(range);
-    const trendFrom = localIsoDate(addDays(parseLocalIsoDate(range.to), -6));
 
     const [
       cashRes,
@@ -197,17 +194,17 @@ export default function DashboardPage() {
       supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income')
-        .gte('date', trendFrom)
+        .gte('date', range.from)
         .lte('date', range.to),
       supabase
         .from('daily_stock_counts')
         .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
-        .gte('date', trendFrom)
+        .gte('date', range.from)
         .lte('date', range.to),
       supabase
         .from('expenses')
         .select('id,date,amount,category,comment,created_at')
-        .gte('date', trendFrom)
+        .gte('date', range.from)
         .lte('date', range.to),
     ]);
 
@@ -255,7 +252,7 @@ export default function DashboardPage() {
     const trendCashRows = (trendCashRes.data ?? []) as DailyCashRow[];
     const trendStockRows = (trendStockRes.data ?? []) as StockCountRow[];
     const trendExpenseRows = (trendExpenseRes.data ?? []) as ExpenseRow[];
-    const trend = buildIncomeTrend(range.to, trendCashRows, trendStockRows, trendExpenseRows).map((row) => ({
+    const trend = buildPeriodTrend(range, trendCashRows, trendStockRows, trendExpenseRows).map((row) => ({
       ...row,
       date: formatShortDate(row.date),
     }));

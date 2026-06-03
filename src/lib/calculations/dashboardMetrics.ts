@@ -190,6 +190,29 @@ export function buildIncomeTrend(
     localIsoDate(addDays(parseLocalIsoDate(endDate), index - 6)),
   );
 
+  return buildTrendForDates(trendDates, cashRows, stockRows, expenseRows);
+}
+
+export function buildPeriodTrend(
+  range: { from: string; to: string },
+  cashRows: DailyCashRow[],
+  stockRows: StockCountRow[],
+  expenseRows: ExpenseRow[],
+): TrendRow[] {
+  const from = parseLocalIsoDate(range.from);
+  const to = parseLocalIsoDate(range.to);
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+  const trendDates = Array.from({ length: days }, (_, index) => localIsoDate(addDays(from, index)));
+
+  return buildTrendForDates(trendDates, cashRows, stockRows, expenseRows);
+}
+
+function buildTrendForDates(
+  trendDates: string[],
+  cashRows: DailyCashRow[],
+  stockRows: StockCountRow[],
+  expenseRows: ExpenseRow[],
+): TrendRow[] {
   return trendDates.map((date) => {
     const dayCash = cashRows.filter((row) => row.date === date);
     const dayStock = stockRows.filter((row) => row.date === date);
