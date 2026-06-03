@@ -229,8 +229,11 @@ export default function ClosingStockPage() {
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
   const isAdmin = currentRole === 'admin';
-  const isReadOnly = isHistoricalDate && !isOwner;
-  const usesSoldEntry = isAdmin && !isReadOnly;
+  const usesSoldEntry = isAdmin && !isHistoricalDate;
+  const usesClosingEntry = isOwner;
+  const canSave = usesClosingEntry || usesSoldEntry;
+  const isReadOnly = !canSave;
+  const isHistoricalReadOnly = isHistoricalDate && !isOwner;
 
   const buildEditableRows = useCallback(
     (
@@ -623,10 +626,10 @@ export default function ClosingStockPage() {
           <Info size={20} className="mt-0.5 flex-shrink-0 text-primary-600" />
           <div>
             <p className="font-semibold text-gray-900">
-              {isReadOnly ? t('readOnlyTitle') : isHistoricalDate ? t('ownerHistoricalEditTitle') : t('infoTitle')}
+              {isHistoricalReadOnly ? t('readOnlyTitle') : isHistoricalDate ? t('ownerHistoricalEditTitle') : t('infoTitle')}
             </p>
             <p className="mt-1 text-sm text-gray-600">
-              {isReadOnly ? t('readOnlyBody') : isHistoricalDate ? t('ownerHistoricalEditBody') : t('infoBody')}
+              {isHistoricalReadOnly ? t('readOnlyBody') : isHistoricalDate ? t('ownerHistoricalEditBody') : t('infoBody')}
             </p>
           </div>
         </div>
