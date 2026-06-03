@@ -7,6 +7,7 @@ import { formatCurrency, todayIso } from '@/lib/utils';
 import { formatDateOnly, formatDatePickerValue } from '@/lib/formatters';
 import {
   calculateClosingStockDefaults,
+  recalculateFutureStockCounts,
   calculateStockCountSummary,
 } from '@/lib/calculations/stock';
 import {
@@ -30,6 +31,21 @@ interface PurchaseQuantity {
   quantity: number;
 }
 
+interface PreviousClosing {
+  product_id: string;
+  closing_stock: number;
+}
+
+interface FutureStockCountRow {
+  id: string;
+  product_id: string;
+  date: string;
+  added_today: number;
+  closing_stock: number;
+  sale_price: number;
+  cost_price: number;
+}
+
 interface StockCountRow {
   product_id: string;
   previous_stock: number;
@@ -38,8 +54,8 @@ interface StockCountRow {
   sale_price: number;
   cost_price: number;
   products?:
-    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'created_at' | 'updated_at'>
-    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'created_at' | 'updated_at'>[]
+    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>
+    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>[]
     | null;
 }
 
@@ -79,21 +95,120 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
 
+function isMissingDeletedColumn(error: { message?: string } | null | undefined) {
+  return error?.message?.includes('is_deleted') ?? false;
+}
+
 async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
   const ordered = await supabase
     .from('products')
     .select('*')
     .eq('is_active', true)
+    .eq('is_deleted', false)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
 
-  if (!isMissingSortOrder(ordered.error)) return ordered;
+  if (!ordered.error) return ordered;
+
+  if (isMissingSortOrder(ordered.error)) {
+    const named = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .order('name', { ascending: true });
+
+    if (!named.error) return named;
+  }
+
+  if (!isMissingDeletedColumn(ordered.error)) return ordered;
 
   return supabase
     .from('products')
     .select('*')
     .eq('is_active', true)
     .order('name', { ascending: true });
+}
+
+async function fetchPreviousClosings(supabase: ReturnType<typeof createClient>, selectedDate: string) {
+  const { data, error } = await supabase
+    .from('daily_stock_counts')
+    .select('product_id,closing_stock')
+    .lt('date', selectedDate)
+    .order('date', { ascending: false });
+
+  if (error) return { data: null, error };
+
+  const previousClosings = ((data as PreviousClosing[]) ?? []).reduce<Record<string, number>>(
+    (acc, row) => {
+      if (acc[row.product_id] === undefined) {
+        acc[row.product_id] = Number(row.closing_stock ?? 0);
+      }
+      return acc;
+    },
+    {},
+  );
+
+  return { data: previousClosings, error: null };
+}
+
+async function recalculateSavedFutureRows(
+  supabase: ReturnType<typeof createClient>,
+  selectedDate: string,
+  savedClosings: Record<string, number>,
+) {
+  const productIds = Object.keys(savedClosings);
+  if (productIds.length === 0) return null;
+
+  const { data, error } = await supabase
+    .from('daily_stock_counts')
+    .select('id,product_id,date,added_today,closing_stock,sale_price,cost_price')
+    .in('product_id', productIds)
+    .gt('date', selectedDate)
+    .order('date', { ascending: true });
+
+  if (error) return error;
+
+  const rowsByProduct = ((data as FutureStockCountRow[]) ?? []).reduce<Record<string, FutureStockCountRow[]>>(
+    (acc, row) => {
+      acc[row.product_id] = [...(acc[row.product_id] ?? []), row];
+      return acc;
+    },
+    {},
+  );
+
+  const updates = Object.entries(rowsByProduct).flatMap(([productId, futureRows]) =>
+    recalculateFutureStockCounts(savedClosings[productId], futureRows).map((row) => {
+      const original = futureRows.find((candidate) => candidate.date === row.date);
+      return {
+        id: original?.id,
+        previous_stock: row.previous_stock,
+        sold_quantity: row.sold_quantity,
+        bar_income: row.bar_income,
+        bar_cost: row.bar_cost,
+        bar_profit: row.bar_profit,
+        updated_at: new Date().toISOString(),
+      };
+    }),
+  ).filter((row): row is { id: string; previous_stock: number; sold_quantity: number; bar_income: number; bar_cost: number; bar_profit: number; updated_at: string } => Boolean(row.id));
+
+  const results = await Promise.all(
+    updates.map((row) =>
+      supabase
+        .from('daily_stock_counts')
+        .update({
+          previous_stock: row.previous_stock,
+          sold_quantity: row.sold_quantity,
+          bar_income: row.bar_income,
+          bar_cost: row.bar_cost,
+          bar_profit: row.bar_profit,
+          updated_at: row.updated_at,
+        })
+        .eq('id', row.id),
+    ),
+  );
+
+  return results.find((result) => result.error)?.error ?? null;
 }
 
 export default function ClosingStockPage() {
@@ -113,7 +228,12 @@ export default function ClosingStockPage() {
   const isReadOnly = isHistoricalDate && !isOwner;
 
   const buildEditableRows = useCallback(
-    (products: Product[], counts: Array<Record<string, number | string>>, purchases: PurchaseQuantity[]) => {
+    (
+      products: Product[],
+      counts: Array<Record<string, number | string>>,
+      purchases: PurchaseQuantity[],
+      previousClosings: Record<string, number>,
+    ) => {
       const purchasesByProduct = purchases.reduce<Record<string, number>>(
         (acc, purchase) => {
           acc[purchase.product_id] = (acc[purchase.product_id] ?? 0) + Number(purchase.quantity ?? 0);
@@ -124,16 +244,19 @@ export default function ClosingStockPage() {
 
       return sortRowsByProductOrder(products.map((product) => {
         const existing = counts.find((count) => count.product_id === product.id);
+        const addedToday = purchasesByProduct[product.id] ?? 0;
         const defaults = calculateClosingStockDefaults({
           currentStock: product.current_stock,
-          purchasedToday: purchasesByProduct[product.id] ?? 0,
+          purchasedToday: addedToday,
         });
+        const previousClosing = previousClosings[product.id];
+        const previousStock = previousClosing ?? defaults.previousStock;
 
         return {
           product,
-          previousStock: existing ? String(existing.previous_stock) : String(defaults.previousStock),
+          previousStock: existing ? String(existing.previous_stock) : String(previousStock),
           addedToday: existing ? String(existing.added_today) : String(defaults.addedToday),
-          closingStock: existing ? String(existing.closing_stock) : String(defaults.closingStock),
+          closingStock: existing ? String(existing.closing_stock) : String(previousClosing === undefined ? defaults.closingStock : previousStock + addedToday),
         };
       }));
     },
@@ -150,7 +273,7 @@ export default function ClosingStockPage() {
     if (readOnlyDate) {
       const countsWithOrder = await supabase
         .from('daily_stock_counts')
-        .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,sort_order,is_active,created_at,updated_at)')
+        .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
 
@@ -160,7 +283,7 @@ export default function ClosingStockPage() {
       if (isMissingSortOrder(countsWithOrder.error)) {
         const countsWithoutOrder = await supabase
           .from('daily_stock_counts')
-          .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,created_at,updated_at)')
+          .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
           .eq('date', selectedDate)
           .order('updated_at', { ascending: false });
 
@@ -178,13 +301,14 @@ export default function ClosingStockPage() {
       const stockCountRows = (data as StockCountRow[] | null) ?? [];
 
       if (stockCountRows.length === 0 && currentRole === 'owner') {
-        const [productsRes, purchasesRes] = await Promise.all([
+        const [productsRes, purchasesRes, previousClosingsRes] = await Promise.all([
           fetchActiveProductsOrdered(supabase),
           supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
+          fetchPreviousClosings(supabase, selectedDate),
         ]);
 
-        if (productsRes.error || purchasesRes.error) {
-          setError(productsRes.error?.message ?? purchasesRes.error?.message ?? tc('error'));
+        if (productsRes.error || purchasesRes.error || previousClosingsRes.error) {
+          setError(productsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? tc('error'));
           setRows([]);
           setLoading(false);
           return;
@@ -195,6 +319,7 @@ export default function ClosingStockPage() {
             (productsRes.data ?? []) as Product[],
             [],
             ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+            previousClosingsRes.data ?? {},
           ),
         );
         setLoading(false);
@@ -202,8 +327,9 @@ export default function ClosingStockPage() {
       }
 
       setRows(
-        sortRowsByProductOrder(stockCountRows.map((count) => {
+        sortRowsByProductOrder(stockCountRows.flatMap((count) => {
           const relation = Array.isArray(count.products) ? count.products[0] : count.products;
+          if (relation?.is_deleted) return [];
           const product: Product = {
             id: relation?.id ?? count.product_id,
             name: relation?.name ?? t('unknownProduct'),
@@ -214,30 +340,32 @@ export default function ClosingStockPage() {
             low_stock_threshold: relation?.low_stock_threshold ?? null,
             sort_order: relation?.sort_order ?? null,
             is_active: relation?.is_active ?? false,
+            is_deleted: relation?.is_deleted ?? false,
             created_at: relation?.created_at ?? '',
             updated_at: relation?.updated_at ?? '',
           };
 
-          return {
+          return [{
             product,
             previousStock: String(count.previous_stock ?? 0),
             addedToday: String(count.added_today ?? 0),
             closingStock: String(count.closing_stock ?? 0),
-          };
+          }];
         })),
       );
       setLoading(false);
       return;
     }
 
-    const [productsRes, countsRes, purchasesRes] = await Promise.all([
+    const [productsRes, countsRes, purchasesRes, previousClosingsRes] = await Promise.all([
       fetchActiveProductsOrdered(supabase),
       supabase.from('daily_stock_counts').select('*').eq('date', selectedDate),
       supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
+      fetchPreviousClosings(supabase, selectedDate),
     ]);
 
-    if (productsRes.error || countsRes.error || purchasesRes.error) {
-      setError(productsRes.error?.message ?? countsRes.error?.message ?? purchasesRes.error?.message ?? tc('error'));
+    if (productsRes.error || countsRes.error || purchasesRes.error || previousClosingsRes.error) {
+      setError(productsRes.error?.message ?? countsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? tc('error'));
       setRows([]);
       setLoading(false);
       return;
@@ -248,6 +376,7 @@ export default function ClosingStockPage() {
         (productsRes.data ?? []) as Product[],
         (countsRes.data ?? []) as Array<Record<string, number | string>>,
         ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+        previousClosingsRes.data ?? {},
       ),
     );
     setLoading(false);
@@ -367,9 +496,22 @@ export default function ClosingStockPage() {
       .from('daily_stock_counts')
       .upsert(upserts, { onConflict: 'date,product_id' });
 
-    setSaving(false);
     if (err) {
+      setSaving(false);
       setError(err.message);
+      return;
+    }
+
+    const savedClosings = upserts.reduce<Record<string, number>>((acc, row) => {
+      acc[row.product_id] = row.closing_stock;
+      return acc;
+    }, {});
+    const cascadeError = await recalculateSavedFutureRows(supabase, date, savedClosings);
+
+    setSaving(false);
+
+    if (cascadeError) {
+      setError(cascadeError.message);
       return;
     }
 

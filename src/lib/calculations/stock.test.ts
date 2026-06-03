@@ -7,6 +7,7 @@ import {
   calculateStockCountSummary,
   calculateWeightedAverageCost,
   calculateClosingStockDefaults,
+  recalculateFutureStockCounts,
 } from './stock';
 
 describe('calculateSoldQuantity', () => {
@@ -181,5 +182,51 @@ describe('calculateClosingStockDefaults', () => {
       addedToday: 24,
       closingStock: 10,
     });
+  });
+});
+
+describe('recalculateFutureStockCounts', () => {
+  it('chains previous stock from the edited closing stock into later saved days', () => {
+    expect(recalculateFutureStockCounts(66, [
+      {
+        date: '2026-06-03',
+        added_today: 10,
+        closing_stock: 70,
+        sale_price: 15000,
+        cost_price: 10000,
+      },
+      {
+        date: '2026-06-02',
+        added_today: 0,
+        closing_stock: 60,
+        sale_price: 15000,
+        cost_price: 10000,
+      },
+    ])).toEqual([
+      {
+        date: '2026-06-02',
+        previous_stock: 66,
+        added_today: 0,
+        closing_stock: 60,
+        sold_quantity: 6,
+        sale_price: 15000,
+        cost_price: 10000,
+        bar_income: 90000,
+        bar_cost: 60000,
+        bar_profit: 30000,
+      },
+      {
+        date: '2026-06-03',
+        previous_stock: 60,
+        added_today: 10,
+        closing_stock: 70,
+        sold_quantity: 0,
+        sale_price: 15000,
+        cost_price: 10000,
+        bar_income: 0,
+        bar_cost: 0,
+        bar_profit: 0,
+      },
+    ]);
   });
 });

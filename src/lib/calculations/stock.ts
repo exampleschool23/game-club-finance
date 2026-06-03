@@ -31,6 +31,22 @@ export interface ClosingStockDefaults {
   closingStock: number;
 }
 
+export interface FutureStockCountInput {
+  date: string;
+  added_today: number;
+  closing_stock: number;
+  sale_price: number;
+  cost_price: number;
+}
+
+export interface RecalculatedFutureStockCount extends FutureStockCountInput {
+  previous_stock: number;
+  sold_quantity: number;
+  bar_income: number;
+  bar_cost: number;
+  bar_profit: number;
+}
+
 export function calculateSoldQuantity(
   previousStock: number,
   addedToday: number,
@@ -91,4 +107,35 @@ export function calculateClosingStockDefaults(input: ClosingStockDefaultsInput):
     addedToday,
     closingStock: currentStock,
   };
+}
+
+export function recalculateFutureStockCounts(
+  startingClosingStock: number,
+  rows: FutureStockCountInput[],
+): RecalculatedFutureStockCount[] {
+  let previousStock = startingClosingStock;
+
+  return [...rows]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => {
+      const summary = calculateStockCountSummary({
+        previousStock,
+        addedToday: row.added_today,
+        closingStock: row.closing_stock,
+        salePrice: row.sale_price,
+        costPrice: row.cost_price,
+      });
+
+      const recalculated = {
+        ...row,
+        previous_stock: previousStock,
+        sold_quantity: summary.soldQuantity,
+        bar_income: summary.barIncome,
+        bar_cost: summary.barCost,
+        bar_profit: summary.barProfit,
+      };
+
+      previousStock = row.closing_stock;
+      return recalculated;
+    });
 }
