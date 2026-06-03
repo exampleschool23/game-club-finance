@@ -108,8 +108,8 @@ export default function ProductsPage() {
       name: form.name.trim(),
       category: form.category.trim() || null,
       sale_price: parseFloat(form.sale_price) || 0,
-      cost_price: parseFloat(form.cost_price) || 0,
-      // Only owners can change current_stock directly
+      // Only owners can change cost_price and current_stock directly
+      ...(isOwner ? { cost_price: parseFloat(form.cost_price) || 0 } : {}),
       ...(isOwner ? { current_stock: parseFloat(form.current_stock) || 0 } : {}),
       low_stock_threshold: parseFloat(form.low_stock_threshold) || 5,
       is_active: form.is_active,
@@ -258,15 +258,22 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">{t('costPrice')}</label>
+                  <label className="label flex items-center gap-1.5">
+                    {t('costPrice')}
+                    {!isOwner && <Lock size={12} className="text-gray-400" />}
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="1"
-                    className="input-field"
+                    className="input-field disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     value={form.cost_price}
+                    disabled={!isOwner}
                     onChange={(e) => set('cost_price', e.target.value)}
                   />
+                  {!isOwner && (
+                    <p className="mt-1 text-xs text-gray-400">Updated automatically from stock purchases</p>
+                  )}
                 </div>
                 <div>
                   <label className="label flex items-center gap-1.5">
