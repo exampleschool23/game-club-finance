@@ -90,6 +90,27 @@ const emptyData: DashboardData = {
   recentTransactions: [],
 };
 
+function isMissingSortOrder(error: { message?: string } | null | undefined) {
+  return error?.message?.includes('sort_order') ?? false;
+}
+
+async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
+  const ordered = await supabase
+    .from('products')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (!isMissingSortOrder(ordered.error)) return ordered;
+
+  return supabase
+    .from('products')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+}
+
 function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte: (column: string, value: string) => T }>(
   query: T,
   range: { from: string; to: string },
@@ -161,7 +182,7 @@ export default function DashboardPage() {
           .order('created_at', { ascending: false }),
         range,
       ),
-      supabase.from('products').select('*').eq('is_active', true).order('name'),
+      fetchActiveProductsOrdered(supabase),
       supabase
         .from('new_debts')
         .select('id,person_name,remaining_amount,status')

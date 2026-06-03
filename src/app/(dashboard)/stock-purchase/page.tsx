@@ -56,6 +56,27 @@ function paymentBadge(method: string) {
   return styles[method] ?? 'bg-gray-100 text-gray-700 border-gray-200';
 }
 
+function isMissingSortOrder(error: { message?: string } | null | undefined) {
+  return error?.message?.includes('sort_order') ?? false;
+}
+
+async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
+  const ordered = await supabase
+    .from('products')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (!isMissingSortOrder(ordered.error)) return ordered;
+
+  return supabase
+    .from('products')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+}
+
 export default function StockPurchasePage() {
   const t = useTranslations('stockPurchase');
   const tc = useTranslations('common');
@@ -80,7 +101,7 @@ export default function StockPurchasePage() {
   async function loadData() {
     const supabase = createClient();
     const [productsRes, purchasesRes] = await Promise.all([
-      supabase.from('products').select('*').eq('is_active', true).order('name'),
+      fetchActiveProductsOrdered(supabase),
       supabase
         .from('stock_purchases')
         .select('*, products(name, sale_price, cost_price)')

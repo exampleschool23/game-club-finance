@@ -16,7 +16,11 @@ import { FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import type { DailyCashEntry, DailyStockCount, Expense } from '@/types';
 
 interface ProductRow extends DailyStockCount {
-  products: { name: string } | null;
+  products: { name: string; sort_order?: number | null } | null;
+}
+
+function isMissingSortOrder(error: { message?: string } | null | undefined) {
+  return error?.message?.includes('sort_order') ?? false;
 }
 
 export default function DailyReportPage() {
@@ -34,17 +38,31 @@ export default function DailyReportPage() {
     setLoading(true);
     const supabase = createClient();
 
-    const [cashRes, stockRes, expRes] = await Promise.all([
+    let [cashRes, stockRes, expRes] = await Promise.all([
       supabase.from('daily_cash_entries').select('*').eq('date', selectedDate).maybeSingle(),
       supabase
         .from('daily_stock_counts')
-        .select('*, products(name)')
+        .select('*, products(name, sort_order)')
         .eq('date', selectedDate),
       supabase.from('expenses').select('*').eq('date', selectedDate).order('created_at'),
     ]);
 
+    if (isMissingSortOrder(stockRes.error)) {
+      stockRes = await supabase
+        .from('daily_stock_counts')
+        .select('*, products(name)')
+        .eq('date', selectedDate);
+    }
+
     setCashEntry(cashRes.data as DailyCashEntry | null);
-    setStockCounts((stockRes.data as ProductRow[]) ?? []);
+    setStockCounts(
+      ((stockRes.data as ProductRow[]) ?? []).sort((a, b) => {
+        const orderA = a.products?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        const orderB = b.products?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.products?.name ?? a.product_id).localeCompare(b.products?.name ?? b.product_id);
+      }),
+    );
     setExpenses((expRes.data as Expense[]) ?? []);
     setLoading(false);
   }, []);

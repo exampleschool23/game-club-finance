@@ -8,7 +8,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/utils';
-import { Lock, Package, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Lock, Package, Plus, X } from 'lucide-react';
 import type { Product, UserRole } from '@/types';
 
 interface ProductForm {
@@ -30,6 +30,10 @@ const emptyForm = (): ProductForm => ({
   low_stock_threshold: '5',
   is_active: true,
 });
+
+function isMissingSortOrder(error: { message?: string } | null | undefined) {
+  return error?.message?.includes('sort_order') ?? false;
+}
 
 export default function ProductsPage() {
   const t = useTranslations('products');
@@ -61,8 +65,23 @@ export default function ProductsPage() {
 
   async function loadProducts() {
     const supabase = createClient();
-    const { data } = await supabase.from('products').select('*').order('name');
-    setProducts(data ?? []);
+    const ordered = await supabase
+      .from('products')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true });
+
+    if (!isMissingSortOrder(ordered.error)) {
+      setProducts(ordered.data ?? []);
+      return;
+    }
+
+    const fallback = await supabase
+      .from('products')
+      .select('*')
+      .order('name', { ascending: true });
+
+    setProducts(fallback.data ?? []);
   }
 
   useEffect(() => {
@@ -124,8 +143,20 @@ export default function ProductsPage() {
         .eq('id', editingId);
       err = e?.message ?? null;
     } else {
-      const { error: e } = await supabase.from('products').insert(payload);
-      err = e?.message ?? null;
+      const maxSortOrder = products.reduce(
+        (max, product, index) => Math.max(max, product.sort_order ?? index + 1),
+        0,
+      );
+      const insertWithOrder = await supabase.from('products').insert({
+        ...payload,
+        sort_order: maxSortOrder + 1,
+      });
+      if (isMissingSortOrder(insertWithOrder.error)) {
+        const { error: e } = await supabase.from('products').insert(payload);
+        err = e?.message ?? null;
+      } else {
+        err = insertWithOrder.error?.message ?? null;
+      }
     }
 
     setSaving(false);
@@ -133,6 +164,33 @@ export default function ProductsPage() {
       setError(err);
     } else {
       setModalOpen(false);
+      await loadProducts();
+    }
+  }
+
+  async function moveProduct(productId: string, direction: -1 | 1) {
+    const currentIndex = products.findIndex((product) => product.id === productId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= products.length) return;
+
+    const reordered = [...products];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    setProducts(reordered);
+
+    const supabase = createClient();
+    const updates = reordered.map((product, index) =>
+      supabase
+        .from('products')
+        .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
+        .eq('id', product.id),
+    );
+    const results = await Promise.all(updates);
+    const firstError = results.find((result) => result.error)?.error;
+
+    if (firstError) {
+      setError(isMissingSortOrder(firstError) ? t('sortOrderMigrationRequired') : firstError.message);
       await loadProducts();
     }
   }
@@ -166,6 +224,37 @@ export default function ProductsPage() {
           data={products}
           columns={[
             { key: 'name', header: t('name') },
+            {
+              key: 'sort_order',
+              header: t('order'),
+              render: (r) => {
+                const index = products.findIndex((product) => product.id === r.id);
+                return (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={index <= 0}
+                      aria-label={t('moveUp')}
+                      title={t('moveUp')}
+                      onClick={() => moveProduct(r.id, -1)}
+                    >
+                      <ArrowUp size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={index === -1 || index >= products.length - 1}
+                      aria-label={t('moveDown')}
+                      title={t('moveDown')}
+                      onClick={() => moveProduct(r.id, 1)}
+                    >
+                      <ArrowDown size={15} />
+                    </button>
+                  </div>
+                );
+              },
+            },
             { key: 'category', header: t('category'), render: (r) => r.category ?? '-' },
             {
               key: 'sale_price',

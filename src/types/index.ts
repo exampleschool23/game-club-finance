@@ -77,6 +77,7 @@ export interface Product {
   cost_price: number;
   current_stock: number;
   low_stock_threshold: number | null;
+  sort_order?: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

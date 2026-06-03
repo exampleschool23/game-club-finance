@@ -38,8 +38,8 @@ interface StockCountRow {
   sale_price: number;
   cost_price: number;
   products?:
-    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'is_active' | 'created_at' | 'updated_at'>
-    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'is_active' | 'created_at' | 'updated_at'>[]
+    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'created_at' | 'updated_at'>
+    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'created_at' | 'updated_at'>[]
     | null;
 }
 
@@ -64,6 +64,36 @@ function initials(name: string) {
     .map((part) => part[0])
     .join('')
     .toUpperCase();
+}
+
+function sortRowsByProductOrder(rows: RowData[]): RowData[] {
+  return [...rows].sort((a, b) => {
+    const orderA = a.product.sort_order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.product.sort_order ?? Number.MAX_SAFE_INTEGER;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.product.name.localeCompare(b.product.name);
+  });
+}
+
+function isMissingSortOrder(error: { message?: string } | null | undefined) {
+  return error?.message?.includes('sort_order') ?? false;
+}
+
+async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
+  const ordered = await supabase
+    .from('products')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (!isMissingSortOrder(ordered.error)) return ordered;
+
+  return supabase
+    .from('products')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
 }
 
 export default function ClosingStockPage() {
@@ -92,7 +122,7 @@ export default function ClosingStockPage() {
         {},
       );
 
-      return products.map((product) => {
+      return sortRowsByProductOrder(products.map((product) => {
         const existing = counts.find((count) => count.product_id === product.id);
         const defaults = calculateClosingStockDefaults({
           currentStock: product.current_stock,
@@ -105,7 +135,7 @@ export default function ClosingStockPage() {
           addedToday: existing ? String(existing.added_today) : String(defaults.addedToday),
           closingStock: existing ? String(existing.closing_stock) : String(defaults.closingStock),
         };
-      });
+      }));
     },
     [],
   );
@@ -118,11 +148,25 @@ export default function ClosingStockPage() {
     const readOnlyDate = selectedDate < todayIso();
 
     if (readOnlyDate) {
-      const { data, error: countsError } = await supabase
+      const countsWithOrder = await supabase
         .from('daily_stock_counts')
-        .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,created_at,updated_at)')
+        .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,sort_order,is_active,created_at,updated_at)')
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
+
+      let data: unknown = countsWithOrder.data;
+      let countsError = countsWithOrder.error;
+
+      if (isMissingSortOrder(countsWithOrder.error)) {
+        const countsWithoutOrder = await supabase
+          .from('daily_stock_counts')
+          .select('product_id,previous_stock,added_today,closing_stock,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,created_at,updated_at)')
+          .eq('date', selectedDate)
+          .order('updated_at', { ascending: false });
+
+        data = countsWithoutOrder.data;
+        countsError = countsWithoutOrder.error;
+      }
 
       if (countsError) {
         setError(countsError.message);
@@ -131,9 +175,11 @@ export default function ClosingStockPage() {
         return;
       }
 
-      if ((data?.length ?? 0) === 0 && currentRole === 'owner') {
+      const stockCountRows = (data as StockCountRow[] | null) ?? [];
+
+      if (stockCountRows.length === 0 && currentRole === 'owner') {
         const [productsRes, purchasesRes] = await Promise.all([
-          supabase.from('products').select('*').eq('is_active', true).order('name'),
+          fetchActiveProductsOrdered(supabase),
           supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
         ]);
 
@@ -156,7 +202,7 @@ export default function ClosingStockPage() {
       }
 
       setRows(
-        ((data as StockCountRow[]) ?? []).map((count) => {
+        sortRowsByProductOrder(stockCountRows.map((count) => {
           const relation = Array.isArray(count.products) ? count.products[0] : count.products;
           const product: Product = {
             id: relation?.id ?? count.product_id,
@@ -166,6 +212,7 @@ export default function ClosingStockPage() {
             cost_price: Number(count.cost_price ?? 0),
             current_stock: relation?.current_stock ?? Number(count.closing_stock ?? 0),
             low_stock_threshold: relation?.low_stock_threshold ?? null,
+            sort_order: relation?.sort_order ?? null,
             is_active: relation?.is_active ?? false,
             created_at: relation?.created_at ?? '',
             updated_at: relation?.updated_at ?? '',
@@ -177,14 +224,14 @@ export default function ClosingStockPage() {
             addedToday: String(count.added_today ?? 0),
             closingStock: String(count.closing_stock ?? 0),
           };
-        }),
+        })),
       );
       setLoading(false);
       return;
     }
 
     const [productsRes, countsRes, purchasesRes] = await Promise.all([
-      supabase.from('products').select('*').eq('is_active', true).order('name'),
+      fetchActiveProductsOrdered(supabase),
       supabase.from('daily_stock_counts').select('*').eq('date', selectedDate),
       supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
     ]);
@@ -332,6 +379,7 @@ export default function ClosingStockPage() {
 
   const kpis = [
     { label: t('totalProducts'), value: rows.length, unit: t('items'), icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
+    { label: t('stockPurchased'), value: totals.added, unit: t('pcs'), icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
     { label: t('totalSold'), value: totals.sold, unit: t('pcs'), icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { label: t('barIncomeEst'), value: formatCurrency(totals.income), unit: tc('currency'), icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
     { label: t('barProfitEst'), value: formatCurrency(totals.profit), unit: tc('currency'), icon: TrendingUp, color: 'text-success-600', bg: 'bg-success-50' },
@@ -409,7 +457,7 @@ export default function ClosingStockPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {kpis.map(({ label, value, unit, icon: Icon, color, bg }) => (
           <div key={label} className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-4">
