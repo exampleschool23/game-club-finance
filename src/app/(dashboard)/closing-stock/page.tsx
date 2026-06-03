@@ -207,11 +207,11 @@ export default function ClosingStockPage() {
   }
 
   const kpis = [
-    { label: 'Total Products', value: rows.length, unit: 'items', icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
-    { label: 'Total Sold (Est.)', value: totals.sold, unit: 'pcs', icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Bar Income (Est.)', value: formatCurrency(totals.income), unit: tc('currency'), icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
-    { label: 'Bar Profit (Est.)', value: formatCurrency(totals.profit), unit: tc('currency'), icon: TrendingUp, color: 'text-success-600', bg: 'bg-success-50' },
-    { label: 'Stock Value', value: formatCurrency(totals.stockValue), unit: tc('currency'), icon: Coins, color: 'text-gray-900', bg: 'bg-gray-100' },
+    { label: t('totalProducts'), value: rows.length, unit: t('items'), icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
+    { label: t('totalSold'), value: totals.sold, unit: t('pcs'), icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: t('barIncomeEst'), value: formatCurrency(totals.income), unit: tc('currency'), icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
+    { label: t('barProfitEst'), value: formatCurrency(totals.profit), unit: tc('currency'), icon: TrendingUp, color: 'text-success-600', bg: 'bg-success-50' },
+    { label: t('stockValue'), value: formatCurrency(totals.stockValue), unit: tc('currency'), icon: Coins, color: 'text-gray-900', bg: 'bg-gray-100' },
   ];
 
   return (
@@ -220,7 +220,7 @@ export default function ClosingStockPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-950">{t('title')}</h1>
           <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
-            <span>Dashboard</span>
+            <span>{t('dashboard')}</span>
             <span>›</span>
             <span>{t('title')}</span>
           </div>
@@ -249,7 +249,7 @@ export default function ClosingStockPage() {
             className="btn-secondary flex min-h-11 items-center justify-center gap-2 border border-gray-200 bg-white"
           >
             <Save size={16} />
-            Save Draft
+            {t('saveDraft')}
           </button>
           <button
             type="button"
@@ -267,8 +267,8 @@ export default function ClosingStockPage() {
         <div className="flex gap-3">
           <Info size={20} className="mt-0.5 flex-shrink-0 text-primary-600" />
           <div>
-            <p className="font-semibold text-gray-900">Enter remaining (closing) stock for each product</p>
-            <p className="mt-1 text-sm text-gray-600">Sold quantity, bar income and profit will be calculated automatically.</p>
+            <p className="font-semibold text-gray-900">{t('infoTitle')}</p>
+            <p className="mt-1 text-sm text-gray-600">{t('infoBody')}</p>
           </div>
         </div>
       </div>
@@ -297,13 +297,13 @@ export default function ClosingStockPage() {
         <section className="min-w-0 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <h2 className="text-lg font-bold text-gray-900">Products</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t('products')}</h2>
               <div className="relative w-full md:w-72">
                 <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="search"
                   className="input-field h-10 pl-9"
-                  placeholder="Search product..."
+                  placeholder={t('searchPlaceholder')}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -311,7 +311,7 @@ export default function ClosingStockPage() {
             </div>
             <button className="btn-secondary flex min-h-10 items-center justify-center gap-2 border border-gray-200 bg-white">
               <Upload size={16} />
-              Import from Excel
+              {t('importFromExcel')}
             </button>
           </div>
 
@@ -326,11 +326,11 @@ export default function ClosingStockPage() {
                   <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     <th className="w-12 px-5 py-4 text-left">#</th>
                     <th className="min-w-[250px] px-4 py-4 text-left">{t('product')}</th>
-                    <th className="px-4 py-4 text-right">Cost Basis<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className="px-4 py-4 text-center">{t('previousStock')}<br /><span className="font-normal normal-case">(pcs)</span></th>
-                    <th className="px-4 py-4 text-center">{t('addedToday')}<br /><span className="font-normal normal-case">(pcs)</span></th>
-                    <th className="px-4 py-4 text-center">{t('closingStock')}<br /><span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">You enter</span></th>
-                    <th className="px-4 py-4 text-center">{t('soldQty')}<br /><span className="font-normal normal-case">(pcs)</span></th>
+                    <th className="px-4 py-4 text-right">{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                    <th className="px-4 py-4 text-center">{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className="px-4 py-4 text-center">{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className="px-4 py-4 text-center">{t('closingStock')}<br /><span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">{t('youEnter')}</span></th>
+                    <th className="px-4 py-4 text-center">{t('soldQty')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className="px-4 py-4 text-right">{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className="px-5 py-4 text-right">{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                   </tr>
@@ -349,15 +349,15 @@ export default function ClosingStockPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="font-bold text-gray-900">{row.product.name}</p>
-                              <p className="mt-1 text-xs text-gray-500">Sale: {formatCurrency(row.product.sale_price)} {tc('currency')}</p>
-                              <p className="text-xs text-gray-500">Cost: {formatCurrency(row.product.cost_price)} {tc('currency')}</p>
+                              <p className="mt-1 text-xs text-gray-500">{t('saleLabel')} {formatCurrency(row.product.sale_price)} {tc('currency')}</p>
+                              <p className="text-xs text-gray-500">{t('costLabel')} {formatCurrency(row.product.cost_price)} {tc('currency')}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right">
                           <p className="font-semibold text-gray-900">{formatCurrency(row.product.cost_price)}</p>
                           <p className="mt-1 text-xs text-gray-500">
-                            Value: {formatCurrency(parseNum(row.closingStock) * row.product.cost_price)}
+                            {t('valueLabel')} {formatCurrency(parseNum(row.closingStock) * row.product.cost_price)}
                           </p>
                         </td>
                         <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.previousStock)}</td>
@@ -380,7 +380,7 @@ export default function ClosingStockPage() {
                   })}
                   <tr className="bg-white font-bold text-gray-900">
                     <td className="px-5 py-4" />
-                    <td className="px-4 py-4">Total ({rows.length} products)</td>
+                    <td className="px-4 py-4">{t('totalRow', { count: rows.length })}</td>
                     <td className="px-4 py-4 text-right">{formatCurrency(totals.stockValue)}</td>
                     <td className="px-4 py-4 text-center">{totals.previous}</td>
                     <td className="px-4 py-4 text-center">{totals.added}</td>
@@ -397,13 +397,13 @@ export default function ClosingStockPage() {
 
         <aside className="space-y-4">
           <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="font-bold text-gray-900">How it works</h3>
+            <h3 className="font-bold text-gray-900">{t('howItWorks')}</h3>
             <div className="mt-4 space-y-5">
-              {[
-                ['Enter closing stock', 'Type how many items are left now.'],
-                ['We calculate', 'Sold quantity, bar income and profit are calculated automatically.'],
-                ['Save', 'Your closing stock will be saved for this date.'],
-              ].map(([title, body], index) => (
+              {([
+                [t('step1Title'), t('step1Body')],
+                [t('step2Title'), t('step2Body')],
+                [t('step3Title'), t('step3Body')],
+              ] as [string, string][]).map(([title, body], index) => (
                 <div key={title} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-700">{index + 1}</span>
                   <div>
@@ -416,19 +416,19 @@ export default function ClosingStockPage() {
           </div>
 
           <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="font-bold text-gray-900">Formulas</h3>
+            <h3 className="font-bold text-gray-900">{t('formulas')}</h3>
             <div className="mt-4 space-y-4 text-sm">
               <div>
-                <p className="font-semibold text-gray-900">Sold Qty =</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">Previous Stock + Added Today - Closing Stock</p>
+                <p className="font-semibold text-gray-900">{t('formulaSoldTitle')}</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{t('formulaSoldBody')}</p>
               </div>
               <div>
-                <p className="font-semibold text-gray-900">Bar Income =</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">Sold Qty x Sale Price</p>
+                <p className="font-semibold text-gray-900">{t('formulaIncomeTitle')}</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{t('formulaIncomeBody')}</p>
               </div>
               <div>
-                <p className="font-semibold text-gray-900">Bar Profit =</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">(Sale Price - Cost Price) x Sold Qty</p>
+                <p className="font-semibold text-gray-900">{t('formulaProfitTitle')}</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{t('formulaProfitBody')}</p>
               </div>
             </div>
           </div>
@@ -436,12 +436,12 @@ export default function ClosingStockPage() {
           <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <HelpCircle size={18} className="text-primary-600" />
-              <h3 className="font-bold text-gray-900">Need help?</h3>
+              <h3 className="font-bold text-gray-900">{t('needHelp')}</h3>
             </div>
-            <p className="mt-3 text-sm leading-6 text-gray-500">If something looks wrong, check your product prices and added stock.</p>
+            <p className="mt-3 text-sm leading-6 text-gray-500">{t('needHelpBody')}</p>
             <a href="/products" className="btn-secondary mt-4 inline-flex min-h-10 items-center gap-2 border border-gray-200 bg-white">
               <Package size={16} />
-              View Products
+              {t('viewProducts')}
             </a>
           </div>
         </aside>
