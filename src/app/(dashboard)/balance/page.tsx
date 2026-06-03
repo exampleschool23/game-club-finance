@@ -55,14 +55,14 @@ export default function BalancePage() {
 
     setLoading(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
 
     const { error } = await supabase.from('cash_movements').insert({
       movement_type: form.movement_type,
       account: form.account,
       amount,
       comment: form.comment || null,
-      created_by: user!.id,
+      created_by: session!.user.id,
     });
 
     setLoading(false);

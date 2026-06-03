@@ -41,7 +41,7 @@ export default function ExpensePage() {
 
     setLoading(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
 
     const { error } = await supabase.from('expense_transactions').insert({
       amount,
@@ -49,7 +49,7 @@ export default function ExpensePage() {
       payment_source: form.payment_source,
       comment: form.comment || null,
       transaction_date: form.transaction_date,
-      created_by: user!.id,
+      created_by: session!.user.id,
     });
 
     setLoading(false);

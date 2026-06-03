@@ -38,7 +38,7 @@ export default function IncomePage() {
 
     setLoading(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
 
     const { error } = await supabase.from('income_transactions').insert({
       amount,
@@ -46,7 +46,7 @@ export default function IncomePage() {
       category: form.category,
       comment: form.comment || null,
       transaction_date: form.transaction_date,
-      created_by: user!.id,
+      created_by: session!.user.id,
     });
 
     setLoading(false);
