@@ -21,16 +21,16 @@ export function StatCard({ title, value, icon: Icon, variant = 'default', subtit
   const styles = variantStyles[variant];
 
   return (
-    <div className={cn('stat-card', styles.card)}>
-      <div className="flex items-start justify-between">
+    <div className={cn('stat-card min-w-0', styles.card)}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm text-gray-500 truncate">{title}</p>
-          <p className={cn('text-2xl font-bold mt-1 truncate', styles.value)}>
+          <p className={cn('text-xl sm:text-2xl font-bold mt-1 leading-tight break-words tabular-nums', styles.value)}>
             {formatCurrency(value)}
           </p>
           {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
         </div>
-        <div className={cn('p-2 rounded-lg ml-3 flex-shrink-0', styles.icon)}>
+        <div className={cn('p-2 rounded-lg flex-shrink-0', styles.icon)}>
           <Icon size={20} />
         </div>
       </div>

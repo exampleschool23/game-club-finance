@@ -25,7 +25,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell
-      role={profile?.role ?? 'cashier'}
+      role={profile?.role ?? 'viewer'}
       fullName={profile?.full_name ?? user.email ?? ''}
     >
       {children}

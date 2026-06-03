@@ -5,10 +5,13 @@
     "closingStock": "Ombor yopilishi",
     "stockPurchase": "Mahsulot xaridi",
     "products": "Mahsulotlar",
+    "inventory": "Inventar",
     "expenses": "Xarajatlar",
     "debts": "Qarzlar",
+    "reports": "Hisobotlar",
     "dailyReport": "Kunlik hisobot",
     "monthlyReport": "Oylik hisobot",
+    "team": "Jamoa",
     "settings": "Sozlamalar",
     "logout": "Chiqish"
   },
@@ -166,6 +169,24 @@
     "account": "Hisob",
     "appInfo": "Ilova haqida",
     "version": "Versiya"
+  },
+  "team": {
+    "title": "Jamoa",
+    "description": "Moliya, amallar va hisobotlarga kirish huquqlarini boshqaring.",
+    "refresh": "Yangilash",
+    "member": "A'zo",
+    "currentAccess": "Joriy huquq",
+    "changeAccess": "Huquqni o'zgartirish",
+    "joined": "Qo'shilgan",
+    "you": "Siz",
+    "saved": "Jamoa huquqi yangilandi",
+    "selfDemoteBlocked": "O'zingizning owner huquqingizni olib tashlay olmaysiz.",
+    "lastOwnerBlocked": "Kamida bitta owner qolishi kerak.",
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "viewer": "Viewer"
+    }
   },
   "auth": {
     "login": "Kirish",

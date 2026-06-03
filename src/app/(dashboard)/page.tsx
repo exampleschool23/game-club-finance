@@ -1,664 +1,566 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Wallet,
-  Receipt,
-  TrendingUp,
-  Coins,
-  ShoppingCart,
-  AlertTriangle,
   Banknote,
+  Boxes,
+  ChartNoAxesCombined,
   CreditCard,
-  QrCode,
-  ArrowRightLeft,
-  UserX,
-  Monitor,
-  CheckCircle2,
-  Package,
-  RefreshCcw,
-  Clock,
+  Gamepad2,
+  Receipt,
+  Settings2,
+  ShoppingBag,
+  TrendingUp,
+  UserRoundCheck,
+  WalletCards,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, todayIso } from '@/lib/utils';
 import { useDashboardDate } from '@/components/layout/DashboardShell';
-import { calculateManualIncome } from '@/lib/calculations/dailyReport';
-import type { Product, DailyStockCount } from '@/types';
+import { MetricCard } from '@/components/dashboard/MetricCard';
+import { PeriodTabs, type DashboardPeriod } from '@/components/dashboard/PeriodTabs';
+import { DashboardBarChart } from '@/components/dashboard/DashboardBarChart';
+import { PaymentMethodChart } from '@/components/dashboard/PaymentMethodChart';
+import { IncomeTrendChart } from '@/components/dashboard/IncomeTrendChart';
+import { IncomeCategoryChart } from '@/components/dashboard/IncomeCategoryChart';
+import { LowStockTable } from '@/components/dashboard/LowStockTable';
+import {
+  RecentTransactionsTable,
+  type RecentTransactionRow,
+} from '@/components/dashboard/RecentTransactionsTable';
+import { SummaryStrip } from '@/components/dashboard/SummaryStrip';
+import {
+  addDays,
+  buildIncomeTrend,
+  calculateDashboardTotals,
+  emptyDashboardTotals,
+  getDashboardRange,
+  getPreviousDashboardRange,
+  localIsoDate,
+  parseLocalIsoDate,
+  percentChange,
+  type DailyCashRow,
+  type DashboardTotals,
+  type ExpenseRow,
+  type StockCountRow,
+  type TrendRow,
+} from '@/lib/calculations/dashboardMetrics';
+import type { Product } from '@/types';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface CashEntry {
-  cash_income: number;
-  terminal_income: number;
-  qr_income: number;
-  transfer_income: number;
-  debt_income: number;
-  game_income: number;
-  other_income: number;
+interface StockPurchaseRow {
+  id: string;
+  date: string;
+  quantity: number;
+  cost_price: number;
+  comment: string | null;
+  created_at: string;
+  products?: { name: string } | { name: string }[] | null;
 }
 
-interface StockRow extends Product {
-  stockCount?: DailyStockCount;
+interface DebtRow {
+  id: string;
+  person_name: string;
+  remaining_amount: number;
+  status: string;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function emptyEntry(): CashEntry {
-  return {
-    cash_income: 0,
-    terminal_income: 0,
-    qr_income: 0,
-    transfer_income: 0,
-    debt_income: 0,
-    game_income: 0,
-    other_income: 0,
-  };
+interface DebtPaymentRow {
+  id: string;
+  debt_id: string;
+  amount: number;
+  created_at: string;
 }
 
-function stockStatus(product: Product): 'Good' | 'Low Stock' | 'Out of Stock' {
-  if (product.current_stock === 0) return 'Out of Stock';
-  if (product.current_stock <= (product.low_stock_threshold ?? 5)) return 'Low Stock';
-  return 'Good';
+interface DashboardData {
+  totals: DashboardTotals;
+  previousTotals: DashboardTotals;
+  trend: TrendRow[];
+  lowStockRows: Array<{
+    id: string;
+    product: string;
+    stockLeft: number;
+    minimumStock: number;
+    status: string;
+  }>;
+  recentTransactions: RecentTransactionRow[];
 }
 
-function pct(current: number, previous: number): number {
-  if (!previous) return 0;
-  return Math.round(((current - previous) / previous) * 100);
+const emptyData: DashboardData = {
+  totals: emptyDashboardTotals,
+  previousTotals: emptyDashboardTotals,
+  trend: [],
+  lowStockRows: [],
+  recentTransactions: [],
+};
+
+function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte: (column: string, value: string) => T }>(
+  query: T,
+  range: { from: string; to: string },
+): T {
+  return query.gte('date', range.from).lte('date', range.to);
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-interface OverviewCardProps {
-  title: string;
-  value: number | string;
-  unit?: string;
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  trend?: { value: number; label: string };
-  alert?: { label: string; href: string };
+function formatShortDate(date: string): string {
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(parseLocalIsoDate(date));
 }
 
-function OverviewCard({ title, value, unit, icon: Icon, iconBg, iconColor, trend, alert }: OverviewCardProps) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-2">
-      <div className="flex items-start justify-between">
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-          <Icon size={18} className={iconColor} />
-        </div>
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900 leading-tight">
-          {typeof value === 'number' ? formatCurrency(value) : value}
-        </p>
-        {unit && <p className="text-xs text-gray-400 mt-0.5">{unit}</p>}
-      </div>
-      {trend !== undefined && (
-        <p className={`text-xs font-medium flex items-center gap-1 ${trend.value >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-          {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}% {trend.label}
-        </p>
-      )}
-      {alert && (
-        <Link href={alert.href} className="text-xs font-medium text-red-500 hover:underline">
-          {alert.label}
-        </Link>
-      )}
-    </div>
+function formatTime(value: string): string {
+  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(
+    new Date(value),
   );
 }
 
-interface SalesSummaryCardProps {
-  title: string;
-  value: number | string;
-  unit?: string;
-  colorClass: string;
-  bgClass: string;
+function expenseLabel(row: ExpenseRow): string {
+  const category = row.category.replace(/_/g, ' ');
+  return row.comment ? `${category} - ${row.comment}` : category;
 }
 
-function SalesSummaryCard({ title, value, unit, colorClass, bgClass }: SalesSummaryCardProps) {
-  return (
-    <div className={`rounded-xl p-4 ${bgClass}`}>
-      <p className="text-xs font-medium text-gray-500 mb-1">{title}</p>
-      <p className={`text-xl font-bold ${colorClass}`}>
-        {typeof value === 'number' ? formatCurrency(value) : value}
-      </p>
-      {unit && <p className="text-xs text-gray-400 mt-0.5">{unit}</p>}
-    </div>
-  );
+function productName(relation: StockPurchaseRow['products']): string | null {
+  if (!relation) return null;
+  return Array.isArray(relation) ? relation[0]?.name ?? null : relation.name;
 }
-
-// ── Income form field ──────────────────────────────────────────────────────────
-
-interface IncomeFieldProps {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-}
-
-function IncomeField({ label, value, onChange, icon: Icon, iconBg, iconColor }: IncomeFieldProps) {
-  const [raw, setRaw] = useState(value === 0 ? '' : String(value));
-
-  useEffect(() => {
-    setRaw(value === 0 ? '' : String(value));
-  }, [value]);
-
-  return (
-    <div className="flex items-center gap-3">
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-        <Icon size={15} className={iconColor} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-        <div className="relative">
-          <input
-            type="number"
-            min="0"
-            value={raw}
-            onChange={(e) => {
-              setRaw(e.target.value);
-              const n = parseFloat(e.target.value);
-              onChange(isNaN(n) || n < 0 ? 0 : Math.round(n));
-            }}
-            placeholder="0"
-            className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       bg-white pr-14"
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
-            UZS
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Dashboard Page ────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const { selectedDate } = useDashboardDate();
-  const supabase = createClient();
+  const [period, setPeriod] = useState<DashboardPeriod>('today');
+  const [data, setData] = useState<DashboardData>(emptyData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Overview metrics state
-  const [metrics, setMetrics] = useState({
-    totalIncome: 0,
-    totalExpense: 0,
-    netProfit: 0,
-    barProfit: 0,
-    productsSold: 0,
-    lowStockCount: 0,
-    prevIncome: 0,
-    prevExpense: 0,
-    prevProfit: 0,
-  });
+  const range = useMemo(() => getDashboardRange(period, selectedDate || todayIso()), [period, selectedDate]);
 
-  // Income form state
-  const [entry, setEntry] = useState<CashEntry>(emptyEntry());
-  const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+    setError('');
 
-  // Stock state
-  const [products, setProducts] = useState<StockRow[]>([]);
+    const supabase = createClient();
+    const previousRange = getPreviousDashboardRange(range);
+    const trendFrom = localIsoDate(addDays(parseLocalIsoDate(range.to), -6));
 
-  // Sales summary state
-  const [barSales, setBarSales] = useState(0);
-  const [barProfitSum, setBarProfitSum] = useState(0);
-  const [itemsSold, setItemsSold] = useState(0);
-  const [costOfGoods, setCostOfGoods] = useState(0);
-  const [lastSaleTime, setLastSaleTime] = useState<string | null>(null);
+    const [
+      cashRes,
+      stockRes,
+      expenseRes,
+      productRes,
+      debtRes,
+      purchaseRes,
+      debtPaymentsRes,
+      prevCashRes,
+      prevStockRes,
+      prevExpenseRes,
+      trendCashRes,
+      trendStockRes,
+      trendExpenseRes,
+    ] = await Promise.all([
+      inRangeQuery(
+        supabase.from('daily_cash_entries').select('date,cash_income,terminal_income,card_income,created_at'),
+        range,
+      ),
+      inRangeQuery(
+        supabase
+          .from('daily_stock_counts')
+          .select('date,bar_income,bar_profit,bar_cost,sold_quantity,updated_at'),
+        range,
+      ),
+      inRangeQuery(
+        supabase
+          .from('expenses')
+          .select('id,date,amount,category,comment,created_at')
+          .order('created_at', { ascending: false }),
+        range,
+      ),
+      supabase.from('products').select('*').eq('is_active', true).order('name'),
+      supabase
+        .from('new_debts')
+        .select('id,person_name,remaining_amount,status')
+        .order('created_at', { ascending: false }),
+      inRangeQuery(
+        supabase
+          .from('stock_purchases')
+          .select('id,date,quantity,cost_price,comment,created_at,products(name)')
+          .order('created_at', { ascending: false }),
+        range,
+      ),
+      supabase
+        .from('debt_payments')
+        .select('id,debt_id,amount,created_at')
+        .gte('created_at', `${range.from}T00:00:00`)
+        .lte('created_at', `${range.to}T23:59:59`)
+        .order('created_at', { ascending: false }),
+      inRangeQuery(
+        supabase.from('daily_cash_entries').select('date,cash_income,terminal_income,card_income'),
+        previousRange,
+      ),
+      inRangeQuery(
+        supabase.from('daily_stock_counts').select('date,bar_income,bar_profit,bar_cost,sold_quantity'),
+        previousRange,
+      ),
+      inRangeQuery(
+        supabase.from('expenses').select('id,date,amount,category,comment,created_at'),
+        previousRange,
+      ),
+      supabase
+        .from('daily_cash_entries')
+        .select('date,cash_income,terminal_income,card_income')
+        .gte('date', trendFrom)
+        .lte('date', range.to),
+      supabase
+        .from('daily_stock_counts')
+        .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
+        .gte('date', trendFrom)
+        .lte('date', range.to),
+      supabase
+        .from('expenses')
+        .select('id,date,amount,category,comment,created_at')
+        .gte('date', trendFrom)
+        .lte('date', range.to),
+    ]);
 
-  const fetchData = useCallback(async () => {
-    const yesterday = new Date(selectedDate + 'T00:00:00');
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayIso = yesterday.toISOString().split('T')[0];
+    const firstError = [
+      cashRes.error,
+      stockRes.error,
+      expenseRes.error,
+      productRes.error,
+      debtRes.error,
+      purchaseRes.error,
+      debtPaymentsRes.error,
+      prevCashRes.error,
+      prevStockRes.error,
+      prevExpenseRes.error,
+      trendCashRes.error,
+      trendStockRes.error,
+      trendExpenseRes.error,
+    ].find(Boolean);
 
-    const [cashRes, productsRes, stockRes, expensesRes, prevCashRes, prevStockRes] =
-      await Promise.all([
-        supabase.from('daily_cash_entries').select('*').eq('date', selectedDate).maybeSingle(),
-        supabase.from('products').select('*').eq('is_active', true).order('name'),
-        supabase.from('daily_stock_counts').select('*').eq('date', selectedDate),
-        supabase.from('expenses').select('amount').eq('date', selectedDate),
-        supabase.from('daily_cash_entries').select('*').eq('date', yesterdayIso).maybeSingle(),
-        supabase.from('daily_stock_counts').select('bar_income,bar_profit,bar_cost,sold_quantity').eq('date', yesterdayIso),
-      ]);
+    if (firstError) {
+      setError(firstError.message);
+      setLoading(false);
+      return;
+    }
 
-    const cashEntry = cashRes.data;
-    const manualIncome = cashEntry
-      ? calculateManualIncome({
-          cash_income: cashEntry.cash_income ?? 0,
-          terminal_income: cashEntry.terminal_income ?? 0,
-          qr_income: cashEntry.qr_income ?? 0,
-          transfer_income: cashEntry.transfer_income ?? 0,
-          debt_income: cashEntry.debt_income ?? 0,
-          game_income: cashEntry.game_income ?? 0,
-          other_income: cashEntry.other_income ?? 0,
-        })
-      : 0;
+    const cashRows = (cashRes.data ?? []) as DailyCashRow[];
+    const stockRows = (stockRes.data ?? []) as StockCountRow[];
+    const expenseRows = (expenseRes.data ?? []) as ExpenseRow[];
+    const products = (productRes.data ?? []) as Product[];
+    const debts = (debtRes.data ?? []) as DebtRow[];
+    const purchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
+    const debtPayments = (debtPaymentsRes.data ?? []) as unknown as DebtPaymentRow[];
+    const activeDebts = debts.filter((debt) => debt.status !== 'paid');
+    const debtNameById = new Map(debts.map((debt) => [debt.id, debt.person_name]));
 
-    const counts: DailyStockCount[] = stockRes.data ?? [];
-    const barIncome = counts.reduce((s, r) => s + (r.bar_income ?? 0), 0);
-    const totalIncome = manualIncome + barIncome;
-    const totalExpense = (expensesRes.data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0);
-    const netProfit = totalIncome - totalExpense;
-    const barProfitTotal = counts.reduce((s, r) => s + (r.bar_profit ?? 0), 0);
-    const productsSoldTotal = counts.reduce((s, r) => s + (r.sold_quantity ?? 0), 0);
-    const costOfGoodsTotal = counts.reduce((s, r) => s + (r.bar_cost ?? 0), 0);
+    const totals = calculateDashboardTotals(cashRows, stockRows, expenseRows, products, activeDebts);
+    const previousTotals = calculateDashboardTotals(
+      (prevCashRes.data ?? []) as DailyCashRow[],
+      (prevStockRes.data ?? []) as StockCountRow[],
+      (prevExpenseRes.data ?? []) as ExpenseRow[],
+      products,
+      activeDebts,
+    );
 
-    const allProducts: Product[] = productsRes.data ?? [];
-    const lowCount = allProducts.filter(
-      (p) => p.current_stock <= (p.low_stock_threshold ?? 5),
-    ).length;
-
-    // Yesterday's numbers for trend
-    const prevCash = prevCashRes.data;
-    const prevManual = prevCash
-      ? calculateManualIncome({
-          cash_income: prevCash.cash_income ?? 0,
-          terminal_income: prevCash.terminal_income ?? 0,
-          qr_income: prevCash.qr_income ?? 0,
-          transfer_income: prevCash.transfer_income ?? 0,
-          debt_income: prevCash.debt_income ?? 0,
-          game_income: prevCash.game_income ?? 0,
-          other_income: prevCash.other_income ?? 0,
-        })
-      : 0;
-    const prevBarIncome = (prevStockRes.data ?? []).reduce((s: number, r: { bar_income?: number }) => s + (r.bar_income ?? 0), 0);
-    const prevIncome = prevManual + prevBarIncome;
-
-    // Stock rows merged with counts
-    const stockMap = new Map(counts.map((c) => [c.product_id, c]));
-    const stockRows: StockRow[] = allProducts.map((p) => ({
-      ...p,
-      stockCount: stockMap.get(p.id),
+    const trendCashRows = (trendCashRes.data ?? []) as DailyCashRow[];
+    const trendStockRows = (trendStockRes.data ?? []) as StockCountRow[];
+    const trendExpenseRows = (trendExpenseRes.data ?? []) as ExpenseRow[];
+    const trend = buildIncomeTrend(range.to, trendCashRows, trendStockRows, trendExpenseRows).map((row) => ({
+      ...row,
+      date: formatShortDate(row.date),
     }));
 
-    // Pre-fill form
-    if (cashEntry) {
-      setEntry({
-        cash_income: cashEntry.cash_income ?? 0,
-        terminal_income: cashEntry.terminal_income ?? 0,
-        qr_income: cashEntry.qr_income ?? 0,
-        transfer_income: cashEntry.transfer_income ?? 0,
-        debt_income: cashEntry.debt_income ?? 0,
-        game_income: cashEntry.game_income ?? 0,
-        other_income: cashEntry.other_income ?? 0,
-      });
-    } else {
-      setEntry(emptyEntry());
-    }
+    const lowStockRows = products
+      .filter((product) => product.current_stock <= (product.low_stock_threshold ?? 5))
+      .slice(0, 8)
+      .map((product) => ({
+        id: product.id,
+        product: product.name,
+        stockLeft: product.current_stock,
+        minimumStock: product.low_stock_threshold ?? 5,
+        status: product.current_stock === 0 ? 'Out' : 'Low',
+      }));
 
-    setMetrics({
-      totalIncome,
-      totalExpense,
-      netProfit,
-      barProfit: barProfitTotal,
-      productsSold: productsSoldTotal,
-      lowStockCount: lowCount,
-      prevIncome,
-      prevExpense: 0,
-      prevProfit: 0,
+    const transactions: RecentTransactionRow[] = [
+      ...cashRows.flatMap((row) => {
+        const createdAt = row.created_at ?? `${row.date}T00:00:00`;
+        return [
+          row.cash_income > 0
+            ? {
+                id: `cash-${row.date}`,
+                type: 'Income' as const,
+                description: 'Game Club Cash income',
+                amount: row.cash_income,
+                time: formatTime(createdAt),
+              }
+            : null,
+          row.terminal_income > 0
+            ? {
+                id: `terminal-${row.date}`,
+                type: 'Income' as const,
+                description: 'Game Club Terminal income',
+                amount: row.terminal_income,
+                time: formatTime(createdAt),
+              }
+            : null,
+          row.card_income > 0
+            ? {
+                id: `card-${row.date}`,
+                type: 'Income' as const,
+                description: 'Game Club Card income',
+                amount: row.card_income,
+                time: formatTime(createdAt),
+              }
+            : null,
+        ];
+      }),
+      ...(stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0) > 0
+        ? [
+            {
+              id: `bar-${range.from}-${range.to}`,
+              type: 'Income' as const,
+              description: 'Bar sales from stock',
+              amount: stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0),
+              time: stockRows[0]?.updated_at ? formatTime(stockRows[0].updated_at) : '23:59',
+            },
+          ]
+        : []),
+      ...expenseRows.map((row) => ({
+        id: `expense-${row.id}`,
+        type: 'Expense' as const,
+        description: expenseLabel(row),
+        amount: row.amount,
+        time: formatTime(row.created_at),
+      })),
+      ...purchases.map((row) => ({
+        id: `purchase-${row.id}`,
+        type: 'Purchase' as const,
+        description: productName(row.products)
+          ? `Product purchase - ${productName(row.products)}`
+          : 'Product purchase',
+        amount: (row.quantity ?? 0) * (row.cost_price ?? 0),
+        time: formatTime(row.created_at),
+      })),
+      ...debtPayments.map((row) => ({
+        id: `debt-payment-${row.id}`,
+        type: 'Debt Payment' as const,
+        description: debtNameById.get(row.debt_id)
+          ? `${debtNameById.get(row.debt_id)} payment`
+          : 'Debt payment',
+        amount: row.amount,
+        time: formatTime(row.created_at),
+      })),
+    ]
+      .filter(Boolean)
+      .slice(0, 8) as RecentTransactionRow[];
+
+    setData({
+      totals,
+      previousTotals,
+      trend,
+      lowStockRows,
+      recentTransactions: transactions,
     });
-    setProducts(stockRows);
-    setBarSales(barIncome);
-    setBarProfitSum(barProfitTotal);
-    setItemsSold(productsSoldTotal);
-    setCostOfGoods(costOfGoodsTotal);
-
-    // Last sale time from most recent stock count
-    if (counts.length > 0) {
-      const sorted = [...counts].sort(
-        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-      );
-      const d = new Date(sorted[0].updated_at);
-      setLastSaleTime(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
-    } else {
-      setLastSaleTime(null);
-    }
-  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
+    setLoading(false);
+  }, [range]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchDashboard().catch((fetchError) => {
+      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      setLoading(false);
+    });
+  }, [fetchDashboard]);
 
-  const totalEntryIncome = Object.values(entry).reduce((s, v) => s + v, 0);
-
-  async function handleSaveIncome() {
-    setSaving(true);
-    setSaveSuccess(false);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from('daily_cash_entries').upsert(
-        {
-          date: selectedDate,
-          ...entry,
-          created_by: session?.user?.id ?? null,
-        },
-        { onConflict: 'date' },
-      );
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-      fetchData();
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    function refreshVisibleDashboard() {
+      if (document.visibilityState === 'visible') {
+        fetchDashboard().catch((fetchError) => {
+          setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+          setLoading(false);
+        });
+      }
     }
-  }
 
-  function setField(field: keyof CashEntry, value: number) {
-    setEntry((prev) => ({ ...prev, [field]: value }));
-  }
+    window.addEventListener('focus', refreshVisibleDashboard);
+    document.addEventListener('visibilitychange', refreshVisibleDashboard);
+    return () => {
+      window.removeEventListener('focus', refreshVisibleDashboard);
+      document.removeEventListener('visibilitychange', refreshVisibleDashboard);
+    };
+  }, [fetchDashboard]);
 
-  const avgProfitPct =
-    barSales > 0 ? Math.round((barProfitSum / barSales) * 100) : 0;
+  const { totals, previousTotals } = data;
+
+  const incomeComparisonLabel =
+    period === 'today' ? 'vs yesterday' : period === 'week' ? 'vs last week' : 'vs last month';
+
+  const incomeExpenseData = [
+    { name: 'Game Club Income', value: totals.gameClubIncome, fill: '#2563eb' },
+    { name: 'Bar Income', value: totals.barIncome, fill: '#f97316' },
+    { name: 'Total Expenses', value: totals.totalExpenses, fill: '#ef4444' },
+    { name: 'Net Profit', value: totals.netProfit, fill: '#22c55e' },
+  ];
+
+  const paymentData = [
+    { name: 'Cash', value: totals.cashIncome, color: '#22c55e' },
+    { name: 'Terminal', value: totals.terminalIncome, color: '#2563eb' },
+    { name: 'Card', value: totals.cardIncome, color: '#7c3aed' },
+  ];
+
+  const categoryData = [
+    { name: 'Game Club', value: totals.gameClubIncome, color: '#2563eb' },
+    { name: 'Bar', value: totals.barIncome, color: '#f97316' },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* ── Today Overview ────────────────────────────────────────────────── */}
-      <section>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          Today Overview
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          <OverviewCard
-            title="Total Income"
-            value={metrics.totalIncome}
-            unit="UZS"
-            icon={Wallet}
-            iconBg="bg-green-100"
-            iconColor="text-green-600"
-            trend={{ value: pct(metrics.totalIncome, metrics.prevIncome), label: 'vs yesterday' }}
-          />
-          <OverviewCard
-            title="Total Expense"
-            value={metrics.totalExpense}
-            unit="UZS"
-            icon={Receipt}
-            iconBg="bg-red-100"
-            iconColor="text-red-500"
-            trend={{ value: 0, label: 'vs yesterday' }}
-          />
-          <OverviewCard
-            title="Net Profit"
-            value={metrics.netProfit}
-            unit="UZS"
-            icon={TrendingUp}
-            iconBg="bg-blue-100"
-            iconColor="text-blue-600"
-            trend={{ value: pct(metrics.netProfit, metrics.prevProfit), label: 'vs yesterday' }}
-          />
-          <OverviewCard
-            title="Bar Profit"
-            value={metrics.barProfit}
-            unit="UZS"
-            icon={Coins}
-            iconBg="bg-orange-100"
-            iconColor="text-orange-600"
-            trend={{ value: 0, label: 'vs yesterday' }}
-          />
-          <OverviewCard
-            title="Products Sold"
-            value={metrics.productsSold}
-            unit="items"
-            icon={ShoppingCart}
-            iconBg="bg-purple-100"
-            iconColor="text-purple-600"
-            trend={{ value: 0, label: 'vs yesterday' }}
-          />
-          <OverviewCard
-            title="Low Stock Items"
-            value={metrics.lowStockCount}
-            unit="products"
-            icon={AlertTriangle}
-            iconBg="bg-blue-100"
-            iconColor="text-blue-600"
-            alert={metrics.lowStockCount > 0 ? { label: 'Check inventory', href: '/products' } : undefined}
-          />
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-normal text-gray-950">Dashboard</h1>
+          <p className="mt-1 text-base text-gray-600">Overview of your game club finance</p>
         </div>
-      </section>
-
-      {/* ── Middle two-column ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* LEFT: Income Form */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4">
-          <div>
-            <h2 className="font-semibold text-gray-900 text-base">1. Add Today Income</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Enter how much income you had today by payment method
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <IncomeField
-              label="Cash Income (UZS)"
-              value={entry.cash_income}
-              onChange={(v) => setField('cash_income', v)}
-              icon={Banknote}
-              iconBg="bg-green-100"
-              iconColor="text-green-600"
-            />
-            <IncomeField
-              label="Terminal Income (UZS)"
-              value={entry.terminal_income}
-              onChange={(v) => setField('terminal_income', v)}
-              icon={Monitor}
-              iconBg="bg-blue-100"
-              iconColor="text-blue-600"
-            />
-            <IncomeField
-              label="Card Income (UZS)"
-              value={entry.game_income}
-              onChange={(v) => setField('game_income', v)}
-              icon={CreditCard}
-              iconBg="bg-purple-100"
-              iconColor="text-purple-600"
-            />
-            <IncomeField
-              label="QR Code Income (UZS)"
-              value={entry.qr_income}
-              onChange={(v) => setField('qr_income', v)}
-              icon={QrCode}
-              iconBg="bg-orange-100"
-              iconColor="text-orange-600"
-            />
-            <IncomeField
-              label="Transfer Income (UZS)"
-              value={entry.transfer_income}
-              onChange={(v) => setField('transfer_income', v)}
-              icon={ArrowRightLeft}
-              iconBg="bg-teal-100"
-              iconColor="text-teal-600"
-            />
-            <IncomeField
-              label="Debt Income (UZS)"
-              value={entry.debt_income}
-              onChange={(v) => setField('debt_income', v)}
-              icon={UserX}
-              iconBg="bg-red-100"
-              iconColor="text-red-500"
-            />
-          </div>
-
-          <button
-            onClick={handleSaveIncome}
-            disabled={saving}
-            className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold
-                       py-2.5 rounded-xl transition-colors disabled:opacity-50 flex items-center
-                       justify-center gap-2 text-sm"
-          >
-            {saving ? (
-              'Saving...'
-            ) : saveSuccess ? (
-              <>
-                <CheckCircle2 size={16} /> Saved!
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={16} /> Save Today Income
-              </>
-            )}
-          </button>
-
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            <span className="text-sm font-medium text-gray-600">Total Income Today</span>
-            <span className="text-sm font-bold text-green-600">
-              {formatCurrency(totalEntryIncome)} UZS
-            </span>
-          </div>
-        </div>
-
-        {/* RIGHT: Stock table */}
-        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <div className="p-5 border-b border-gray-100">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="font-semibold text-gray-900 text-base">2. Current Stock (Inventory)</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Live product stock levels</p>
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <Link
-                  href="/products"
-                  className="flex items-center gap-1 px-3 py-1.5 border border-gray-200
-                             rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  <Package size={13} /> Add Product
-                </Link>
-                <Link
-                  href="/closing-stock"
-                  className="flex items-center gap-1 px-3 py-1.5 border border-gray-200
-                             rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  <RefreshCcw size={13} /> Adjust Stock
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  <th className="px-4 py-2.5 text-left">Product</th>
-                  <th className="px-4 py-2.5 text-left hidden sm:table-cell">Category</th>
-                  <th className="px-4 py-2.5 text-right">Sale Price</th>
-                  <th className="px-4 py-2.5 text-right hidden md:table-cell">Cost Price</th>
-                  <th className="px-4 py-2.5 text-right">Stock</th>
-                  <th className="px-4 py-2.5 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {products.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
-                      No products found
-                    </td>
-                  </tr>
-                ) : (
-                  products.map((p) => {
-                    const status = stockStatus(p);
-                    const stockValue = p.current_stock * p.cost_price;
-                    return (
-                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
-                        <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
-                          {p.category ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700">
-                          {formatCurrency(p.sale_price)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-gray-700 hidden md:table-cell">
-                          {formatCurrency(p.cost_price)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                          {p.current_stock}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              status === 'Good'
-                                ? 'bg-green-100 text-green-700'
-                                : status === 'Low Stock'
-                                ? 'bg-orange-100 text-orange-700'
-                                : 'bg-red-100 text-red-600'
-                            }`}
-                          >
-                            {status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Total stock value footer */}
-          {products.length > 0 && (
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50 rounded-b-xl">
-              <span className="text-sm font-semibold text-gray-600">Total Stock Value</span>
-              <span className="text-sm font-bold text-gray-900">
-                {formatCurrency(products.reduce((s, p) => s + p.current_stock * p.cost_price, 0))} UZS
-              </span>
-            </div>
-          )}
-        </div>
+        <Link
+          href="/reports"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
+        >
+          <Settings2 size={17} className="text-primary-600" />
+          View Full Reports
+        </Link>
       </div>
 
-      {/* ── Bottom: Sales Summary ─────────────────────────────────────────── */}
-      <section>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          3. Today Sales Summary (Auto Calculated)
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          <SalesSummaryCard
-            title="Bar Sales (Total)"
-            value={barSales}
-            unit="UZS"
-            colorClass="text-green-700"
-            bgClass="bg-green-50 border border-green-100"
-          />
-          <SalesSummaryCard
-            title="Bar Profit"
-            value={barProfitSum}
-            unit="UZS"
-            colorClass="text-orange-700"
-            bgClass="bg-orange-50 border border-orange-100"
-          />
-          <SalesSummaryCard
-            title="Items Sold"
-            value={itemsSold}
-            unit="items"
-            colorClass="text-purple-700"
-            bgClass="bg-purple-50 border border-purple-100"
-          />
-          <SalesSummaryCard
-            title="Cost of Sold Goods"
-            value={costOfGoods}
-            unit="UZS"
-            colorClass="text-gray-700"
-            bgClass="bg-gray-100 border border-gray-200"
-          />
-          <SalesSummaryCard
-            title="Average Profit %"
-            value={`${avgProfitPct}%`}
-            colorClass="text-green-700"
-            bgClass="bg-green-50 border border-green-100"
-          />
-          <div className="rounded-xl p-4 bg-blue-50 border border-blue-100">
-            <p className="text-xs font-medium text-gray-500 mb-1">Last Sale</p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <Clock size={16} className="text-blue-600" />
-              <span className="text-base font-bold text-blue-700">
-                {lastSaleTime ?? '—'}
-              </span>
-            </div>
-          </div>
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {error}
         </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <MetricCard
+          label="Game Club Income"
+          amount={totals.gameClubIncome}
+          icon={Gamepad2}
+          iconBgClassName="bg-blue-100"
+          iconClassName="text-blue-600"
+          comparison={{ value: percentChange(totals.gameClubIncome, previousTotals.gameClubIncome), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label="Bar Income"
+          amount={totals.barIncome}
+          icon={ShoppingBag}
+          iconBgClassName="bg-orange-100"
+          iconClassName="text-orange-600"
+          comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label="Total Income"
+          amount={totals.totalIncome}
+          icon={Banknote}
+          iconBgClassName="bg-green-100"
+          iconClassName="text-green-600"
+          comparison={{ value: percentChange(totals.totalIncome, previousTotals.totalIncome), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label="Total Expenses"
+          amount={totals.totalExpenses}
+          icon={Receipt}
+          iconBgClassName="bg-red-100"
+          iconClassName="text-red-500"
+          comparison={{ value: percentChange(totals.totalExpenses, previousTotals.totalExpenses), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label="Net Profit"
+          amount={totals.netProfit}
+          icon={ChartNoAxesCombined}
+          iconBgClassName="bg-purple-100"
+          iconClassName="text-purple-600"
+          comparison={{ value: percentChange(totals.netProfit, previousTotals.netProfit), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label="Inventory Value"
+          amount={totals.inventoryValue}
+          icon={Boxes}
+          iconBgClassName="bg-blue-100"
+          iconClassName="text-blue-600"
+          helper={`${data.lowStockRows.length} low stock alerts`}
+        />
+      </div>
+
+      <section className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <PeriodTabs value={period} onChange={setPeriod} />
+        <Link
+          href="/reports"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
+        >
+          View Full Reports
+          <TrendingUp size={16} className="text-primary-600" />
+        </Link>
       </section>
+
+      {loading ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">
+          Loading dashboard...
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <DashboardBarChart title={`Income vs Expenses (${period === 'today' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'})`} data={incomeExpenseData} />
+            <PaymentMethodChart
+              title={`Income by Payment Method (${period === 'today' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'})`}
+              data={paymentData}
+              total={totals.gameClubIncome}
+            />
+            <IncomeTrendChart data={data.trend} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1.2fr_1fr]">
+            <LowStockTable rows={data.lowStockRows} />
+            <RecentTransactionsTable rows={data.recentTransactions} />
+            <IncomeCategoryChart data={categoryData} total={totals.totalIncome} />
+          </div>
+
+          <SummaryStrip
+            items={[
+              {
+                label: 'Cash Balance',
+                value: totals.cashIncome,
+                icon: Banknote,
+                iconBgClassName: 'bg-green-100',
+                iconClassName: 'text-green-600',
+                isCurrency: true,
+              },
+              {
+                label: 'Terminal Balance',
+                value: totals.terminalIncome,
+                icon: WalletCards,
+                iconBgClassName: 'bg-blue-100',
+                iconClassName: 'text-blue-600',
+                isCurrency: true,
+              },
+              {
+                label: 'Card Income',
+                value: totals.cardIncome,
+                icon: CreditCard,
+                iconBgClassName: 'bg-purple-100',
+                iconClassName: 'text-purple-600',
+                isCurrency: true,
+              },
+              {
+                label: 'Active Debts',
+                value: totals.activeDebts,
+                helper: `${totals.activeDebtCount} people`,
+                icon: UserRoundCheck,
+                iconBgClassName: 'bg-orange-100',
+                iconClassName: 'text-orange-600',
+                isCurrency: true,
+              },
+              {
+                label: "Today's Profit Margin",
+                value: `${totals.profitMargin}%`,
+                helper: totals.profitMargin >= 0 ? 'Good' : 'Needs attention',
+                icon: TrendingUp,
+                iconBgClassName: 'bg-green-100',
+                iconClassName: 'text-green-600',
+              },
+            ]}
+          />
+        </>
+      )}
     </div>
   );
 }

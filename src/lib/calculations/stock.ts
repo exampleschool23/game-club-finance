@@ -13,6 +13,24 @@ export interface StockCountResult {
   barProfit: number;
 }
 
+export interface AverageCostInput {
+  currentStock: number;
+  currentCostPrice: number;
+  purchasedQuantity: number;
+  purchaseCostPrice: number;
+}
+
+export interface ClosingStockDefaultsInput {
+  currentStock: number;
+  purchasedToday: number;
+}
+
+export interface ClosingStockDefaults {
+  previousStock: number;
+  addedToday: number;
+  closingStock: number;
+}
+
 export function calculateSoldQuantity(
   previousStock: number,
   addedToday: number,
@@ -46,5 +64,31 @@ export function calculateStockCountSummary(input: StockCountInput): StockCountRe
     barIncome,
     barCost,
     barProfit: calculateBarProfit(barIncome, barCost),
+  };
+}
+
+export function calculateWeightedAverageCost(input: AverageCostInput): number {
+  const currentStock = Math.max(0, input.currentStock);
+  const purchasedQuantity = Math.max(0, input.purchasedQuantity);
+  const totalQuantity = currentStock + purchasedQuantity;
+
+  if (totalQuantity === 0) return 0;
+  if (currentStock === 0) return input.purchaseCostPrice;
+  if (purchasedQuantity === 0) return input.currentCostPrice;
+
+  return (
+    (currentStock * input.currentCostPrice) +
+    (purchasedQuantity * input.purchaseCostPrice)
+  ) / totalQuantity;
+}
+
+export function calculateClosingStockDefaults(input: ClosingStockDefaultsInput): ClosingStockDefaults {
+  const currentStock = Math.max(0, input.currentStock);
+  const addedToday = Math.max(0, input.purchasedToday);
+
+  return {
+    previousStock: Math.max(0, currentStock - addedToday),
+    addedToday,
+    closingStock: currentStock,
   };
 }

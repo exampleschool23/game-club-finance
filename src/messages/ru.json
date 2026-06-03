@@ -5,10 +5,13 @@
     "closingStock": "Закрытие склада",
     "stockPurchase": "Закупка товаров",
     "products": "Товары",
+    "inventory": "Инвентарь",
     "expenses": "Расходы",
     "debts": "Долги",
+    "reports": "Отчеты",
     "dailyReport": "Ежедневный отчёт",
     "monthlyReport": "Месячный отчёт",
+    "team": "Команда",
     "settings": "Настройки",
     "logout": "Выйти"
   },
@@ -166,6 +169,24 @@
     "account": "Аккаунт",
     "appInfo": "О приложении",
     "version": "Версия"
+  },
+  "team": {
+    "title": "Команда",
+    "description": "Управление доступом к финансам, операциям и отчётам.",
+    "refresh": "Обновить",
+    "member": "Участник",
+    "currentAccess": "Текущий доступ",
+    "changeAccess": "Изменить доступ",
+    "joined": "Добавлен",
+    "you": "Вы",
+    "saved": "Доступ обновлён",
+    "selfDemoteBlocked": "Нельзя убрать доступ владельца у себя.",
+    "lastOwnerBlocked": "Должен остаться хотя бы один владелец.",
+    "roles": {
+      "owner": "Владелец",
+      "admin": "Админ",
+      "viewer": "Просмотр"
+    }
   },
   "auth": {
     "login": "Войти",

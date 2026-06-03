@@ -22,11 +22,16 @@ export function MetricCard({
   valueClassName,
 }: MetricCardProps) {
   return (
-    <div className={cn('bg-white rounded-xl shadow-sm border border-gray-100 p-5', className)}>
-      <div className="flex items-start justify-between">
+    <div className={cn('bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-w-0', className)}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-500 truncate">{label}</p>
-          <p className={cn('mt-1 text-2xl font-bold text-gray-900 truncate', valueClassName)}>
+          <p
+            className={cn(
+              'mt-1 text-xl sm:text-2xl font-bold text-gray-900 leading-tight break-words tabular-nums',
+              valueClassName,
+            )}
+          >
             {value}
           </p>
           {trendLabel && (

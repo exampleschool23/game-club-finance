@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'admin' | 'cashier';
+export type UserRole = 'owner' | 'admin' | 'viewer';
 export type PaymentMethod = 'cash' | 'terminal' | 'qr' | 'transfer' | 'debt';
 export type PaymentSource = 'cash' | 'terminal' | 'bank';
 export type IncomeCategory = 'game_time' | 'food' | 'drinks' | 'other';
@@ -87,11 +87,7 @@ export interface DailyCashEntry {
   date: string;
   cash_income: number;
   terminal_income: number;
-  qr_income: number;
-  transfer_income: number;
-  debt_income: number;
-  game_income: number;
-  other_income: number;
+  card_income: number;
   comment: string | null;
   created_by: string | null;
   created_at: string;

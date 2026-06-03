@@ -8,10 +8,10 @@ import { MetricCard } from '@/components/ui/MetricCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatDate, todayIso } from '@/lib/utils';
 import {
-  calculateManualIncome,
   calculateTotalIncome,
   calculateNetProfit,
 } from '@/lib/calculations/dailyReport';
+import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import type { DailyCashEntry, DailyStockCount, Expense } from '@/types';
 
@@ -54,14 +54,10 @@ export default function DailyReportPage() {
   }, [date, fetchData]);
 
   const manualIncome = cashEntry
-    ? calculateManualIncome({
-        cash_income: cashEntry.cash_income,
-        terminal_income: cashEntry.terminal_income,
-        qr_income: cashEntry.qr_income,
-        transfer_income: cashEntry.transfer_income,
-        debt_income: cashEntry.debt_income,
-        game_income: cashEntry.game_income,
-        other_income: cashEntry.other_income,
+    ? calculateGameClubIncome({
+        cashIncome: cashEntry.cash_income,
+        terminalIncome: cashEntry.terminal_income,
+        cardIncome: cashEntry.card_income,
       })
     : 0;
 
@@ -140,34 +136,10 @@ export default function DailyReportPage() {
                     <p className="font-semibold">{formatCurrency(cashEntry.terminal_income)}</p>
                   </div>
                 )}
-                {cashEntry.qr_income > 0 && (
+                {cashEntry.card_income > 0 && (
                   <div>
-                    <p className="text-gray-500">{tc('paymentMethods.qr')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.qr_income)}</p>
-                  </div>
-                )}
-                {cashEntry.transfer_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">{tc('paymentMethods.transfer')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.transfer_income)}</p>
-                  </div>
-                )}
-                {cashEntry.debt_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">{tc('paymentMethods.debt')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.debt_income)}</p>
-                  </div>
-                )}
-                {cashEntry.game_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">Game</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.game_income)}</p>
-                  </div>
-                )}
-                {cashEntry.other_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">Other</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.other_income)}</p>
+                    <p className="text-gray-500">Card</p>
+                    <p className="font-semibold">{formatCurrency(cashEntry.card_income)}</p>
                   </div>
                 )}
               </div>
@@ -184,7 +156,7 @@ export default function DailyReportPage() {
                 {t('stockSummary')}
               </h2>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
                       <th className="text-left py-2 text-gray-500 font-medium">Product</th>

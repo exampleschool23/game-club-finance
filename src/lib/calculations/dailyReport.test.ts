@@ -6,28 +6,20 @@ import {
 } from './dailyReport';
 
 describe('calculateManualIncome', () => {
-  it('sums all income fields', () => {
+  it('sums game club payment method fields', () => {
     const entry = {
       cash_income: 100000,
       terminal_income: 50000,
-      qr_income: 30000,
-      transfer_income: 20000,
-      debt_income: 10000,
-      game_income: 200000,
-      other_income: 5000,
+      card_income: 30000,
     };
-    expect(calculateManualIncome(entry)).toBe(415000);
+    expect(calculateManualIncome(entry)).toBe(180000);
   });
 
   it('returns 0 when all fields are 0', () => {
     const entry = {
       cash_income: 0,
       terminal_income: 0,
-      qr_income: 0,
-      transfer_income: 0,
-      debt_income: 0,
-      game_income: 0,
-      other_income: 0,
+      card_income: 0,
     };
     expect(calculateManualIncome(entry)).toBe(0);
   });

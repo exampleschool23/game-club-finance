@@ -5,6 +5,8 @@ import {
   calculateBarCost,
   calculateBarProfit,
   calculateStockCountSummary,
+  calculateWeightedAverageCost,
+  calculateClosingStockDefaults,
 } from './stock';
 
 describe('calculateSoldQuantity', () => {
@@ -60,5 +62,96 @@ describe('calculateStockCountSummary', () => {
     expect(result.barIncome).toBe(200000);
     expect(result.barCost).toBe(120000);
     expect(result.barProfit).toBe(80000);
+  });
+});
+
+describe('calculateWeightedAverageCost', () => {
+  it('calculates weighted average when existing and purchased quantities are equal', () => {
+    expect(calculateWeightedAverageCost({
+      currentStock: 10,
+      currentCostPrice: 8200,
+      purchasedQuantity: 10,
+      purchaseCostPrice: 7200,
+    })).toBe(7700);
+  });
+
+  it('weights by quantity when purchase quantity differs from current stock', () => {
+    expect(calculateWeightedAverageCost({
+      currentStock: 5,
+      currentCostPrice: 10000,
+      purchasedQuantity: 15,
+      purchaseCostPrice: 6000,
+    })).toBe(7000);
+  });
+
+  it('uses purchase cost when there is no existing stock', () => {
+    expect(calculateWeightedAverageCost({
+      currentStock: 0,
+      currentCostPrice: 8200,
+      purchasedQuantity: 10,
+      purchaseCostPrice: 7200,
+    })).toBe(7200);
+  });
+
+  it('keeps current cost when purchased quantity is zero', () => {
+    expect(calculateWeightedAverageCost({
+      currentStock: 10,
+      currentCostPrice: 8200,
+      purchasedQuantity: 0,
+      purchaseCostPrice: 7200,
+    })).toBe(8200);
+  });
+
+  it('returns zero when no stock exists before or after purchase', () => {
+    expect(calculateWeightedAverageCost({
+      currentStock: 0,
+      currentCostPrice: 8200,
+      purchasedQuantity: 0,
+      purchaseCostPrice: 7200,
+    })).toBe(0);
+  });
+
+  it('treats negative quantities as zero', () => {
+    expect(calculateWeightedAverageCost({
+      currentStock: -10,
+      currentCostPrice: 8200,
+      purchasedQuantity: 10,
+      purchaseCostPrice: 7200,
+    })).toBe(7200);
+  });
+});
+
+describe('calculateClosingStockDefaults', () => {
+  it('splits current stock into previous stock and purchases made today', () => {
+    expect(calculateClosingStockDefaults({
+      currentStock: 124,
+      purchasedToday: 24,
+    })).toEqual({
+      previousStock: 100,
+      addedToday: 24,
+      closingStock: 124,
+    });
+  });
+
+  it('keeps added today at zero when no purchases were made today', () => {
+    expect(calculateClosingStockDefaults({
+      currentStock: 79,
+      purchasedToday: 0,
+    })).toEqual({
+      previousStock: 79,
+      addedToday: 0,
+      closingStock: 79,
+    });
+  });
+
+  it('does not allow previous stock to become negative', () => {
+    expect(calculateClosingStockDefaults({
+      currentStock: 10,
+      purchasedToday: 24,
+    })).toEqual({
+      previousStock: 0,
+      addedToday: 24,
+      closingStock: 10,
+    });
   });
 });

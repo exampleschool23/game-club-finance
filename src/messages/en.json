@@ -5,10 +5,13 @@
     "closingStock": "Closing Stock",
     "stockPurchase": "Stock Purchase",
     "products": "Products",
+    "inventory": "Inventory",
     "expenses": "Expenses",
     "debts": "Debts",
+    "reports": "Reports",
     "dailyReport": "Daily Report",
     "monthlyReport": "Monthly Report",
+    "team": "Team",
     "settings": "Settings",
     "logout": "Logout"
   },
@@ -166,6 +169,24 @@
     "account": "Account",
     "appInfo": "App Info",
     "version": "Version"
+  },
+  "team": {
+    "title": "Team",
+    "description": "Manage who can access finance, operations, and reports.",
+    "refresh": "Refresh",
+    "member": "Member",
+    "currentAccess": "Current access",
+    "changeAccess": "Change access",
+    "joined": "Joined",
+    "you": "You",
+    "saved": "Team access updated",
+    "selfDemoteBlocked": "You cannot remove your own owner access.",
+    "lastOwnerBlocked": "At least one owner must remain.",
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "viewer": "Viewer"
+    }
   },
   "auth": {
     "login": "Login",

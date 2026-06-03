@@ -21,13 +21,19 @@ export function formatDate(date: string | Date, locale = 'ru-UZ'): string {
 }
 
 export function todayIso(): string {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function monthRange(yearMonth: string): { from: string; to: string } {
   const [year, month] = yearMonth.split('-').map(Number);
-  const from = new Date(year, month - 1, 1).toISOString().split('T')[0];
-  const to = new Date(year, month, 0).toISOString().split('T')[0];
+  const fromDate = new Date(year, month - 1, 1);
+  const toDate = new Date(year, month, 0);
+  const from = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`;
+  const to = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
   return { from, to };
 }
 

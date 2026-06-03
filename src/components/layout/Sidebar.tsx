@@ -11,7 +11,6 @@ import {
   Package,
   ShoppingCart,
   BarChart2,
-  FileText,
   Users,
   LogOut,
   X,
@@ -19,6 +18,7 @@ import {
   MinusCircle,
   Archive,
   Settings,
+  Shield,
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -76,30 +76,24 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
       href: '/',
       icon: LayoutDashboard,
       label: t('dashboard'),
-      roles: ['owner', 'admin', 'cashier'],
+      roles: ['owner', 'admin', 'viewer'],
     },
     {
       href: '/daily-cash',
       icon: Wallet,
       label: t('dailyCash'),
-      roles: ['owner', 'admin', 'cashier'],
+      roles: ['owner', 'admin'],
     },
     {
       href: '/closing-stock',
       icon: Archive,
       label: t('closingStock'),
-      roles: ['owner', 'admin', 'cashier'],
+      roles: ['owner', 'admin'],
     },
     {
       href: '/stock-purchase',
       icon: ShoppingCart,
       label: t('stockPurchase'),
-      roles: ['owner', 'admin'],
-    },
-    {
-      href: '/products',
-      icon: Package,
-      label: t('products'),
       roles: ['owner', 'admin'],
     },
     {
@@ -112,25 +106,31 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
       href: '/debts',
       icon: Users,
       label: t('debts'),
-      roles: ['owner', 'admin', 'cashier'],
+      roles: ['owner', 'admin', 'viewer'],
     },
     {
-      href: '/daily-report',
-      icon: FileText,
-      label: t('dailyReport'),
-      roles: ['owner', 'admin', 'cashier'],
-    },
-    {
-      href: '/monthly-report',
-      icon: BarChart2,
-      label: t('monthlyReport'),
+      href: '/products',
+      icon: Package,
+      label: t('inventory'),
       roles: ['owner', 'admin'],
+    },
+    {
+      href: '/reports',
+      icon: BarChart2,
+      label: t('reports'),
+      roles: ['owner', 'admin', 'viewer'],
+    },
+    {
+      href: '/team',
+      icon: Shield,
+      label: t('team'),
+      roles: ['owner'],
     },
     {
       href: '/settings',
       icon: Settings,
       label: t('settings'),
-      roles: ['owner', 'admin', 'cashier'],
+      roles: ['owner', 'admin', 'viewer'],
     },
   ].filter((l) => l.roles.includes(role));
 
@@ -179,7 +179,7 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
       <div className="px-3 py-4 border-t border-white/10 space-y-3">
         {/* Language switcher */}
         <div className="px-1">
-          <LanguageSwitcher />
+          <LanguageSwitcher variant="dark" />
         </div>
 
         {/* User profile card */}

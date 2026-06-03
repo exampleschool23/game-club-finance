@@ -7,10 +7,10 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency, formatDate, monthRange, currentYearMonth } from '@/lib/utils';
 import {
-  calculateManualIncome,
   calculateTotalIncome,
   calculateNetProfit,
 } from '@/lib/calculations/dailyReport';
+import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { BarChart2 } from 'lucide-react';
 
 interface DayRow {
@@ -37,7 +37,7 @@ export default function MonthlyReportPage() {
     const [cashRes, stockRes, expRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
-        .select('date,cash_income,terminal_income,qr_income,transfer_income,debt_income,game_income,other_income')
+        .select('date,cash_income,terminal_income,card_income')
         .gte('date', from)
         .lte('date', to),
       supabase.from('daily_stock_counts').select('date,bar_income').gte('date', from).lte('date', to),
@@ -59,14 +59,10 @@ export default function MonthlyReportPage() {
     const dayRows: DayRow[] = dates.map((date) => {
       const cashEntry = cashEntries.find((r) => r.date === date);
       const manualIncome = cashEntry
-        ? calculateManualIncome({
-            cash_income: cashEntry.cash_income,
-            terminal_income: cashEntry.terminal_income,
-            qr_income: cashEntry.qr_income,
-            transfer_income: cashEntry.transfer_income,
-            debt_income: cashEntry.debt_income,
-            game_income: cashEntry.game_income,
-            other_income: cashEntry.other_income,
+        ? calculateGameClubIncome({
+            cashIncome: cashEntry.cash_income,
+            terminalIncome: cashEntry.terminal_income,
+            cardIncome: cashEntry.card_income,
           })
         : 0;
       const barIncome = stockCounts
