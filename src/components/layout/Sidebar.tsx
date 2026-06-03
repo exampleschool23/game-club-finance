@@ -10,7 +10,6 @@ import {
   Wallet,
   Package,
   ShoppingCart,
-  BarChart2,
   Users,
   LogOut,
   X,
@@ -113,12 +112,6 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
       icon: Package,
       label: t('inventory'),
       roles: ['owner', 'admin'],
-    },
-    {
-      href: '/reports',
-      icon: BarChart2,
-      label: t('reports'),
-      roles: ['owner', 'admin', 'viewer'],
     },
     {
       href: '/team',
