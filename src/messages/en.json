@@ -260,7 +260,8 @@
     "success": "Product saved",
     "editProduct": "Edit Product",
     "deleteProduct": "Delete Product",
-    "deleteConfirm": "Delete this product? This cannot be undone."
+    "deleteConfirm": "Delete this product? This cannot be undone.",
+    "inactiveEditBlocked": "Disabled inventory cannot be edited."
   },
   "expenses": {
     "title": "Expenses",

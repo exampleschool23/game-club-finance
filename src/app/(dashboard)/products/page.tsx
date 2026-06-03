@@ -145,6 +145,12 @@ export default function ProductsPage() {
   }
 
   async function handleSave() {
+    const existingProduct = editingId ? products.find((product) => product.id === editingId) : null;
+    if (existingProduct && !existingProduct.is_active) {
+      setError(t('inactiveEditBlocked'));
+      return;
+    }
+
     if (!form.name.trim()) {
       setError(tc('required'));
       return;
@@ -366,7 +372,9 @@ export default function ProductsPage() {
               header: tc('actions'),
               render: (r) => (
                 <button
-                  className="text-primary-600 hover:underline text-sm"
+                  className="text-sm text-primary-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
+                  disabled={!r.is_active}
+                  title={!r.is_active ? t('inactiveEditBlocked') : tc('edit')}
                   onClick={() => openEdit(r)}
                 >
                   {tc('edit')}

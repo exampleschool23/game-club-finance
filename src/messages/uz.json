@@ -260,7 +260,8 @@
     "success": "Mahsulot saqlandi",
     "editProduct": "Mahsulotni tahrirlash",
     "deleteProduct": "Mahsulotni o'chirish",
-    "deleteConfirm": "Bu mahsulot o'chirilsinmi? Bu amalni qaytarib bo'lmaydi."
+    "deleteConfirm": "Bu mahsulot o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.",
+    "inactiveEditBlocked": "O'chirilgan inventarni tahrirlab bo'lmaydi."
   },
   "expenses": {
     "title": "Xarajatlar",
