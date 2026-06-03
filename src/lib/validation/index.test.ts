@@ -1,0 +1,122 @@
+import { describe, it, expect } from 'vitest';
+import {
+  validateAmount,
+  validateQuantity,
+  validateDate,
+  validateClosingStock,
+  validateDebtPayment,
+  validateEditWindow,
+  validateAll,
+} from './index';
+
+describe('validateAmount', () => {
+  it('passes for positive numbers', () => {
+    expect(validateAmount(120000).valid).toBe(true);
+  });
+  it('fails for zero', () => {
+    expect(validateAmount(0).valid).toBe(false);
+  });
+  it('fails for negative', () => {
+    expect(validateAmount(-500).valid).toBe(false);
+  });
+  it('fails for non-numeric', () => {
+    expect(validateAmount('abc').valid).toBe(false);
+  });
+});
+
+describe('validateQuantity', () => {
+  it('passes for zero', () => {
+    expect(validateQuantity(0).valid).toBe(true);
+  });
+  it('passes for positive', () => {
+    expect(validateQuantity(10).valid).toBe(true);
+  });
+  it('fails for negative', () => {
+    expect(validateQuantity(-1).valid).toBe(false);
+  });
+});
+
+describe('validateDate', () => {
+  it('passes for valid ISO date', () => {
+    expect(validateDate('2026-06-03').valid).toBe(true);
+  });
+  it('fails for wrong format', () => {
+    expect(validateDate('03/06/2026').valid).toBe(false);
+  });
+  it('fails for invalid date', () => {
+    expect(validateDate('2026-13-99').valid).toBe(false);
+  });
+  it('fails for non-string', () => {
+    expect(validateDate(null).valid).toBe(false);
+  });
+});
+
+describe('validateClosingStock', () => {
+  it('passes when closing stock is within range', () => {
+    expect(validateClosingStock({ previousStock: 100, addedToday: 20, closingStock: 90 }).valid).toBe(true);
+  });
+  it('fails when closing stock exceeds previous + added without confirmation', () => {
+    const result = validateClosingStock({ previousStock: 100, addedToday: 20, closingStock: 125 });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('120');
+  });
+  it('passes when closing stock exceeds with explicit confirmation', () => {
+    expect(
+      validateClosingStock({ previousStock: 100, addedToday: 20, closingStock: 125, confirmAdjustment: true }).valid,
+    ).toBe(true);
+  });
+  it('passes when closing stock equals previous + added (nothing sold)', () => {
+    expect(validateClosingStock({ previousStock: 100, addedToday: 20, closingStock: 120 }).valid).toBe(true);
+  });
+});
+
+describe('validateDebtPayment', () => {
+  it('passes when payment is within remaining balance', () => {
+    expect(validateDebtPayment({ paymentAmount: 200000, remainingDebt: 500000 }).valid).toBe(true);
+  });
+  it('passes when payment equals remaining balance exactly', () => {
+    expect(validateDebtPayment({ paymentAmount: 500000, remainingDebt: 500000 }).valid).toBe(true);
+  });
+  it('fails when payment exceeds remaining debt', () => {
+    const result = validateDebtPayment({ paymentAmount: 600000, remainingDebt: 500000 });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('Overpayment');
+  });
+  it('fails when payment is zero or negative', () => {
+    expect(validateDebtPayment({ paymentAmount: 0, remainingDebt: 500000 }).valid).toBe(false);
+  });
+});
+
+describe('validateEditWindow', () => {
+  const createdAt = '2026-06-03T10:00:00.000Z';
+
+  it('always allows owner to edit', () => {
+    const farFuture = new Date('2026-12-31T23:59:59Z');
+    expect(validateEditWindow({ createdAt, now: farFuture, role: 'owner' }).valid).toBe(true);
+  });
+  it('allows admin within 15 minutes', () => {
+    const within = new Date('2026-06-03T10:10:00.000Z');
+    expect(validateEditWindow({ createdAt, now: within, role: 'admin' }).valid).toBe(true);
+  });
+  it('blocks admin after 15 minutes', () => {
+    const after = new Date('2026-06-03T10:16:00.000Z');
+    const result = validateEditWindow({ createdAt, now: after, role: 'admin' });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('locked');
+  });
+  it('blocks viewer regardless', () => {
+    const within = new Date('2026-06-03T10:05:00.000Z');
+    expect(validateEditWindow({ createdAt, now: within, role: 'viewer' }).valid).toBe(false);
+  });
+});
+
+describe('validateAll', () => {
+  it('returns ok when all pass', () => {
+    expect(validateAll({ valid: true }, { valid: true }).valid).toBe(true);
+  });
+  it('returns first failure', () => {
+    const result = validateAll({ valid: true }, { valid: false, error: 'bad' }, { valid: false, error: 'worse' });
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('bad');
+  });
+});

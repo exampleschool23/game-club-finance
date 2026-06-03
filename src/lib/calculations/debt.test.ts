@@ -13,6 +13,18 @@ describe('calculateRemainingDebt', () => {
   it('returns 0 when overpaid (clamps to 0)', () => {
     expect(calculateRemainingDebt(100000, 120000)).toBe(0);
   });
+
+  it('new debt has remaining equal to full amount', () => {
+    expect(calculateRemainingDebt(500000, 0)).toBe(500000);
+  });
+
+  it('partial payment reduces remaining correctly', () => {
+    expect(calculateRemainingDebt(500000, 200000)).toBe(300000);
+  });
+
+  it('remaining cannot go below zero (overpayment clamps)', () => {
+    expect(calculateRemainingDebt(500000, 600000)).toBe(0);
+  });
 });
 
 describe('getDebtStatus', () => {

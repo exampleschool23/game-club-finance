@@ -12,7 +12,9 @@
     "lint": "next lint",
     "import:june-bar-items": "node scripts/import-june-bar-items.cjs",
     "test": "vitest run",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "seed:test-data": "node scripts/seed-test-data.cjs --confirm",
+    "reset:test-data": "node scripts/reset-test-data.cjs --confirm"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

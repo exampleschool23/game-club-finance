@@ -22,6 +22,12 @@ describe('calculateGameClubIncome', () => {
     ).toBe(0);
   });
 
+  it('only cash, terminal, card contribute — no other fields', () => {
+    expect(calculateGameClubIncome({ cashIncome: 1000, terminalIncome: 0, cardIncome: 0 })).toBe(1000);
+    expect(calculateGameClubIncome({ cashIncome: 0, terminalIncome: 500, cardIncome: 0 })).toBe(500);
+    expect(calculateGameClubIncome({ cashIncome: 0, terminalIncome: 0, cardIncome: 250 })).toBe(250);
+  });
+
   it('handles large values', () => {
     expect(
       calculateGameClubIncome({

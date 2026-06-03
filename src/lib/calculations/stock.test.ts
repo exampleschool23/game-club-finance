@@ -63,6 +63,34 @@ describe('calculateStockCountSummary', () => {
     expect(result.barCost).toBe(120000);
     expect(result.barProfit).toBe(80000);
   });
+
+  it('scenario: prev=100 added=20 closing=90 → soldQty=30', () => {
+    const result = calculateStockCountSummary({
+      previousStock: 100,
+      addedToday: 20,
+      closingStock: 90,
+      salePrice: 15000,
+      costPrice: 7000,
+    });
+    expect(result.soldQuantity).toBe(30);
+    expect(result.barIncome).toBe(450000);
+    expect(result.barCost).toBe(210000);
+    expect(result.barProfit).toBe(240000);
+  });
+
+  it('zero sale calculates correctly', () => {
+    const result = calculateStockCountSummary({
+      previousStock: 50,
+      addedToday: 0,
+      closingStock: 50,
+      salePrice: 5000,
+      costPrice: 2000,
+    });
+    expect(result.soldQuantity).toBe(0);
+    expect(result.barIncome).toBe(0);
+    expect(result.barCost).toBe(0);
+    expect(result.barProfit).toBe(0);
+  });
 });
 
 describe('calculateWeightedAverageCost', () => {
