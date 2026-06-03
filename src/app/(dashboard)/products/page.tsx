@@ -8,8 +8,8 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/utils';
-import { Package, Plus, X } from 'lucide-react';
-import type { Product } from '@/types';
+import { Lock, Package, Plus, X } from 'lucide-react';
+import type { Product, UserRole } from '@/types';
 
 interface ProductForm {
   name: string;
@@ -40,6 +40,24 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+
+  const isOwner = currentRole === 'owner';
+
+  useEffect(() => {
+    async function fetchRole() {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      setCurrentRole((data?.role as UserRole | undefined) ?? null);
+    }
+    fetchRole().catch(() => {});
+  }, []);
 
   async function loadProducts() {
     const supabase = createClient();
@@ -91,7 +109,8 @@ export default function ProductsPage() {
       category: form.category.trim() || null,
       sale_price: parseFloat(form.sale_price) || 0,
       cost_price: parseFloat(form.cost_price) || 0,
-      current_stock: parseFloat(form.current_stock) || 0,
+      // Only owners can change current_stock directly
+      ...(isOwner ? { current_stock: parseFloat(form.current_stock) || 0 } : {}),
       low_stock_threshold: parseFloat(form.low_stock_threshold) || 5,
       is_active: form.is_active,
       updated_at: new Date().toISOString(),
@@ -250,15 +269,22 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">{t('currentStock')}</label>
+                  <label className="label flex items-center gap-1.5">
+                    {t('currentStock')}
+                    {!isOwner && <Lock size={12} className="text-gray-400" />}
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    className="input-field"
+                    className="input-field disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     value={form.current_stock}
+                    disabled={!isOwner}
                     onChange={(e) => set('current_stock', e.target.value)}
                   />
+                  {!isOwner && (
+                    <p className="mt-1 text-xs text-gray-400">Only owners can edit stock count</p>
+                  )}
                 </div>
                 <div>
                   <label className="label">{t('lowStockThreshold')}</label>
