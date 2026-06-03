@@ -20,6 +20,7 @@ import { createClient } from '@/lib/supabase/client';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
 import { formatCurrency, todayIso } from '@/lib/utils';
+import { formatDateTime } from '@/lib/formatters';
 import type { DailyCashEntry, UserRole } from '@/types';
 
 interface CashFormData {
@@ -47,22 +48,6 @@ function amountToInput(value: number | null | undefined): string {
   return value && value > 0 ? String(value) : '';
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-function formatTime(value: Date): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(value);
-}
 
 function formatRemaining(ms: number): string {
   const safe = Math.max(0, ms);
@@ -364,7 +349,7 @@ export default function DailyCashPage() {
                 <span>{t('ownerAccessEdit')}</span>
               ) : (
                 <>
-                  <span>{t('editUntil', { time: formatTime(deadline) })}</span>
+                  <span>{t('editUntil', { time: formatDateTime(deadline) })}</span>
                   <span className="rounded-full bg-green-100 px-2 py-1">{formatRemaining(remainingMs)}</span>
                 </>
               )}

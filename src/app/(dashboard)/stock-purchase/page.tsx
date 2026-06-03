@@ -3,7 +3,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency, formatDate, todayIso } from '@/lib/utils';
+import { formatCurrency, todayIso } from '@/lib/utils';
+import { formatDateOnly } from '@/lib/formatters';
 import { calculateWeightedAverageCost } from '@/lib/calculations/stock';
 import {
   Calendar,
@@ -34,9 +35,6 @@ function parseNum(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function prettyDate(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB');
-}
 
 function productInitials(name: string) {
   return name
@@ -435,7 +433,7 @@ export default function StockPurchasePage() {
                 <InfoTile label={t('currentStock')} value={`${selectedProduct.current_stock} ${t('pcs')}`} color="text-primary-700" />
                 <InfoTile label={t('lowStockAlert')} value={`${selectedProduct.low_stock_threshold ?? 5} ${t('pcs')}`} color="text-warning-700" />
                 <InfoTile label={t('stockValue')} value={`${formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} ${tc('currency')}`} color="text-success-700" />
-                <InfoTile label={t('lastPurchase')} value={purchases.find((purchase) => purchase.product_id === selectedProduct.id)?.date ? formatDate(purchases.find((purchase) => purchase.product_id === selectedProduct.id)!.date) : '-'} color="text-purple-700" />
+                <InfoTile label={t('lastPurchase')} value={purchases.find((purchase) => purchase.product_id === selectedProduct.id)?.date ? formatDateOnly(purchases.find((purchase) => purchase.product_id === selectedProduct.id)!.date) : '-'} color="text-purple-700" />
               </div>
             </>
           ) : (
@@ -499,7 +497,7 @@ export default function StockPurchasePage() {
                   <tr key={purchase.id} className="hover:bg-gray-50/80">
                     <td className="px-4 py-3 font-semibold text-gray-700">{index + 1}</td>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{prettyDate(purchase.date)}</p>
+                      <p className="font-semibold text-gray-900">{formatDateOnly(purchase.date)}</p>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">

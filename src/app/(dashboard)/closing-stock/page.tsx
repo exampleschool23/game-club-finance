@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, todayIso } from '@/lib/utils';
+import { formatDateOnly } from '@/lib/formatters';
 import {
   calculateClosingStockDefaults,
   calculateStockCountSummary,
@@ -41,13 +42,6 @@ function parseNum(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function prettyDate(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-}
 
 function initials(name: string) {
   return name
@@ -245,7 +239,7 @@ export default function ClosingStockPage() {
                 setError('');
               }}
             />
-            <span className="hidden min-w-[118px] sm:inline">{prettyDate(date)}</span>
+            <span className="hidden min-w-[118px] sm:inline">{formatDateOnly(date)}</span>
             <ChevronDown size={16} className="text-gray-400" />
           </label>
           <button

@@ -18,6 +18,7 @@ import {
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, todayIso } from '@/lib/utils';
+import { formatDateTime } from '@/lib/formatters';
 import { useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PeriodTabs, type DashboardPeriod } from '@/components/dashboard/PeriodTabs';
@@ -106,11 +107,6 @@ function formatShortDate(date: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(parseLocalIsoDate(date));
 }
 
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(value),
-  );
-}
 
 function expenseLabel(row: ExpenseRow): string {
   const category = row.category.replace(/_/g, ' ');
@@ -289,7 +285,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 description: t('cashIncomeDesc'),
                 amount: row.cash_income,
-                time: formatTime(createdAt),
+                time: formatDateTime(createdAt),
               }
             : null,
           row.terminal_income > 0
@@ -298,7 +294,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 description: t('terminalIncomeDesc'),
                 amount: row.terminal_income,
-                time: formatTime(createdAt),
+                time: formatDateTime(createdAt),
               }
             : null,
           row.card_income > 0
@@ -307,7 +303,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 description: t('cardIncomeDesc'),
                 amount: row.card_income,
-                time: formatTime(createdAt),
+                time: formatDateTime(createdAt),
               }
             : null,
         ];
@@ -319,7 +315,7 @@ export default function DashboardPage() {
               type: 'Income' as const,
               description: t('barSalesDesc'),
               amount: stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0),
-              time: stockRows[0]?.updated_at ? formatTime(stockRows[0].updated_at) : '23:59',
+              time: stockRows[0]?.updated_at ? formatDateTime(stockRows[0].updated_at) : '23:59',
             },
           ]
         : []),
@@ -328,7 +324,7 @@ export default function DashboardPage() {
         type: 'Expense' as const,
         description: expenseLabel(row),
         amount: row.amount,
-        time: formatTime(row.created_at),
+        time: formatDateTime(row.created_at),
       })),
       ...purchases.map((row) => ({
         id: `purchase-${row.id}`,
@@ -337,7 +333,7 @@ export default function DashboardPage() {
           ? `${t('productPurchaseDesc')} - ${productName(row.products)}`
           : t('productPurchaseDesc'),
         amount: (row.quantity ?? 0) * (row.cost_price ?? 0),
-        time: formatTime(row.created_at),
+        time: formatDateTime(row.created_at),
       })),
       ...debtPayments.map((row) => ({
         id: `debt-payment-${row.id}`,
@@ -346,7 +342,7 @@ export default function DashboardPage() {
           ? `${debtNameById.get(row.debt_id)} ${t('debtPaymentSuffix')}`
           : t('debtPayment'),
         amount: row.amount,
-        time: formatTime(row.created_at),
+        time: formatDateTime(row.created_at),
       })),
     ]
       .filter(Boolean)

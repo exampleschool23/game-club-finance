@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
-import { formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/formatters';
 import { ShieldCheck, Users } from 'lucide-react';
 import type { Profile, UserRole } from '@/types';
 
@@ -171,7 +171,7 @@ export default function TeamPageClient({ currentUserId }: TeamPageClientProps) {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{formatDate(profile.created_at)}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.created_at)}</td>
                 </tr>
               ))}
             </tbody>
