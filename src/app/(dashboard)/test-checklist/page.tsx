@@ -5,6 +5,7 @@ import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { calculateRemainingDebt } from '@/lib/calculations/debt';
 import { todayIso } from '@/lib/utils';
+import { formatNumber } from '@/lib/formatters';
 
 interface CheckResult {
   name: string;
@@ -123,7 +124,7 @@ export default async function TestChecklistPage() {
     checks.push({
       name: 'Net profit = total income − total expenses',
       pass: true,
-      explanation: `Game Club: ${gameClub.toLocaleString()} + Bar: ${barIncome.toLocaleString()} − Expenses: ${totalExpenses.toLocaleString()} = Net Profit: ${netProfit.toLocaleString()} UZS`,
+      explanation: `Game Club: ${formatNumber(gameClub)} + Bar: ${formatNumber(barIncome)} − Expenses: ${formatNumber(totalExpenses)} = Net Profit: ${formatNumber(netProfit)} UZS`,
       link: '/daily-report',
     });
   }
@@ -156,7 +157,7 @@ export default async function TestChecklistPage() {
   const allPass = passCount === checks.length;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-950">System Sanity Checks</h1>
         <p className="mt-1 text-sm text-gray-600">

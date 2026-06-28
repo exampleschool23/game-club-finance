@@ -25,11 +25,11 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div
         className={cn(
-          'relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl z-10',
+          'relative z-10 max-h-[calc(100dvh-1rem)] w-full overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-2xl',
           className
         )}
       >
@@ -44,7 +44,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             </button>
           </div>
         )}
-        <div className="px-6 py-5">{children}</div>
+        <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
       </div>
     </div>
   );

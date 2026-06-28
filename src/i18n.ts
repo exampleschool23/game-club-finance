@@ -6,6 +6,7 @@ export default getRequestConfig(async () => {
   const locale = cookieStore.get('locale')?.value ?? 'ru';
   return {
     locale,
+    timeZone: 'Asia/Tashkent',
     messages: (await import(`./messages/${locale}.json`)).default,
   };
 });

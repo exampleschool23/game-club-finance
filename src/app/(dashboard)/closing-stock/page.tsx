@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency, todayIso } from '@/lib/utils';
-import { formatDateOnly, formatDatePickerValue } from '@/lib/formatters';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency, formatDatePickerValue } from '@/lib/formatters';
 import {
   calculateClosingStockDefaults,
   calculateClosingStockFromSold,
@@ -12,12 +13,23 @@ import {
   calculateStockCountSummary,
 } from '@/lib/calculations/stock';
 import {
+  applyClosingStockDraft,
+  applyClosingStockImport,
+  buildClosingStockUpserts,
+  clearClosingStockDraft,
+  parseClosingStockNumber,
+  readClosingStockDraft,
+  saveClosingStockDraft,
+  selectClosingStockImportRows,
+  type ClosingStockRowData,
+  type StorageLike,
+} from '@/lib/closingStock';
+import {
   Box,
   Calendar,
   ChevronDown,
   Coins,
   FileBox,
-  HelpCircle,
   Info,
   Package,
   Save,
@@ -61,17 +73,19 @@ interface StockCountRow {
     | null;
 }
 
-interface RowData {
-  product: Product;
-  previousStock: string;
-  addedToday: string;
-  closingStock: string;
-  soldQuantity: string;
-}
+type RowData = ClosingStockRowData;
 
 function parseNum(value: string): number {
-  const n = parseFloat(value);
-  return Number.isFinite(n) ? n : 0;
+  return parseClosingStockNumber(value) ?? 0;
+}
+
+function getBrowserStorage(): StorageLike | null {
+  return typeof window === 'undefined' ? null : window.localStorage;
+}
+
+function applyBrowserDraft(date: string, rows: RowData[]): RowData[] {
+  const draft = readClosingStockDraft(getBrowserStorage(), date);
+  return applyClosingStockDraft(rows, draft);
 }
 
 
@@ -217,6 +231,7 @@ async function recalculateSavedFutureRows(
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
   const today = todayIso();
   const [date, setDate] = useState(todayIso());
   const [rows, setRows] = useState<RowData[]>([]);
@@ -226,6 +241,7 @@ export default function ClosingStockPage() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
   const isAdmin = currentRole === 'admin';
@@ -275,9 +291,9 @@ export default function ClosingStockPage() {
   const loadData = useCallback(async (selectedDate: string) => {
     setLoading(true);
     setError('');
-    setSuccess('');
     const supabase = createClient();
     const readOnlyDate = selectedDate < todayIso();
+    const canUseDraft = currentRole === 'owner' || (currentRole === 'admin' && !readOnlyDate);
 
     if (readOnlyDate) {
       const countsWithOrder = await supabase
@@ -317,31 +333,29 @@ export default function ClosingStockPage() {
         ]);
 
         if (productsRes.error || purchasesRes.error || previousClosingsRes.error) {
-          setError(productsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? tc('error'));
+          setError(productsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? 'Error');
           setRows([]);
           setLoading(false);
           return;
         }
 
-        setRows(
-          buildEditableRows(
+        const editableRows = buildEditableRows(
             (productsRes.data ?? []) as Product[],
             [],
             ((purchasesRes.data as PurchaseQuantity[]) ?? []),
             previousClosingsRes.data ?? {},
-          ),
         );
+        setRows(canUseDraft ? applyBrowserDraft(selectedDate, editableRows) : editableRows);
         setLoading(false);
         return;
       }
 
-      setRows(
-        sortRowsByProductOrder(stockCountRows.flatMap((count) => {
+      const savedRows = sortRowsByProductOrder(stockCountRows.flatMap((count) => {
           const relation = Array.isArray(count.products) ? count.products[0] : count.products;
           if (relation?.is_deleted) return [];
           const product: Product = {
             id: relation?.id ?? count.product_id,
-            name: relation?.name ?? t('unknownProduct'),
+            name: relation?.name ?? 'Unknown product',
             category: relation?.category ?? null,
             sale_price: Number(count.sale_price ?? 0),
             cost_price: Number(count.cost_price ?? 0),
@@ -361,8 +375,8 @@ export default function ClosingStockPage() {
             closingStock: String(count.closing_stock ?? 0),
             soldQuantity: String(count.sold_quantity ?? 0),
           }];
-        })),
-      );
+        }));
+      setRows(canUseDraft ? applyBrowserDraft(selectedDate, savedRows) : savedRows);
       setLoading(false);
       return;
     }
@@ -375,22 +389,21 @@ export default function ClosingStockPage() {
     ]);
 
     if (productsRes.error || countsRes.error || purchasesRes.error || previousClosingsRes.error) {
-      setError(productsRes.error?.message ?? countsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? tc('error'));
+      setError(productsRes.error?.message ?? countsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? 'Error');
       setRows([]);
       setLoading(false);
       return;
     }
 
-    setRows(
-      buildEditableRows(
+    const editableRows = buildEditableRows(
         (productsRes.data ?? []) as Product[],
         (countsRes.data ?? []) as Array<Record<string, number | string>>,
         ((purchasesRes.data as PurchaseQuantity[]) ?? []),
         previousClosingsRes.data ?? {},
-      ),
     );
+    setRows(canUseDraft ? applyBrowserDraft(selectedDate, editableRows) : editableRows);
     setLoading(false);
-  }, [buildEditableRows, currentRole, t, tc]);
+  }, [buildEditableRows, currentRole]);
 
   useEffect(() => {
     loadData(date).catch((err) => {
@@ -487,9 +500,100 @@ export default function ClosingStockPage() {
     );
   }, [rows]);
 
-  async function handleSave() {
+  function handleSaveDraft() {
     if (isReadOnly) {
       setError(t('readOnlyBody'));
+      return;
+    }
+
+    if (rows.length === 0) {
+      setError(tc('noData'));
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    if (!saveClosingStockDraft(getBrowserStorage(), date, rows)) {
+      setError(t('draftSaveFailed'));
+      return;
+    }
+
+    setSuccess(t('draftSaved'));
+  }
+
+  async function handleImportFromExcel(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) return;
+
+    if (isReadOnly) {
+      setError(t('readOnlyBody'));
+      return;
+    }
+
+    if (rows.length === 0) {
+      setError(tc('noData'));
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+
+      if (workbook.SheetNames.length === 0) {
+        setError(t('importEmpty'));
+        return;
+      }
+
+      const importSelection = selectClosingStockImportRows(
+        workbook.SheetNames.map((sheetName) => ({
+          name: sheetName,
+          rows: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
+            header: 1,
+            defval: '',
+            blankrows: false,
+            raw: false,
+          }),
+        })),
+        date,
+      );
+
+      if (!importSelection) {
+        setError(t('importEmpty'));
+        return;
+      }
+
+      const result = applyClosingStockImport(
+        rows,
+        importSelection.rows,
+        usesSoldEntry ? 'soldQuantity' : 'closingStock',
+      );
+
+      if (result.matchedCount === 0) {
+        setError(t('importNoMatches'));
+        return;
+      }
+
+      setRows(result.rows);
+      setSuccess(t('importSuccess', { count: result.matchedCount, sheet: importSelection.sheetName }));
+    } catch {
+      setError(t('importFailed'));
+    }
+  }
+
+  async function handleSubmitStockCounts() {
+    if (isReadOnly) {
+      setError(t('readOnlyBody'));
+      return;
+    }
+
+    if (rows.length === 0) {
+      setError(tc('noData'));
       return;
     }
 
@@ -498,34 +602,10 @@ export default function ClosingStockPage() {
     setSuccess('');
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-
-    const upserts = rows.map((row) => {
-      const prev = parseNum(row.previousStock);
-      const added = parseNum(row.addedToday);
-      const closing = parseNum(row.closingStock);
-      const { soldQuantity, barIncome, barCost, barProfit } = calculateStockCountSummary({
-        previousStock: prev,
-        addedToday: added,
-        closingStock: closing,
-        salePrice: row.product.sale_price,
-        costPrice: row.product.cost_price,
-      });
-
-      return {
-        date,
-        product_id: row.product.id,
-        previous_stock: prev,
-        added_today: added,
-        closing_stock: closing,
-        sold_quantity: soldQuantity,
-        sale_price: row.product.sale_price,
-        cost_price: row.product.cost_price,
-        bar_income: barIncome,
-        bar_cost: barCost,
-        bar_profit: barProfit,
-        created_by: session?.user?.id ?? null,
-        updated_at: new Date().toISOString(),
-      };
+    const { upserts, savedClosings } = buildClosingStockUpserts({
+      date,
+      rows,
+      createdBy: session?.user?.id ?? null,
     });
 
     const { error: err } = await supabase
@@ -538,10 +618,6 @@ export default function ClosingStockPage() {
       return;
     }
 
-    const savedClosings = upserts.reduce<Record<string, number>>((acc, row) => {
-      acc[row.product_id] = row.closing_stock;
-      return acc;
-    }, {});
     const cascadeError = await recalculateSavedFutureRows(supabase, date, savedClosings);
 
     setSaving(false);
@@ -551,8 +627,9 @@ export default function ClosingStockPage() {
       return;
     }
 
-    setSuccess(t('success'));
+    clearClosingStockDraft(getBrowserStorage(), date);
     await loadData(date);
+    setSuccess(t('success'));
   }
 
   const kpis = [
@@ -576,8 +653,8 @@ export default function ClosingStockPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <label className="relative block h-11 w-full cursor-pointer sm:w-[300px]">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap xl:w-auto xl:flex-nowrap">
+          <label className="relative block h-11 w-full cursor-pointer sm:w-[260px]">
             <input
               type="date"
               max={today}
@@ -592,28 +669,24 @@ export default function ClosingStockPage() {
             />
             <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
               <Calendar size={17} className="shrink-0 text-gray-500" />
-              <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(date)}</span>
-              <span className="hidden h-5 w-px bg-gray-200 sm:block" />
-              <span className="hidden min-w-0 flex-1 truncate font-semibold text-gray-700 sm:block">
-                {formatDateOnly(date)}
-              </span>
+              <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(date, locale)}</span>
               <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
             </span>
           </label>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={handleSaveDraft}
             disabled={saving || loading || isReadOnly}
-            className="btn-secondary flex min-h-11 items-center justify-center gap-2 border border-gray-200 bg-white"
+            className="btn-secondary min-h-11 w-full border border-gray-200 bg-white sm:w-auto"
           >
             <Save size={16} />
             {t('saveDraft')}
           </button>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={handleSubmitStockCounts}
             disabled={saving || loading || isReadOnly}
-            className="btn-primary flex min-h-11 items-center justify-center gap-2 px-5"
+            className="btn-primary min-h-11 w-full px-5 sm:w-auto"
           >
             <Package size={16} />
             {saving ? tc('saving') : t('submit')}
@@ -635,16 +708,16 @@ export default function ClosingStockPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {kpis.map(({ label, value, unit, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-4">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-full ${bg}`}>
+          <div key={label} className="min-w-0 rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 sm:gap-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-full sm:h-12 sm:w-12 ${bg}`}>
                 <Icon size={22} className={color} />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-600">{label}</p>
-                <p className={`mt-1 break-words text-2xl font-bold leading-tight tabular-nums ${color}`}>{value}</p>
+                <p className={`mt-1 break-words text-xl font-bold leading-tight tabular-nums sm:text-2xl ${color}`}>{value}</p>
                 <p className="mt-1 text-xs font-medium text-gray-500">{unit}</p>
               </div>
             </div>
@@ -655,10 +728,10 @@ export default function ClosingStockPage() {
       {error && <p className="rounded-lg bg-danger-50 px-4 py-3 text-sm font-medium text-danger-600">{error}</p>}
       {success && <p className="rounded-lg bg-success-50 px-4 py-3 text-sm font-medium text-success-600">{success}</p>}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div>
         <section className="min-w-0 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 md:flex-row md:items-center md:justify-between sm:px-5">
+            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center">
               <h2 className="text-lg font-bold text-gray-900">{t('products')}</h2>
               <div className="relative w-full md:w-72">
                 <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -671,7 +744,19 @@ export default function ClosingStockPage() {
                 />
               </div>
             </div>
-            <button className="btn-secondary flex min-h-10 items-center justify-center gap-2 border border-gray-200 bg-white">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleImportFromExcel}
+            />
+            <button
+              type="button"
+              disabled={saving || loading || isReadOnly}
+              onClick={() => importInputRef.current?.click()}
+              className="btn-secondary min-h-10 w-full border border-gray-200 bg-white md:w-auto"
+            >
               <Upload size={16} />
               {t('importFromExcel')}
             </button>
@@ -791,57 +876,6 @@ export default function ClosingStockPage() {
             </div>
           )}
         </section>
-
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="font-bold text-gray-900">{t('howItWorks')}</h3>
-            <div className="mt-4 space-y-5">
-              {([
-                [t('step1Title'), t('step1Body')],
-                [t('step2Title'), t('step2Body')],
-                [t('step3Title'), t('step3Body')],
-              ] as [string, string][]).map(([title, body], index) => (
-                <div key={title} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-700">{index + 1}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{title}</p>
-                    <p className="mt-1 text-xs leading-5 text-gray-500">{body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <h3 className="font-bold text-gray-900">{t('formulas')}</h3>
-            <div className="mt-4 space-y-4 text-sm">
-              <div>
-                <p className="font-semibold text-gray-900">{t('formulaSoldTitle')}</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">{t('formulaSoldBody')}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{t('formulaIncomeTitle')}</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">{t('formulaIncomeBody')}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{t('formulaProfitTitle')}</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">{t('formulaProfitBody')}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <HelpCircle size={18} className="text-primary-600" />
-              <h3 className="font-bold text-gray-900">{t('needHelp')}</h3>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-gray-500">{t('needHelpBody')}</p>
-            <a href="/products" className="btn-secondary mt-4 inline-flex min-h-10 items-center gap-2 border border-gray-200 bg-white">
-              <Package size={16} />
-              {t('viewProducts')}
-            </a>
-          </div>
-        </aside>
       </div>
     </div>
   );

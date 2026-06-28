@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import type { MouseEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -27,6 +28,7 @@ interface SidebarProps {
   fullName: string;
   mobileOpen?: boolean;
   onClose?: () => void;
+  onNavigate?: (href: string) => void;
 }
 
 function NavLink({
@@ -34,18 +36,34 @@ function NavLink({
   icon: Icon,
   label,
   active,
-  onClick,
+  onNavigate,
 }: {
   href: string;
   icon: React.ElementType;
   label: string;
   active: boolean;
-  onClick?: () => void;
+  onNavigate?: (href: string) => void;
 }) {
+  function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+
+    onNavigate?.(href);
+  }
+
   return (
     <Link
       href={href}
-      onClick={onClick}
+      prefetch={false}
+      onClick={handleClick}
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
         active
@@ -59,7 +77,7 @@ function NavLink({
   );
 }
 
-export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
+export function Sidebar({ role, fullName, mobileOpen, onClose, onNavigate }: SidebarProps) {
   const t = useTranslations('nav');
   const pathname = usePathname();
   const router = useRouter();
@@ -137,18 +155,22 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
   const content = (
     <div className="flex flex-col h-full bg-sidebar">
       {/* Logo */}
-      <div className="flex items-center justify-between px-4 py-5 border-b border-white/10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Gamepad2 size={20} className="text-white" />
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-white/15 bg-primary-600 shadow-sm shadow-primary-900/30">
+            <Gamepad2 size={23} className="text-white" />
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-white font-bold text-base tracking-wide">GAME CLUB</span>
-            <span className="text-primary-400 font-semibold text-xs tracking-wider">FINANCE</span>
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-[15px] font-extrabold text-white">
+              Game Club
+            </p>
+            <p className="truncate text-[13px] font-bold text-primary-100">
+              Finance
+            </p>
           </div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="text-slate-400 hover:text-white lg:hidden">
+          <button onClick={onClose} className="text-slate-400 hover:text-white xl:hidden">
             <X size={20} />
           </button>
         )}
@@ -163,7 +185,7 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
             icon={link.icon}
             label={link.label}
             active={pathname === link.href}
-            onClick={onClose}
+            onNavigate={onNavigate}
           />
         ))}
       </nav>
@@ -198,15 +220,15 @@ export function Sidebar({ role, fullName, mobileOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-56 xl:w-64 flex-shrink-0 h-screen sticky top-0">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 xl:flex">
         {content}
       </aside>
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-40 xl:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 z-50">{content}</aside>
+          <aside className="absolute bottom-0 left-0 top-0 z-50 w-[min(18rem,86vw)]">{content}</aside>
         </div>
       )}
     </>

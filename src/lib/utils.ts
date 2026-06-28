@@ -1,20 +1,8 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { formatDateOnly } from './formatters';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
-}
-
-export function formatCurrency(amount: number, locale = 'ru-UZ'): string {
-  return new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-export function formatDate(date: string | Date, _locale?: string): string {
-  return formatDateOnly(date);
 }
 
 export function todayIso(): string {

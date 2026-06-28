@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
 import { ShieldCheck, Users } from 'lucide-react';
 import type { Profile, UserRole } from '@/types';
@@ -12,19 +14,23 @@ import type { Profile, UserRole } from '@/types';
 const ROLES: UserRole[] = ['owner', 'admin', 'viewer'];
 
 interface TeamPageClientProps {
-  currentUserId: string;
+  currentUserId?: string;
 }
 
-export default function TeamPageClient({ currentUserId }: TeamPageClientProps) {
+export default function TeamPageClient({ currentUserId: initialCurrentUserId }: TeamPageClientProps) {
+  const router = useRouter();
   const t = useTranslations('team');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
+  const [currentUserId, setCurrentUserId] = useState(initialCurrentUserId ?? '');
+  const [authorized, setAuthorized] = useState(Boolean(initialCurrentUserId));
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  async function loadProfiles() {
+  const loadProfiles = useCallback(async () => {
     setLoading(true);
     setError('');
     const supabase = createClient();
@@ -40,11 +46,50 @@ export default function TeamPageClient({ currentUserId }: TeamPageClientProps) {
       setProfiles((data as Profile[]) ?? []);
     }
     setLoading(false);
-  }
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function authorize() {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace('/login');
+        return;
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (data?.role !== 'owner') {
+        router.replace('/');
+        return;
+      }
+
+      setCurrentUserId(session.user.id);
+      setAuthorized(true);
+    }
+
+    authorize().catch((err) => {
+      if (!cancelled) setError(String(err));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    if (!authorized) return;
     loadProfiles().catch((err) => setError(String(err)));
-  }, []);
+  }, [authorized, loadProfiles]);
 
   const ownerCount = useMemo(
     () => profiles.filter((profile) => profile.role === 'owner').length,
@@ -90,6 +135,10 @@ export default function TeamPageClient({ currentUserId }: TeamPageClientProps) {
     if (role === 'owner') return <Badge variant="success">{t('roles.owner')}</Badge>;
     if (role === 'admin') return <Badge variant="warning">{t('roles.admin')}</Badge>;
     return <Badge variant="default">{t('roles.viewer')}</Badge>;
+  }
+
+  if (!authorized) {
+    return <p className="text-gray-500">{tc('loading')}</p>;
   }
 
   return (
@@ -171,7 +220,7 @@ export default function TeamPageClient({ currentUserId }: TeamPageClientProps) {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.created_at)}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.created_at, locale)}</td>
                 </tr>
               ))}
             </tbody>

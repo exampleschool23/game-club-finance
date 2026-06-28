@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { Banknote, CreditCard, QrCode, Users, DollarSign, Plus } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Toast, useToast } from '@/components/ui/Toast';
@@ -48,7 +48,7 @@ export default function BalancePage() {
 
   async function handleMovement(e: React.FormEvent) {
     e.preventDefault();
-    const raw = parseFloat(form.amount);
+    const raw = parseCurrencyInput(form.amount);
     if (!raw || raw <= 0) { showToast('Введите сумму', 'error'); return; }
 
     const amount = form.movement_type === 'withdraw' ? -raw : raw;
@@ -77,30 +77,30 @@ export default function BalancePage() {
   const total = (balances['cash'] ?? 0) + (balances['terminal'] ?? 0) + (balances['bank'] ?? 0);
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
-        <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => setModalOpen(true)} className="btn-primary w-full sm:w-auto">
           <Plus size={16} /> {t('deposit')}
         </button>
       </div>
 
       {/* Balance cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {ACCOUNTS.map(({ key, label, icon: Icon, color }) => (
           <div key={key} className="card flex items-center gap-3">
             <Icon size={22} className={color} />
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-gray-500">{td(label)}</p>
-              <p className={`text-lg font-bold ${color}`}>{formatCurrency(balances[key] ?? 0)}</p>
+              <p className={`break-words text-lg font-bold ${color}`}>{formatCurrency(balances[key] ?? 0)}</p>
             </div>
           </div>
         ))}
-        <div className="card flex items-center gap-3 col-span-2 sm:col-span-1">
+        <div className="card flex items-center gap-3 sm:col-span-2 lg:col-span-1">
           <DollarSign size={22} className="text-gray-700" />
-          <div>
+          <div className="min-w-0">
             <p className="text-xs text-gray-500">{td('totalBalance')}</p>
-            <p className="text-lg font-bold text-gray-900">{formatCurrency(total)}</p>
+            <p className="break-words text-lg font-bold text-gray-900">{formatCurrency(total)}</p>
           </div>
         </div>
       </div>
@@ -111,12 +111,12 @@ export default function BalancePage() {
         {movements.length === 0 && <p className="text-gray-400 text-sm">Нет данных</p>}
         <div className="space-y-2">
           {movements.map((m) => (
-            <div key={m.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-              <div>
+            <div key={m.id} className="flex flex-col gap-1 border-b border-gray-50 py-2 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="text-sm font-medium capitalize text-gray-800">{m.movement_type} — {m.account}</p>
                 {m.comment && <p className="text-xs text-gray-400">{m.comment}</p>}
               </div>
-              <span className={`text-sm font-bold ${m.amount >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
+              <span className={`text-sm font-bold sm:text-right ${m.amount >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
                 {m.amount >= 0 ? '+' : ''}{formatCurrency(m.amount)}
               </span>
             </div>
@@ -129,7 +129,7 @@ export default function BalancePage() {
         <form onSubmit={handleMovement} className="space-y-4">
           <div>
             <label className="label">Тип операции</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(['deposit', 'withdraw', 'correction'] as MovementType[]).map((type) => (
                 <button
                   key={type}
@@ -163,12 +163,12 @@ export default function BalancePage() {
           <div>
             <label className="label">{t('amount')}</label>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={form.amount}
-              onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+              onChange={(e) => setForm((p) => ({ ...p, amount: formatCurrencyInput(e.target.value) }))}
               className="input-field"
               placeholder="0"
-              min="1"
               required
             />
           </div>

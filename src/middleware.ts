@@ -1,7 +1,29 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+function hasSupabaseAuthCookie(request: NextRequest) {
+  return request.cookies
+    .getAll()
+    .some(({ name, value }) => name.startsWith('sb-') && name.includes('-auth-token') && Boolean(value));
+}
+
+function isAppRouterNavigation(request: NextRequest) {
+  return (
+    request.headers.get('rsc') === '1' ||
+    request.headers.has('next-url') ||
+    request.headers.get('next-router-prefetch') === '1'
+  );
+}
+
 export async function middleware(request: NextRequest) {
+  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
+  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
+  const isProtectedPage = !isAuthPage && !isAuthCallback;
+
+  if (isProtectedPage && isAppRouterNavigation(request) && hasSupabaseAuthCookie(request)) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -26,9 +48,6 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
-  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
 
   if (!user && !isAuthPage && !isAuthCallback) {
     return NextResponse.redirect(new URL('/login', request.url));

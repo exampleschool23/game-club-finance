@@ -3,8 +3,9 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency, todayIso } from '@/lib/utils';
-import { formatDateOnly } from '@/lib/formatters';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency, formatCurrencyInput, formatDateOnly, parseCurrencyInput } from '@/lib/formatters';
 import { calculateWeightedAverageCost } from '@/lib/calculations/stock';
 import {
   Calendar,
@@ -30,7 +31,7 @@ interface PurchaseWithProduct extends StockPurchase {
   products: { name: string; sale_price?: number | null; cost_price?: number | null } | null;
 }
 
-function parseNum(value: string) {
+function parseQuantity(value: string) {
   const parsed = parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -80,6 +81,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
 export default function StockPurchasePage() {
   const t = useTranslations('stockPurchase');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<PurchaseWithProduct[]>([]);
@@ -123,9 +125,9 @@ export default function StockPurchasePage() {
   }, []);
 
   const selectedProduct = products.find((product) => product.id === form.product_id) ?? null;
-  const quantity = parseNum(form.quantity);
-  const costPrice = parseNum(form.cost_price);
-  const salePrice = parseNum(form.sale_price || String(selectedProduct?.sale_price ?? 0));
+  const quantity = parseQuantity(form.quantity);
+  const costPrice = parseCurrencyInput(form.cost_price);
+  const salePrice = parseCurrencyInput(form.sale_price || selectedProduct?.sale_price || 0);
   const totalCost = quantity * costPrice;
   const totalSaleValue = quantity * salePrice;
   const estimatedProfit = quantity * (salePrice - costPrice);
@@ -148,6 +150,9 @@ export default function StockPurchasePage() {
       purchase.payment_method.toLowerCase().includes(needle),
     );
   }, [purchases, query]);
+  const selectedProductLastPurchase = selectedProduct
+    ? purchases.find((purchase) => purchase.product_id === selectedProduct.id)
+    : undefined;
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -172,8 +177,8 @@ export default function StockPurchasePage() {
     setForm((prev) => ({
       ...prev,
       product_id: productId,
-      cost_price: product ? String(product.cost_price) : prev.cost_price,
-      sale_price: product ? String(product.sale_price) : prev.sale_price,
+      cost_price: product ? formatCurrencyInput(product.cost_price) : prev.cost_price,
+      sale_price: product ? formatCurrencyInput(product.sale_price) : prev.sale_price,
     }));
   }
 
@@ -229,19 +234,19 @@ export default function StockPurchasePage() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button className="btn-secondary flex min-h-11 items-center justify-center gap-2 border border-gray-200 bg-white px-5">
+          <button className="btn-secondary min-h-11 w-full border border-gray-200 bg-white px-5 sm:w-auto">
             <Upload size={17} />
             {t('importFromExcel')}
           </button>
-          <button className="btn-primary flex min-h-11 items-center justify-center gap-2 px-5">
+          <button className="btn-primary min-h-11 w-full px-5 sm:w-auto">
             <Plus size={18} />
             {t('addNewPurchase')}
           </button>
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_520px]">
-        <form onSubmit={handleSubmit} className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_520px]">
+        <form onSubmit={handleSubmit} className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
               <ShoppingCart size={18} />
@@ -305,12 +310,11 @@ export default function StockPurchasePage() {
               <div className="flex h-11 items-center gap-3 rounded-lg border border-gray-200 bg-white px-3">
                 <Coins size={17} className="text-purple-600" />
                 <input
-                  type="number"
-                  min="0"
-                  step="1"
+                  type="text"
+                  inputMode="numeric"
                   className="min-w-0 flex-1 bg-transparent font-semibold text-gray-900 outline-none"
                   value={form.cost_price}
-                  onChange={(event) => set('cost_price', event.target.value)}
+                  onChange={(event) => set('cost_price', formatCurrencyInput(event.target.value))}
                   required
                 />
                 <span className="text-sm font-semibold text-gray-600">{tc('currency')}</span>
@@ -322,12 +326,11 @@ export default function StockPurchasePage() {
               <div className="flex h-11 items-center gap-3 rounded-lg border border-gray-200 bg-success-50/40 px-3">
                 <Coins size={17} className="text-success-600" />
                 <input
-                  type="number"
-                  min="0"
-                  step="1"
+                  type="text"
+                  inputMode="numeric"
                   className="min-w-0 flex-1 bg-transparent font-semibold text-gray-900 outline-none"
                   value={form.sale_price}
-                  onChange={(event) => set('sale_price', event.target.value)}
+                  onChange={(event) => set('sale_price', formatCurrencyInput(event.target.value))}
                 />
                 <span className="text-sm font-semibold text-gray-600">{tc('currency')}</span>
               </div>
@@ -410,7 +413,7 @@ export default function StockPurchasePage() {
           </div>
         </form>
 
-        <aside className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
+        <aside className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
@@ -425,7 +428,7 @@ export default function StockPurchasePage() {
 
           {selectedProduct ? (
             <>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-lg font-bold text-gray-500">
                   {productInitials(selectedProduct.name)}
                 </div>
@@ -454,7 +457,7 @@ export default function StockPurchasePage() {
                 <InfoTile label={t('currentStock')} value={`${selectedProduct.current_stock} ${t('pcs')}`} color="text-primary-700" />
                 <InfoTile label={t('lowStockAlert')} value={`${selectedProduct.low_stock_threshold ?? 5} ${t('pcs')}`} color="text-warning-700" />
                 <InfoTile label={t('stockValue')} value={`${formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} ${tc('currency')}`} color="text-success-700" />
-                <InfoTile label={t('lastPurchase')} value={purchases.find((purchase) => purchase.product_id === selectedProduct.id)?.date ? formatDateOnly(purchases.find((purchase) => purchase.product_id === selectedProduct.id)!.date) : '-'} color="text-purple-700" />
+                <InfoTile label={t('lastPurchase')} value={selectedProductLastPurchase?.date ? formatDateOnly(selectedProductLastPurchase.date, locale) : '-'} color="text-purple-700" />
               </div>
             </>
           ) : (
@@ -475,7 +478,7 @@ export default function StockPurchasePage() {
       </div>
 
       <section className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-lg font-bold text-gray-900">{t('recentPurchases')}</h2>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative w-full sm:w-72">
@@ -488,7 +491,7 @@ export default function StockPurchasePage() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
-            <button className="btn-secondary flex min-h-10 items-center justify-center gap-2 border border-gray-200 bg-white">
+            <button className="btn-secondary min-h-10 w-full border border-gray-200 bg-white sm:w-auto">
               <Filter size={16} />
               {t('filters')}
             </button>
@@ -518,7 +521,7 @@ export default function StockPurchasePage() {
                   <tr key={purchase.id} className="hover:bg-gray-50/80">
                     <td className="px-4 py-3 font-semibold text-gray-700">{index + 1}</td>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{formatDateOnly(purchase.date)}</p>
+                      <p className="font-semibold text-gray-900">{formatDateOnly(purchase.date, locale)}</p>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">

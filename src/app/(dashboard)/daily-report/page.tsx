@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatCurrency, formatDate, todayIso } from '@/lib/utils';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency } from '@/lib/formatters';
 import {
   calculateTotalIncome,
   calculateNetProfit,
@@ -88,14 +89,14 @@ export default function DailyReportPage() {
   const currency = tc('currency');
 
   return (
-    <div className="max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
       <PageHeader title={t('title')} />
 
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <label className="label mb-0">{t('date')}</label>
         <input
           type="date"
-          className="input-field w-auto"
+          className="input-field w-full sm:w-auto"
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
@@ -108,7 +109,7 @@ export default function DailyReportPage() {
       ) : (
         <div className="space-y-6">
           {/* KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               label={t('manualIncome')}
               value={`${formatCurrency(manualIncome)} ${currency}`}
@@ -141,7 +142,7 @@ export default function DailyReportPage() {
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
                 {t('cashEntry')}
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 {cashEntry.cash_income > 0 && (
                   <div>
                     <p className="text-gray-500">{tc('paymentMethods.cash')}</p>
@@ -222,7 +223,7 @@ export default function DailyReportPage() {
               </h2>
               <div className="space-y-2">
                 {expenses.map((e) => (
-                  <div key={e.id} className="flex justify-between text-sm">
+                  <div key={e.id} className="flex flex-col gap-1 text-sm sm:flex-row sm:justify-between">
                     <span className="text-gray-600">
                       {te(`categories.${e.category}` as Parameters<typeof te>[0])}
                       {e.comment ? ` · ${e.comment}` : ''}
@@ -230,7 +231,7 @@ export default function DailyReportPage() {
                     <span className="font-medium text-danger-500">{formatCurrency(e.amount)}</span>
                   </div>
                 ))}
-                <div className="flex justify-between text-sm font-semibold border-t border-gray-100 pt-2">
+                <div className="flex flex-col gap-1 border-t border-gray-100 pt-2 text-sm font-semibold sm:flex-row sm:justify-between">
                   <span>{tc('total')}</span>
                   <span className="text-danger-500">{formatCurrency(totalExpenses)}</span>
                 </div>

@@ -2,7 +2,7 @@
 
 import type { ElementType } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/formatters';
 
 interface MetricCardProps {
   label: string;
@@ -29,14 +29,14 @@ export function MetricCard({
   const isPositive = (comparison?.value ?? 0) >= 0;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-3">
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBgClassName}`}>
           <Icon size={22} className={iconClassName} />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-600">{label}</p>
-          <p className="mt-2 text-2xl font-bold leading-tight text-gray-950">
+          <p className="break-words text-sm font-semibold text-gray-600">{label}</p>
+          <p className="mt-2 break-words text-xl font-bold leading-tight text-gray-950 sm:text-2xl">
             {formatCurrency(amount)}
           </p>
           <p className="text-sm font-medium text-gray-600">UZS</p>
@@ -44,7 +44,7 @@ export function MetricCard({
       </div>
       {comparison ? (
         <p
-          className={`mt-4 flex items-center gap-1 text-xs font-semibold ${
+          className={`mt-4 flex flex-wrap items-center gap-1 text-xs font-semibold ${
             isPositive ? 'text-green-600' : 'text-red-500'
           }`}
         >

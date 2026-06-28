@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
 import type { Product, UserRole } from '@/types';
 
@@ -130,8 +130,8 @@ export default function ProductsPage() {
     setForm({
       name: p.name,
       category: p.category ?? '',
-      sale_price: String(p.sale_price),
-      cost_price: String(p.cost_price),
+      sale_price: formatCurrencyInput(p.sale_price),
+      cost_price: formatCurrencyInput(p.cost_price),
       current_stock: String(p.current_stock),
       low_stock_threshold: String(p.low_stock_threshold ?? 5),
       is_active: p.is_active,
@@ -162,9 +162,9 @@ export default function ProductsPage() {
     const payload = {
       name: form.name.trim(),
       category: form.category.trim() || null,
-      sale_price: parseFloat(form.sale_price) || 0,
+      sale_price: parseCurrencyInput(form.sale_price),
       // Only owners can change cost_price and current_stock directly
-      ...(isOwner ? { cost_price: parseFloat(form.cost_price) || 0 } : {}),
+      ...(isOwner ? { cost_price: parseCurrencyInput(form.cost_price) } : {}),
       ...(isOwner ? { current_stock: parseFloat(form.current_stock) || 0 } : {}),
       low_stock_threshold: parseFloat(form.low_stock_threshold) || 5,
       is_active: form.is_active,
@@ -388,7 +388,7 @@ export default function ProductsPage() {
       {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900">
                 {editingId ? t('editProduct') : t('addProduct')}
@@ -416,16 +416,15 @@ export default function ProductsPage() {
                   onChange={(e) => set('category', e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="label">{t('salePrice')}</label>
                   <input
-                    type="number"
-                    min="0"
-                    step="1"
+                    type="text"
+                    inputMode="numeric"
                     className="input-field"
                     value={form.sale_price}
-                    onChange={(e) => set('sale_price', e.target.value)}
+                    onChange={(e) => set('sale_price', formatCurrencyInput(e.target.value))}
                   />
                 </div>
                 <div>
@@ -434,13 +433,12 @@ export default function ProductsPage() {
                     {!isOwner && <Lock size={12} className="text-gray-400" />}
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="1"
+                    type="text"
+                    inputMode="numeric"
                     className="input-field disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     value={form.cost_price}
                     disabled={!isOwner}
-                    onChange={(e) => set('cost_price', e.target.value)}
+                    onChange={(e) => set('cost_price', formatCurrencyInput(e.target.value))}
                   />
                   {!isOwner && (
                     <p className="mt-1 text-xs text-gray-400">Updated automatically from stock purchases</p>
@@ -502,7 +500,7 @@ export default function ProductsPage() {
                   {deleting ? tc('loading') : t('deleteProduct')}
                 </button>
               )}
-              <div className="flex gap-3 sm:ml-auto">
+              <div className="flex w-full flex-col gap-3 sm:ml-auto sm:w-auto sm:flex-row">
                 <button className="btn-secondary flex-1 sm:flex-none" onClick={() => setModalOpen(false)} disabled={deleting}>
                   {tc('cancel')}
                 </button>

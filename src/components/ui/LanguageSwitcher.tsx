@@ -1,8 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useLocale } from 'next-intl';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState } from 'react';
+import { isAppLocale, useAppLocale, type AppLocale } from '@/components/i18n/AppLocaleContext';
 import { cn } from '@/lib/utils';
 
 const LANGUAGES = [
@@ -16,10 +15,8 @@ interface LanguageSwitcherProps {
 }
 
 export function LanguageSwitcher({ variant = 'light' }: LanguageSwitcherProps) {
-  const router = useRouter();
-  const locale = useLocale();
+  const { locale, setLocale } = useAppLocale();
   const [current, setCurrent] = useState(locale);
-  const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     setCurrent(locale);
@@ -28,21 +25,17 @@ export function LanguageSwitcher({ variant = 'light' }: LanguageSwitcherProps) {
   useEffect(() => {
     function handleLocaleChange(event: Event) {
       const nextLocale = (event as CustomEvent<string>).detail;
-      if (nextLocale) setCurrent(nextLocale);
+      if (isAppLocale(nextLocale)) setCurrent(nextLocale);
     }
 
     window.addEventListener('app-locale-change', handleLocaleChange);
     return () => window.removeEventListener('app-locale-change', handleLocaleChange);
   }, []);
 
-  function switchLocale(nextLocale: string) {
+  function switchLocale(nextLocale: AppLocale) {
+    if (nextLocale === locale) return;
     setCurrent(nextLocale);
-    document.cookie = `locale=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
-    document.cookie = `NEXT_LOCALE=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
-    window.dispatchEvent(new CustomEvent('app-locale-change', { detail: nextLocale }));
-    startTransition(() => {
-      router.refresh();
-    });
+    setLocale(nextLocale);
   }
 
   return (
@@ -50,8 +43,9 @@ export function LanguageSwitcher({ variant = 'light' }: LanguageSwitcherProps) {
       {LANGUAGES.map((lang) => (
         <button
           key={lang.code}
-          onClick={() => switchLocale(lang.code)}
-          disabled={isPending}
+          onClick={() => {
+            if (isAppLocale(lang.code)) switchLocale(lang.code);
+          }}
           className={cn(
             'text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors disabled:opacity-60',
             current === lang.code

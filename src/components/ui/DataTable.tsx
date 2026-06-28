@@ -17,8 +17,8 @@ interface DataTableProps<T> {
 
 export function DataTable<T>({ columns, data, keyExtractor, className }: DataTableProps<T>) {
   return (
-    <div className={cn('overflow-x-auto rounded-xl border border-gray-100', className)}>
-      <table className="w-full text-sm">
+    <div className={cn('max-w-full overflow-x-auto rounded-xl border border-gray-100', className)}>
+      <table className="w-full min-w-[720px] text-sm">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-100">
             {columns.map((col) => (

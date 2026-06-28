@@ -7,8 +7,10 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { FormSection } from '@/components/ui/FormSection';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatCurrency, formatDate, todayIso } from '@/lib/utils';
-import { MinusCircle } from 'lucide-react';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, parseCurrencyInput } from '@/lib/formatters';
+import { Calendar, ChevronDown, MinusCircle } from 'lucide-react';
 import type { Expense } from '@/types';
 
 const CATEGORIES = [
@@ -19,6 +21,7 @@ const CATEGORIES = [
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
@@ -52,7 +55,7 @@ export default function ExpensesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const amount = parseFloat(form.amount);
+    const amount = parseCurrencyInput(form.amount);
     if (!amount || amount <= 0) {
       setError(tc('invalidAmount'));
       return;
@@ -86,7 +89,7 @@ export default function ExpensesPage() {
   const paymentMethods = ['cash', 'terminal', 'qr', 'transfer'];
 
   return (
-    <div className="max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
       <PageHeader title={t('title')} description={t('description')} />
       <div className="space-y-6">
         <form onSubmit={handleSubmit}>
@@ -94,22 +97,29 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">{t('date')}</label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={form.date}
-                  onChange={(e) => set('date', e.target.value)}
-                />
+                <label className="relative block h-10 w-full cursor-pointer">
+                  <input
+                    type="date"
+                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    value={form.date}
+                    onClick={(event) => event.currentTarget.showPicker?.()}
+                    onChange={(e) => set('date', e.target.value)}
+                  />
+                  <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+                    <Calendar size={16} className="shrink-0 text-gray-500" />
+                    <span className="font-semibold text-gray-950">{formatDatePickerValue(form.date, locale)}</span>
+                    <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
+                  </span>
+                </label>
               </div>
               <div>
                 <label className="label">{t('amount')}</label>
                 <input
-                  type="number"
-                  min="0"
-                  step="1"
+                  type="text"
+                  inputMode="numeric"
                   className="input-field"
                   value={form.amount}
-                  onChange={(e) => set('amount', e.target.value)}
+                  onChange={(e) => set('amount', formatCurrencyInput(e.target.value))}
                   required
                 />
               </div>
@@ -168,7 +178,7 @@ export default function ExpensesPage() {
               keyExtractor={(r) => r.id}
               data={expenses}
               columns={[
-                { key: 'date', header: t('date'), render: (r) => formatDate(r.date) },
+                { key: 'date', header: t('date'), render: (r) => formatDate(r.date, locale) },
                 {
                   key: 'amount',
                   header: t('amount'),

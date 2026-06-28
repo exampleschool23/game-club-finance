@@ -169,13 +169,33 @@ describe('dashboard metrics', () => {
       from: '2026-06-03',
       to: '2026-06-03',
     });
+    expect(getDashboardRange('yesterday', '2026-06-03')).toEqual({
+      from: '2026-06-02',
+      to: '2026-06-02',
+    });
+    expect(getDashboardRange('last7Days', '2026-06-03')).toEqual({
+      from: '2026-05-28',
+      to: '2026-06-03',
+    });
     expect(getDashboardRange('week', '2026-06-03')).toEqual({
       from: '2026-06-01',
       to: '2026-06-07',
     });
+    expect(getDashboardRange('lastWeek', '2026-06-03')).toEqual({
+      from: '2026-05-25',
+      to: '2026-05-31',
+    });
     expect(getDashboardRange('month', '2026-06-03')).toEqual({
       from: '2026-06-01',
       to: '2026-06-30',
+    });
+    expect(getDashboardRange('lastMonth', '2026-06-03')).toEqual({
+      from: '2026-05-01',
+      to: '2026-05-31',
+    });
+    expect(getDashboardRange('custom', '2026-06-03', { from: '2026-06-10', to: '2026-06-03' })).toEqual({
+      from: '2026-06-03',
+      to: '2026-06-10',
     });
     expect(getPreviousDashboardRange({ from: '2026-06-01', to: '2026-06-07' })).toEqual({
       from: '2026-05-25',

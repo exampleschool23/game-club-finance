@@ -6,9 +6,11 @@ import { createClient } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatCurrency, formatDate, todayIso } from '@/lib/utils';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, parseCurrencyInput } from '@/lib/formatters';
 import { calculateRemainingDebt, getDebtStatus } from '@/lib/calculations/debt';
-import { Plus, X, Users } from 'lucide-react';
+import { Calendar, ChevronDown, Plus, X, Users } from 'lucide-react';
 import type { NewDebt, DebtPayment } from '@/types';
 
 const PAYMENT_METHODS = ['cash', 'terminal', 'qr', 'transfer'];
@@ -24,6 +26,7 @@ function statusVariant(status: string): DebtStatusVariant {
 export default function DebtsPage() {
   const t = useTranslations('debts');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
 
   const [debts, setDebts] = useState<NewDebt[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -79,7 +82,7 @@ export default function DebtsPage() {
 
   async function handleAddDebt(e: React.FormEvent) {
     e.preventDefault();
-    const amount = parseFloat(addForm.amount);
+    const amount = parseCurrencyInput(addForm.amount);
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     if (!addForm.person_name.trim()) { setError(tc('required')); return; }
     setSaving(true);
@@ -112,7 +115,7 @@ export default function DebtsPage() {
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault();
     if (!payDebtId) return;
-    const amount = parseFloat(payForm.amount);
+    const amount = parseCurrencyInput(payForm.amount);
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     setSaving(true);
     setError('');
@@ -140,7 +143,7 @@ export default function DebtsPage() {
   const paid = debts.filter((d) => d.status === 'paid');
 
   return (
-    <div className="max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl">
       <PageHeader
         title={t('title')}
         description={t('description')}
@@ -167,14 +170,14 @@ export default function DebtsPage() {
                   const remaining = calculateRemainingDebt(debt.amount, debt.paid_amount);
                   const status = getDebtStatus(debt.amount, debt.paid_amount);
                   return (
-                    <div key={debt.id} className="card flex items-center justify-between gap-3">
+                    <div key={debt.id} className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-gray-900">{debt.person_name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="break-words font-semibold text-gray-900">{debt.person_name}</p>
                           <Badge variant={statusVariant(status)}>{t(status)}</Badge>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">
-                          {formatDate(debt.date)}
+                          {formatDate(debt.date, locale)}
                           {debt.comment ? ` · ${debt.comment}` : ''}
                         </p>
                         {debt.paid_amount > 0 && (
@@ -184,12 +187,12 @@ export default function DebtsPage() {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className="font-bold text-danger-700">
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+                        <span className="break-words font-bold text-danger-700 sm:text-right">
                           {formatCurrency(debt.amount)}
                         </span>
                         <button
-                          className="btn-secondary text-xs px-3 py-1.5"
+                          className="btn-secondary px-3 py-1.5 text-xs"
                           onClick={() => openPayModal(debt.id)}
                         >
                           {t('addPayment')}
@@ -210,12 +213,12 @@ export default function DebtsPage() {
               </h2>
               <div className="space-y-2">
                 {paid.map((debt) => (
-                  <div key={debt.id} className="card flex items-center justify-between opacity-60">
-                    <div>
+                  <div key={debt.id} className="card flex flex-col gap-2 opacity-60 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <p className="font-medium text-gray-700">{debt.person_name}</p>
-                      <p className="text-xs text-gray-400">{formatDate(debt.date)}</p>
+                      <p className="text-xs text-gray-400">{formatDate(debt.date, locale)}</p>
                     </div>
-                    <span className="font-bold text-success-600">{formatCurrency(debt.amount)}</span>
+                    <span className="break-words font-bold text-success-600 sm:text-right">{formatCurrency(debt.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -227,7 +230,7 @@ export default function DebtsPage() {
       {/* Add Debt Modal */}
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900">{t('addDebt')}</h2>
               <button onClick={() => setAddOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -248,23 +251,30 @@ export default function DebtsPage() {
               <div>
                 <label className="label">{t('amount')}</label>
                 <input
-                  type="number"
-                  min="1"
-                  step="1"
+                  type="text"
+                  inputMode="numeric"
                   className="input-field"
                   value={addForm.amount}
-                  onChange={(e) => setAddForm((p) => ({ ...p, amount: e.target.value }))}
+                  onChange={(e) => setAddForm((p) => ({ ...p, amount: formatCurrencyInput(e.target.value) }))}
                   required
                 />
               </div>
               <div>
                 <label className="label">{t('date')}</label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={addForm.date}
-                  onChange={(e) => setAddForm((p) => ({ ...p, date: e.target.value }))}
-                />
+                <label className="relative block h-10 w-full cursor-pointer">
+                  <input
+                    type="date"
+                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    value={addForm.date}
+                    onClick={(event) => event.currentTarget.showPicker?.()}
+                    onChange={(e) => setAddForm((p) => ({ ...p, date: e.target.value }))}
+                  />
+                  <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+                    <Calendar size={16} className="shrink-0 text-gray-500" />
+                    <span className="font-semibold text-gray-950">{formatDatePickerValue(addForm.date, locale)}</span>
+                    <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
+                  </span>
+                </label>
               </div>
               <div>
                 <label className="label">{t('comment')}</label>
@@ -276,7 +286,7 @@ export default function DebtsPage() {
                 />
               </div>
               {error && <p className="text-sm text-danger-500">{error}</p>}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button type="button" className="btn-secondary flex-1" onClick={() => setAddOpen(false)}>
                   {tc('cancel')}
                 </button>
@@ -292,7 +302,7 @@ export default function DebtsPage() {
       {/* Add Payment Modal */}
       {payDebtId && activeDebt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900">{t('partialPayment')}</h2>
               <button onClick={() => setPayDebtId(null)} className="text-gray-400 hover:text-gray-600">
@@ -315,8 +325,8 @@ export default function DebtsPage() {
                   </p>
                   <div className="space-y-1">
                     {(paymentsMap[payDebtId] ?? []).map((p) => (
-                      <div key={p.id} className="flex justify-between text-sm text-gray-600">
-                        <span>{formatDate(p.date)}</span>
+                      <div key={p.id} className="flex flex-col gap-1 text-sm text-gray-600 sm:flex-row sm:justify-between">
+                        <span>{formatDate(p.date, locale)}</span>
                         <span className="font-medium text-success-600">+{formatCurrency(p.amount)}</span>
                       </div>
                     ))}
@@ -329,12 +339,11 @@ export default function DebtsPage() {
               <div>
                 <label className="label">{t('amount')}</label>
                 <input
-                  type="number"
-                  min="1"
-                  step="1"
+                  type="text"
+                  inputMode="numeric"
                   className="input-field"
                   value={payForm.amount}
-                  onChange={(e) => setPayForm((p) => ({ ...p, amount: e.target.value }))}
+                  onChange={(e) => setPayForm((p) => ({ ...p, amount: formatCurrencyInput(e.target.value) }))}
                   required
                 />
               </div>
@@ -359,12 +368,20 @@ export default function DebtsPage() {
               </div>
               <div>
                 <label className="label">{t('date')}</label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={payForm.date}
-                  onChange={(e) => setPayForm((p) => ({ ...p, date: e.target.value }))}
-                />
+                <label className="relative block h-10 w-full cursor-pointer">
+                  <input
+                    type="date"
+                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    value={payForm.date}
+                    onClick={(event) => event.currentTarget.showPicker?.()}
+                    onChange={(e) => setPayForm((p) => ({ ...p, date: e.target.value }))}
+                  />
+                  <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+                    <Calendar size={16} className="shrink-0 text-gray-500" />
+                    <span className="font-semibold text-gray-950">{formatDatePickerValue(payForm.date, locale)}</span>
+                    <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
+                  </span>
+                </label>
               </div>
               <div>
                 <label className="label">{t('comment')}</label>
@@ -376,7 +393,7 @@ export default function DebtsPage() {
                 />
               </div>
               {error && <p className="text-sm text-danger-500">{error}</p>}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button type="button" className="btn-secondary flex-1" onClick={() => setPayDebtId(null)}>
                   {tc('cancel')}
                 </button>

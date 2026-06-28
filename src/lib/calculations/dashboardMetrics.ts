@@ -1,6 +1,14 @@
 import { calculateGameClubIncome } from './dailyCash';
 
-export type DashboardPeriod = 'today' | 'week' | 'month';
+export type DashboardPeriod =
+  | 'today'
+  | 'yesterday'
+  | 'last7Days'
+  | 'week'
+  | 'lastWeek'
+  | 'month'
+  | 'lastMonth'
+  | 'custom';
 
 export interface DailyCashRow {
   date: string;
@@ -94,6 +102,7 @@ export function addDays(date: Date, days: number): Date {
 export function getDashboardRange(
   period: DashboardPeriod,
   selectedDate: string,
+  customRange?: { from: string; to: string },
 ): { from: string; to: string } {
   const base = parseLocalIsoDate(selectedDate);
 
@@ -101,11 +110,40 @@ export function getDashboardRange(
     return { from: selectedDate, to: selectedDate };
   }
 
+  if (period === 'yesterday') {
+    const yesterday = localIsoDate(addDays(base, -1));
+    return { from: yesterday, to: yesterday };
+  }
+
+  if (period === 'last7Days') {
+    return { from: localIsoDate(addDays(base, -6)), to: selectedDate };
+  }
+
   if (period === 'week') {
     const day = base.getDay() || 7;
     const monday = addDays(base, 1 - day);
     const sunday = addDays(monday, 6);
     return { from: localIsoDate(monday), to: localIsoDate(sunday) };
+  }
+
+  if (period === 'lastWeek') {
+    const day = base.getDay() || 7;
+    const thisMonday = addDays(base, 1 - day);
+    const lastMonday = addDays(thisMonday, -7);
+    const lastSunday = addDays(lastMonday, 6);
+    return { from: localIsoDate(lastMonday), to: localIsoDate(lastSunday) };
+  }
+
+  if (period === 'lastMonth') {
+    const monthStart = new Date(base.getFullYear(), base.getMonth() - 1, 1);
+    const monthEnd = new Date(base.getFullYear(), base.getMonth(), 0);
+    return { from: localIsoDate(monthStart), to: localIsoDate(monthEnd) };
+  }
+
+  if (period === 'custom' && customRange?.from && customRange?.to) {
+    return customRange.from <= customRange.to
+      ? customRange
+      : { from: customRange.to, to: customRange.from };
   }
 
   const monthStart = new Date(base.getFullYear(), base.getMonth(), 1);

@@ -20,8 +20,9 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
-import { formatCurrency, todayIso } from '@/lib/utils';
-import { formatDateOnly, formatDatePickerValue, formatDateTime } from '@/lib/formatters';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency, formatCurrencyInput, formatDatePickerValue, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
 import type { DailyCashEntry, UserRole } from '@/types';
 
 interface CashFormData {
@@ -46,12 +47,12 @@ const emptyForm = (date = todayIso()): CashFormData => ({
 });
 
 function parseAmount(value: string): number {
-  const parsed = Number(value);
+  const parsed = parseCurrencyInput(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
 }
 
 function amountToInput(value: number | null | undefined): string {
-  return value && value > 0 ? String(value) : '';
+  return value && value > 0 ? formatCurrencyInput(value) : '';
 }
 
 
@@ -94,29 +95,27 @@ function PaymentCard({
   const amount = parseAmount(value);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-4">
         <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconBgClassName}`}>
           <Icon size={24} className={iconClassName} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-700">{label}</p>
-          <p className="mt-2 text-2xl font-bold leading-tight text-gray-950">
+          <p className="mt-2 break-words text-xl font-bold leading-tight text-gray-950 sm:text-2xl">
             {formatCurrency(amount)}
           </p>
           <p className="text-xs font-medium text-gray-500">UZS</p>
         </div>
       </div>
       <input
-        type="number"
-        min="0"
-        step="1"
+        type="text"
         inputMode="numeric"
         className="mt-6 h-12 w-full rounded-lg border border-gray-200 bg-white px-4 text-base font-semibold text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400"
         placeholder="0"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(formatCurrencyInput(event.target.value))}
       />
     </div>
   );
@@ -125,6 +124,7 @@ function PaymentCard({
 export default function DailyCashPage() {
   const t = useTranslations('dailyCash');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
   const [form, setForm] = useState<CashFormData>(emptyForm());
   const [entry, setEntry] = useState<DailyCashEntry | null>(null);
   const [createdByName, setCreatedByName] = useState('Admin');
@@ -335,14 +335,14 @@ export default function DailyCashPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-normal text-gray-950">{t('title')}</h1>
+          <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
           <p className="mt-2 text-base text-gray-600">
             {t('subtitle')}
           </p>
         </div>
         <Link
-          href="/reports"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
+          href="/"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 sm:w-auto"
         >
           {t('reports')}
           <TrendingUp size={16} className="text-primary-600" />
@@ -351,12 +351,12 @@ export default function DailyCashPage() {
 
       <form
         onSubmit={handleSave}
-        className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
+        className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6"
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="w-full sm:w-56">
+          <div className="w-full sm:max-w-[300px]">
             <label className="mb-2 block text-sm font-semibold text-gray-700">{t('date')}</label>
-            <label className="relative block h-11 w-full cursor-pointer sm:w-[300px]">
+            <label className="relative block h-11 w-full cursor-pointer">
               <input
                 type="date"
                 className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
@@ -366,11 +366,7 @@ export default function DailyCashPage() {
               />
               <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
                 <Calendar size={17} className="shrink-0 text-gray-500" />
-                <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(form.date)}</span>
-                <span className="hidden h-5 w-px bg-gray-200 sm:block" />
-                <span className="hidden min-w-0 flex-1 truncate font-semibold text-gray-700 sm:block">
-                  {formatDateOnly(form.date)}
-                </span>
+                <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(form.date, locale)}</span>
                 <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
               </span>
             </label>
@@ -383,7 +379,7 @@ export default function DailyCashPage() {
                 <span>{t('ownerAccessEdit')}</span>
               ) : (
                 <>
-                  <span>{t('editUntil', { time: formatDateTime(deadline) })}</span>
+                  <span>{t('editUntil', { time: formatDateTime(deadline, locale) })}</span>
                   <span className="rounded-full bg-green-100 px-2 py-1">{formatRemaining(remainingMs)}</span>
                 </>
               )}
@@ -448,11 +444,11 @@ export default function DailyCashPage() {
           />
         </div>
 
-        <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-5">
-          <div className="flex items-center justify-between gap-4">
+        <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-600">{t('totalGameClubIncome')}</p>
-              <p className="mt-2 text-3xl font-bold text-green-600">
+              <p className="mt-2 break-words text-2xl font-bold text-green-600 sm:text-3xl">
                 {formatCurrency(total)} UZS
               </p>
             </div>
@@ -462,22 +458,22 @@ export default function DailyCashPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <p className="text-sm font-semibold text-gray-500">{t('barSales')}</p>
-            <p className="mt-2 text-2xl font-bold text-gray-950">
+            <p className="mt-2 break-words text-xl font-bold text-gray-950 sm:text-2xl">
               {formatCurrency(barSummary.sales)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <p className="text-sm font-semibold text-gray-500">{t('barProfit')}</p>
-            <p className="mt-2 text-2xl font-bold text-green-600">
+            <p className="mt-2 break-words text-xl font-bold text-green-600 sm:text-2xl">
               {formatCurrency(barSummary.profit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <p className="text-sm font-semibold text-gray-500">{t('netProfit')}</p>
-            <p className="mt-2 text-2xl font-bold text-primary-600">
+            <p className="mt-2 break-words text-xl font-bold text-primary-600 sm:text-2xl">
               {formatCurrency(netProfit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
@@ -523,17 +519,17 @@ export default function DailyCashPage() {
       </form>
 
       {entry && (
-        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-gray-950">{t('todayEntry')}</h2>
+              <h2 className="text-lg font-bold text-gray-950 sm:text-xl">{t('todayEntry')}</h2>
               <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
                 {t('savedBadge')}
               </span>
             </div>
 
             {editable && (
-              <div className="flex gap-3">
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                 <button
                   type="button"
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-primary-200 bg-white px-4 text-sm font-semibold text-primary-600 transition hover:bg-primary-50"
@@ -555,7 +551,7 @@ export default function DailyCashPage() {
             )}
           </div>
 
-          <div className="mt-6 grid grid-cols-1 divide-y divide-gray-100 rounded-lg border border-gray-200 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <div className="mt-6 grid grid-cols-1 divide-y divide-gray-100 rounded-lg border border-gray-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
             <div className="p-4">
               <p className="text-sm font-medium text-gray-500">{t('cash')}</p>
               <p className="mt-1 text-lg font-bold text-gray-950">
@@ -590,13 +586,13 @@ export default function DailyCashPage() {
           </div>
 
           <div className="mt-4 flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-600 sm:flex-row sm:items-center sm:justify-between">
-            <span>{t('createdLabel')} {formatDateTime(entry.created_at)}</span>
+            <span>{t('createdLabel')} {formatDateTime(entry.created_at, locale)}</span>
             <span>{t('byLabel')} {createdByName}</span>
             {deadline && editable && (
               <span>
                 {currentRole === 'owner'
                   ? t('ownerEditable')
-                  : t('editUntil', { time: formatDateTime(deadline.toISOString()) })}
+                  : t('editUntil', { time: formatDateTime(deadline.toISOString(), locale) })}
               </span>
             )}
           </div>

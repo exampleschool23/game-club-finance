@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
   Banknote,
   Boxes,
@@ -9,7 +8,6 @@ import {
   CreditCard,
   Gamepad2,
   Receipt,
-  Settings2,
   ShoppingBag,
   TrendingUp,
   UserRoundCheck,
@@ -17,11 +15,12 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency, todayIso } from '@/lib/utils';
-import { formatDateTime } from '@/lib/formatters';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { todayIso } from '@/lib/utils';
+import { formatCurrency, formatDateShort, formatDateTime } from '@/lib/formatters';
 import { useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
-import { PeriodTabs, type DashboardPeriod } from '@/components/dashboard/PeriodTabs';
+import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
 import { DashboardBarChart } from '@/components/dashboard/DashboardBarChart';
 import { PaymentMethodChart } from '@/components/dashboard/PaymentMethodChart';
 import { IncomeTrendChart } from '@/components/dashboard/IncomeTrendChart';
@@ -38,9 +37,9 @@ import {
   emptyDashboardTotals,
   getDashboardRange,
   getPreviousDashboardRange,
-  parseLocalIsoDate,
   percentChange,
   type DailyCashRow,
+  type DashboardPeriod,
   type DashboardTotals,
   type ExpenseRow,
   type StockCountRow,
@@ -72,13 +71,30 @@ interface DebtPaymentRow {
   created_at: string;
 }
 
+type DashboardDescriptionKey =
+  | 'cashIncomeDesc'
+  | 'terminalIncomeDesc'
+  | 'cardIncomeDesc'
+  | 'barSalesDesc'
+  | 'productPurchaseDesc'
+  | 'debtPaymentSuffix'
+  | 'debtPayment';
+
+interface DashboardTransactionRow extends Omit<RecentTransactionRow, 'description' | 'time'> {
+  description?: string;
+  descriptionKey?: DashboardDescriptionKey;
+  productName?: string | null;
+  debtName?: string;
+  timeValue?: string | null;
+}
+
 interface DashboardData {
   totals: DashboardTotals;
   previousTotals: DashboardTotals;
   trend: TrendRow[];
   lowStockCount: number;
   expenseCategories: Array<{ category: string; value: number }>;
-  recentTransactions: RecentTransactionRow[];
+  recentTransactions: DashboardTransactionRow[];
 }
 
 const emptyData: DashboardData = {
@@ -118,11 +134,6 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
   return query.gte('date', range.from).lte('date', range.to);
 }
 
-function formatShortDate(date: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(parseLocalIsoDate(date));
-}
-
-
 function expenseLabel(row: ExpenseRow): string {
   const category = row.category.replace(/_/g, ' ');
   return row.comment ? `${category} - ${row.comment}` : category;
@@ -135,13 +146,19 @@ function productName(relation: StockPurchaseRow['products']): string | null {
 
 export default function DashboardPage() {
   const { selectedDate } = useDashboardDate();
+  const { locale } = useAppLocale();
   const [period, setPeriod] = useState<DashboardPeriod>('today');
+  const [customFrom, setCustomFrom] = useState(todayIso);
+  const [customTo, setCustomTo] = useState(todayIso);
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const t = useTranslations('dashboard');
 
-  const range = useMemo(() => getDashboardRange(period, selectedDate || todayIso()), [period, selectedDate]);
+  const range = useMemo(
+    () => getDashboardRange(period, selectedDate || todayIso(), { from: customFrom, to: customTo }),
+    [customFrom, customTo, period, selectedDate],
+  );
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -273,10 +290,7 @@ export default function DashboardPage() {
     const trendCashRows = (trendCashRes.data ?? []) as DailyCashRow[];
     const trendStockRows = (trendStockRes.data ?? []) as StockCountRow[];
     const trendExpenseRows = (trendExpenseRes.data ?? []) as ExpenseRow[];
-    const trend = buildPeriodTrend(range, trendCashRows, trendStockRows, trendExpenseRows).map((row) => ({
-      ...row,
-      date: formatShortDate(row.date),
-    }));
+    const trend = buildPeriodTrend(range, trendCashRows, trendStockRows, trendExpenseRows);
 
     const lowStockCount = products.filter(
       (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
@@ -290,7 +304,7 @@ export default function DashboardPage() {
       ([category, value]) => ({ category, value }),
     ).sort((a, b) => b.value - a.value);
 
-    const transactions: RecentTransactionRow[] = [
+    const transactions: DashboardTransactionRow[] = [
       ...cashRows.flatMap((row) => {
         const createdAt = row.created_at ?? `${row.date}T00:00:00`;
         return [
@@ -298,27 +312,27 @@ export default function DashboardPage() {
             ? {
                 id: `cash-${row.date}`,
                 type: 'Income' as const,
-                description: t('cashIncomeDesc'),
+                descriptionKey: 'cashIncomeDesc' as const,
                 amount: row.cash_income,
-                time: formatDateTime(createdAt),
+                timeValue: createdAt,
               }
             : null,
           row.terminal_income > 0
             ? {
                 id: `terminal-${row.date}`,
                 type: 'Income' as const,
-                description: t('terminalIncomeDesc'),
+                descriptionKey: 'terminalIncomeDesc' as const,
                 amount: row.terminal_income,
-                time: formatDateTime(createdAt),
+                timeValue: createdAt,
               }
             : null,
           row.card_income > 0
             ? {
                 id: `card-${row.date}`,
                 type: 'Income' as const,
-                description: t('cardIncomeDesc'),
+                descriptionKey: 'cardIncomeDesc' as const,
                 amount: row.card_income,
-                time: formatDateTime(createdAt),
+                timeValue: createdAt,
               }
             : null,
         ];
@@ -328,9 +342,9 @@ export default function DashboardPage() {
             {
               id: `bar-${range.from}-${range.to}`,
               type: 'Income' as const,
-              description: t('barSalesDesc'),
+              descriptionKey: 'barSalesDesc' as const,
               amount: stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0),
-              time: stockRows[0]?.updated_at ? formatDateTime(stockRows[0].updated_at) : '23:59',
+              timeValue: stockRows[0]?.updated_at ?? null,
             },
           ]
         : []),
@@ -339,29 +353,27 @@ export default function DashboardPage() {
         type: 'Expense' as const,
         description: expenseLabel(row),
         amount: row.amount,
-        time: formatDateTime(row.created_at),
+        timeValue: row.created_at,
       })),
       ...purchases.map((row) => ({
         id: `purchase-${row.id}`,
         type: 'Purchase' as const,
-        description: productName(row.products)
-          ? `${t('productPurchaseDesc')} - ${productName(row.products)}`
-          : t('productPurchaseDesc'),
+        descriptionKey: 'productPurchaseDesc' as const,
+        productName: productName(row.products),
         amount: (row.quantity ?? 0) * (row.cost_price ?? 0),
-        time: formatDateTime(row.created_at),
+        timeValue: row.created_at,
       })),
       ...debtPayments.map((row) => ({
         id: `debt-payment-${row.id}`,
         type: 'Debt Payment' as const,
-        description: debtNameById.get(row.debt_id)
-          ? `${debtNameById.get(row.debt_id)} ${t('debtPaymentSuffix')}`
-          : t('debtPayment'),
+        descriptionKey: debtNameById.get(row.debt_id) ? 'debtPaymentSuffix' as const : 'debtPayment' as const,
+        debtName: debtNameById.get(row.debt_id),
         amount: row.amount,
-        time: formatDateTime(row.created_at),
+        timeValue: row.created_at,
       })),
     ]
       .filter(Boolean)
-      .slice(0, 8) as RecentTransactionRow[];
+      .slice(0, 8) as DashboardTransactionRow[];
 
     setData({
       totals,
@@ -372,7 +384,7 @@ export default function DashboardPage() {
       recentTransactions: transactions,
     });
     setLoading(false);
-  }, [range, t]);
+  }, [range]);
 
   useEffect(() => {
     fetchDashboard().catch((fetchError) => {
@@ -381,30 +393,59 @@ export default function DashboardPage() {
     });
   }, [fetchDashboard]);
 
-  useEffect(() => {
-    function refreshVisibleDashboard() {
-      if (document.visibilityState === 'visible') {
-        fetchDashboard().catch((fetchError) => {
-          setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-          setLoading(false);
-        });
-      }
-    }
-
-    window.addEventListener('focus', refreshVisibleDashboard);
-    document.addEventListener('visibilitychange', refreshVisibleDashboard);
-    return () => {
-      window.removeEventListener('focus', refreshVisibleDashboard);
-      document.removeEventListener('visibilitychange', refreshVisibleDashboard);
-    };
-  }, [fetchDashboard]);
-
   const { totals, previousTotals } = data;
 
-  const periodLabel = period === 'today' ? t('today') : period === 'week' ? t('thisWeek') : t('thisMonth');
+  const periodLabel = period === 'today'
+    ? t('today')
+    : period === 'yesterday'
+      ? t('yesterday')
+      : period === 'last7Days'
+        ? t('last7Days')
+        : period === 'week'
+          ? t('thisWeek')
+          : period === 'lastWeek'
+            ? t('lastWeek')
+            : period === 'month'
+              ? t('thisMonth')
+              : period === 'lastMonth'
+                ? t('lastMonth')
+                : `${formatDateShort(range.from, locale)} - ${formatDateShort(range.to, locale)}`;
 
   const incomeComparisonLabel =
-    period === 'today' ? t('vsYesterday') : period === 'week' ? t('vsLastWeek') : t('vsLastMonth');
+    period === 'today'
+      ? t('vsYesterday')
+      : period === 'week'
+        ? t('vsLastWeek')
+        : period === 'month'
+          ? t('vsLastMonth')
+          : t('vsPreviousPeriod');
+
+  const trend = useMemo(
+    () => data.trend.map((row) => ({
+      ...row,
+      date: formatDateShort(row.date, locale),
+    })),
+    [data.trend, locale],
+  );
+
+  const recentTransactions = data.recentTransactions.map((row): RecentTransactionRow => {
+    const { descriptionKey, productName: rowProductName, debtName, timeValue, ...base } = row;
+    let description = row.description ?? (descriptionKey ? t(descriptionKey) : '');
+
+    if (descriptionKey === 'productPurchaseDesc' && rowProductName) {
+      description = `${t('productPurchaseDesc')} - ${rowProductName}`;
+    }
+
+    if (descriptionKey === 'debtPaymentSuffix' && debtName) {
+      description = `${debtName} ${t('debtPaymentSuffix')}`;
+    }
+
+    return {
+      ...base,
+      description,
+      time: timeValue ? formatDateTime(timeValue, locale) : '23:59',
+    };
+  });
 
   const incomeExpenseData = [
     { name: t('gameClubIncome'), value: totals.gameClubIncome, fill: '#2563eb' },
@@ -425,19 +466,12 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-normal text-gray-950">{t('title')}</h1>
+          <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
           <p className="mt-1 text-base text-gray-600">{t('subtitle')}</p>
         </div>
-        <Link
-          href="/reports"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
-        >
-          <Settings2 size={17} className="text-primary-600" />
-          {t('viewFullReports')}
-        </Link>
       </div>
 
       {error && (
@@ -446,7 +480,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <MetricCard
           label={t('gameClubIncome')}
           amount={totals.gameClubIncome}
@@ -497,15 +531,15 @@ export default function DashboardPage() {
         />
       </div>
 
-      <section className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <PeriodTabs value={period} onChange={setPeriod} />
-        <Link
-          href="/reports"
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
-        >
-          {t('viewFullReports')}
-          <TrendingUp size={16} className="text-primary-600" />
-        </Link>
+      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <PeriodTabs
+          value={period}
+          onChange={setPeriod}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+        />
       </section>
 
       {loading ? (
@@ -514,19 +548,19 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             <DashboardBarChart title={`${t('incomeVsExpenses')} (${periodLabel})`} data={incomeExpenseData} />
             <PaymentMethodChart
               title={`${t('incomeByPaymentMethod')} (${periodLabel})`}
               data={paymentData}
               total={totals.gameClubIncome}
             />
-            <IncomeTrendChart data={data.trend} />
+            <IncomeTrendChart data={trend} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             <ExpensesByCategoryChart data={data.expenseCategories} total={totals.totalExpenses} />
-            <RecentTransactionsTable rows={data.recentTransactions} />
+            <RecentTransactionsTable rows={recentTransactions} />
             <IncomeCategoryChart data={categoryData} total={totals.totalIncome} />
           </div>
 

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
 import { Toast, useToast } from '@/components/ui/Toast';
+import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import type { PaymentMethod, IncomeCategory } from '@/types';
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'terminal', 'qr', 'transfer', 'debt'];
@@ -25,12 +26,13 @@ export default function IncomePage() {
   const [loading, setLoading] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const value = e.target.name === 'amount' ? formatCurrencyInput(e.target.value) : e.target.value;
+    setForm((prev) => ({ ...prev, [e.target.name]: value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const amount = parseFloat(form.amount);
+    const amount = parseCurrencyInput(form.amount);
     if (!amount || amount <= 0) {
       showToast(tc('invalidAmount'), 'error');
       return;
@@ -59,7 +61,7 @@ export default function IncomePage() {
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="mx-auto w-full max-w-lg">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('title')}</h1>
 
       <form onSubmit={handleSubmit} className="card space-y-5">
@@ -67,13 +69,13 @@ export default function IncomePage() {
         <div>
           <label className="label">{t('amount')} *</label>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             name="amount"
             value={form.amount}
             onChange={handleChange}
             className="input-field text-lg font-semibold"
             placeholder="0"
-            min="1"
             required
           />
         </div>
@@ -81,7 +83,7 @@ export default function IncomePage() {
         {/* Payment Method */}
         <div>
           <label className="label">{t('paymentMethod')}</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {PAYMENT_METHODS.map((method) => (
               <button
                 key={method}
@@ -102,7 +104,7 @@ export default function IncomePage() {
         {/* Category */}
         <div>
           <label className="label">{t('category')}</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}

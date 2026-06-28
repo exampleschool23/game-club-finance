@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, CircleDollarSign } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/formatters';
 
 export interface RecentTransactionRow {
   id: string;

@@ -1,4 +1,5 @@
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/formatters';
 import type { LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
