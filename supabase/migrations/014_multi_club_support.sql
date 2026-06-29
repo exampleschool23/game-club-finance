@@ -534,16 +534,10 @@ security definer
 set search_path = public
 as $$
 declare
-  requested_role text;
   assigned_role user_role;
   display_name text;
-  default_club_id uuid;
 begin
-  requested_role := NEW.raw_user_meta_data->>'role';
-  assigned_role := case
-    when requested_role in ('owner', 'admin', 'viewer') then requested_role::user_role
-    else 'viewer'::user_role
-  end;
+  assigned_role := 'viewer'::user_role;
 
   display_name := coalesce(
     nullif(trim(NEW.raw_user_meta_data->>'full_name'), ''),
@@ -559,17 +553,6 @@ begin
       nullif(trim(excluded.full_name), ''),
       public.profiles.full_name
     );
-
-  select id into default_club_id
-  from public.clubs
-  order by created_at asc
-  limit 1;
-
-  if default_club_id is not null then
-    insert into public.club_memberships (club_id, user_id, role)
-    values (default_club_id, NEW.id, assigned_role)
-    on conflict (club_id, user_id) do nothing;
-  end if;
 
   return NEW;
 end;

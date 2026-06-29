@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
-import { ShieldCheck, Users } from 'lucide-react';
+import { ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
 import type { Profile, UserRole } from '@/types';
 
 const ROLES: UserRole[] = ['owner', 'admin', 'viewer'];
@@ -32,6 +32,8 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const [currentUserId, setCurrentUserId] = useState(initialCurrentUserId ?? '');
   const [authorized, setAuthorized] = useState(Boolean(initialCurrentUserId));
   const [profiles, setProfiles] = useState<TeamMember[]>([]);
+  const [pendingProfiles, setPendingProfiles] = useState<Profile[]>([]);
+  const [pendingRoles, setPendingRoles] = useState<Record<string, UserRole>>({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -40,6 +42,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const loadProfiles = useCallback(async () => {
     if (!selectedClubId) {
       setProfiles([]);
+      setPendingProfiles([]);
       setLoading(false);
       return;
     }
@@ -52,48 +55,52 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       .select('user_id, role, created_at, updated_at')
       .eq('club_id', selectedClubId);
 
-    if (loadError) {
-      setError(loadError.message);
+    const { data: allProfiles, error: allProfilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, created_at, updated_at')
+      .order('full_name', { ascending: true });
+
+    if (loadError || allProfilesError) {
+      setError(loadError?.message ?? allProfilesError?.message ?? 'Error');
       setProfiles([]);
+      setPendingProfiles([]);
       setLoading(false);
       return;
     }
 
     const userIds = ((memberships ?? []) as Array<{ user_id: string }>).map((membership) => membership.user_id);
+    const selectedClubUserIds = new Set(userIds);
+    const profileRows = ((allProfiles as Profile[] | null) ?? []);
 
-    if (userIds.length === 0) {
-      setProfiles([]);
-      setLoading(false);
-      return;
-    }
+    setPendingProfiles(profileRows.filter((profile) => !selectedClubUserIds.has(profile.id)));
+    setPendingRoles((current) => {
+      const next: Record<string, UserRole> = {};
+      for (const profile of profileRows) {
+        if (!selectedClubUserIds.has(profile.id)) {
+          next[profile.id] = current[profile.id] ?? 'viewer';
+        }
+      }
+      return next;
+    });
 
-    const { data: profileRows, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, full_name, role, created_at, updated_at')
-      .in('id', userIds)
-      .order('full_name', { ascending: true });
-
-    if (profileError) {
-      setError(profileError.message);
-      setProfiles([]);
-    } else {
-      const membershipByUser = new Map(
-        ((memberships ?? []) as Array<{ user_id: string; role: UserRole; created_at: string }>).map((membership) => [
-          membership.user_id,
-          membership,
-        ]),
-      );
-      setProfiles(
-        (((profileRows as Profile[] | null) ?? []).map((profile) => {
+    const membershipByUser = new Map(
+      ((memberships ?? []) as Array<{ user_id: string; role: UserRole; created_at: string }>).map((membership) => [
+        membership.user_id,
+        membership,
+      ]),
+    );
+    setProfiles(
+      profileRows
+        .filter((profile) => selectedClubUserIds.has(profile.id))
+        .map((profile) => {
           const membership = membershipByUser.get(profile.id);
           return {
             ...profile,
             membershipRole: membership?.role ?? 'viewer',
             membershipCreatedAt: membership?.created_at ?? profile.created_at,
           };
-        }) as TeamMember[]),
-      );
-    }
+        }) as TeamMember[],
+    );
     setLoading(false);
   }, [selectedClubId]);
 
@@ -177,6 +184,69 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     setMessage(t('saved'));
   }
 
+  async function approveProfile(profile: Profile) {
+    if (!selectedClubId) return;
+
+    const role = pendingRoles[profile.id] ?? 'viewer';
+    setSavingId(profile.id);
+    setError('');
+    setMessage('');
+
+    const supabase = createClient();
+    const { error: insertError } = await supabase
+      .from('club_memberships')
+      .insert({
+        club_id: selectedClubId,
+        user_id: profile.id,
+        role,
+      });
+
+    setSavingId(null);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+
+    setMessage(t('approved'));
+    await loadProfiles();
+  }
+
+  async function removeProfile(profile: TeamMember) {
+    if (!selectedClubId) return;
+
+    if (profile.id === currentUserId) {
+      setError(t('selfRemoveBlocked'));
+      return;
+    }
+
+    if (profile.membershipRole === 'owner' && ownerCount <= 1) {
+      setError(t('lastOwnerBlocked'));
+      return;
+    }
+
+    if (!window.confirm(t('removeConfirm'))) return;
+
+    setSavingId(profile.id);
+    setError('');
+    setMessage('');
+
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from('club_memberships')
+      .delete()
+      .eq('club_id', selectedClubId)
+      .eq('user_id', profile.id);
+
+    setSavingId(null);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setMessage(t('removed'));
+    await loadProfiles();
+  }
+
   function roleBadge(role: UserRole) {
     if (role === 'owner') return <Badge variant="success">{t('roles.owner')}</Badge>;
     if (role === 'admin') return <Badge variant="warning">{t('roles.admin')}</Badge>;
@@ -221,56 +291,124 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
       {loading ? (
         <p className="text-gray-500">{tc('loading')}</p>
-      ) : profiles.length === 0 ? (
-        <div className="card py-12 text-center text-gray-500">{tc('noData')}</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                  {t('member')}
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                  {t('currentAccess')}
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                  {t('changeAccess')}
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                  {t('joined')}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {profiles.map((profile) => (
-                <tr key={profile.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{profile.full_name}</p>
-                    {profile.id === currentUserId && (
-                      <p className="text-xs text-gray-400">{t('you')}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{roleBadge(profile.membershipRole)}</td>
-                  <td className="px-4 py-3">
-                    <select
-                      className="input-field w-40"
-                      value={profile.membershipRole}
-                      disabled={savingId === profile.id}
-                      onChange={(event) => updateRole(profile, event.target.value as UserRole)}
-                    >
-                      {ROLES.map((role) => (
-                        <option key={role} value={role}>
-                          {t(`roles.${role}`)}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.membershipCreatedAt, locale)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {pendingProfiles.length > 0 && (
+            <section className="rounded-xl border border-amber-100 bg-amber-50/40 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <UserPlus size={18} className="text-amber-600" />
+                <h2 className="text-sm font-bold uppercase tracking-wide text-amber-900">{t('pendingApproval')}</h2>
+              </div>
+              <div className="space-y-2">
+                {pendingProfiles.map((profile) => (
+                  <div key={profile.id} className="flex flex-col gap-3 rounded-lg border border-amber-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900">{profile.full_name}</p>
+                      {profile.email && <p className="text-xs text-gray-500">{profile.email}</p>}
+                      <p className="text-xs text-gray-500">{formatDateTime(profile.created_at, locale)}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <select
+                        className="input-field h-10 w-full sm:w-36"
+                        value={pendingRoles[profile.id] ?? 'viewer'}
+                        disabled={savingId === profile.id}
+                        onChange={(event) =>
+                          setPendingRoles((current) => ({
+                            ...current,
+                            [profile.id]: event.target.value as UserRole,
+                          }))
+                        }
+                      >
+                        {ROLES.map((role) => (
+                          <option key={role} value={role}>
+                            {t(`roles.${role}`)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-primary h-10"
+                        disabled={savingId === profile.id}
+                        onClick={() => approveProfile(profile)}
+                      >
+                        <UserPlus size={16} />
+                        {t('approve')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {profiles.length === 0 ? (
+            <div className="card py-12 text-center text-gray-500">{tc('noData')}</div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
+                      {t('member')}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
+                      {t('currentAccess')}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
+                      {t('changeAccess')}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
+                      {t('joined')}
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">
+                      {tc('actions')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {profiles.map((profile) => (
+                    <tr key={profile.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900">{profile.full_name}</p>
+                        {profile.email && <p className="text-xs text-gray-500">{profile.email}</p>}
+                        {profile.id === currentUserId && (
+                          <p className="text-xs text-gray-400">{t('you')}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{roleBadge(profile.membershipRole)}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          className="input-field w-40"
+                          value={profile.membershipRole}
+                          disabled={savingId === profile.id}
+                          onChange={(event) => updateRole(profile, event.target.value as UserRole)}
+                        >
+                          {ROLES.map((role) => (
+                            <option key={role} value={role}>
+                              {t(`roles.${role}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.membershipCreatedAt, locale)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-danger-100 px-3 text-xs font-semibold text-danger-600 transition hover:bg-danger-50 disabled:opacity-40"
+                          disabled={savingId === profile.id || profile.id === currentUserId}
+                          onClick={() => removeProfile(profile)}
+                          aria-label={t('removeAccess')}
+                        >
+                          <Trash2 size={16} />
+                          {t('removeAccess')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

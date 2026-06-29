@@ -379,6 +379,13 @@
     "joined": "Qo'shilgan",
     "you": "Siz",
     "saved": "Jamoa huquqi yangilandi",
+    "approved": "Foydalanuvchi bu klubga qo'shildi",
+    "removed": "Klubga kirish huquqi olib tashlandi",
+    "pendingApproval": "Tasdiq kutmoqda",
+    "approve": "Tasdiqlash",
+    "removeAccess": "Huquqni olib tashlash",
+    "removeConfirm": "Bu foydalanuvchining tanlangan klubga kirish huquqi olib tashlansinmi?",
+    "selfRemoveBlocked": "O'zingizning huquqingizni olib tashlay olmaysiz.",
     "selfDemoteBlocked": "O'zingizning owner huquqingizni olib tashlay olmaysiz.",
     "lastOwnerBlocked": "Kamida bitta owner qolishi kerak.",
     "roles": {
@@ -386,6 +393,13 @@
       "admin": "Admin",
       "viewer": "Viewer"
     }
+  },
+  "approval": {
+    "title": "Owner tasdig'i kutilmoqda",
+    "fallbackName": "Salom",
+    "description": "{name}: hisob yaratildi. Moliyaviy ma'lumotlarni ko'rishdan oldin owner sizni o'yin klubiga biriktirishi kerak.",
+    "ownerOnly": "Kirish huquqini faqat klub ownerlari tasdiqlaydi",
+    "signOut": "Chiqish"
   },
   "auth": {
     "login": "Kirish",

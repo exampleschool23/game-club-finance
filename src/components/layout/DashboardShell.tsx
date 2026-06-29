@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, createContext, useContext } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Gamepad2, Menu } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { Clock3, Gamepad2, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { DashboardContentLoading } from './DashboardContentLoading';
 import { createClient } from '@/lib/supabase/client';
@@ -68,6 +69,43 @@ function relatedClub(relation: ClubMembership['clubs']): Club | null {
 }
 
 const SELECTED_CLUB_STORAGE_KEY = 'game-club-finance:selected-club-id';
+
+function PendingApproval({ fullName }: { fullName: string }) {
+  const router = useRouter();
+  const t = useTranslations('approval');
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-xl items-center justify-center">
+      <div className="w-full rounded-xl border border-amber-100 bg-white p-6 text-center shadow-sm sm:p-8">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+          <Clock3 size={28} />
+        </div>
+        <h1 className="mt-5 text-2xl font-bold text-gray-950">{t('title')}</h1>
+        <p className="mt-3 text-sm leading-6 text-gray-600">
+          {t('description', { name: fullName || t('fallbackName') })}
+        </p>
+        <div className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800">
+          <ShieldCheck size={17} />
+          {t('ownerOnly')}
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
+        >
+          <LogOut size={16} />
+          {t('signOut')}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function DashboardShell({ initialEmail = '', children }: DashboardShellProps) {
   const pathname = usePathname();
@@ -239,7 +277,15 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
 
           <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="mx-auto w-full max-w-[1680px] px-3 pb-5 pt-16 sm:px-5 md:px-6 xl:px-8 xl:py-6 2xl:px-10">
-              {pendingPath ? <DashboardContentLoading /> : children}
+              {clubLoading ? (
+                <DashboardContentLoading />
+              ) : memberships.length === 0 ? (
+                <PendingApproval fullName={fullName} />
+              ) : pendingPath ? (
+                <DashboardContentLoading />
+              ) : (
+                children
+              )}
             </div>
           </main>
         </div>

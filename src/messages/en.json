@@ -379,6 +379,13 @@
     "joined": "Joined",
     "you": "You",
     "saved": "Team access updated",
+    "approved": "User approved for this club",
+    "removed": "Club access removed",
+    "pendingApproval": "Waiting for approval",
+    "approve": "Approve",
+    "removeAccess": "Remove access",
+    "removeConfirm": "Remove this user's access to the selected club?",
+    "selfRemoveBlocked": "You cannot remove your own access.",
     "selfDemoteBlocked": "You cannot remove your own owner access.",
     "lastOwnerBlocked": "At least one owner must remain.",
     "roles": {
@@ -386,6 +393,13 @@
       "admin": "Admin",
       "viewer": "Viewer"
     }
+  },
+  "approval": {
+    "title": "Waiting for owner approval",
+    "fallbackName": "Hi",
+    "description": "{name}, your account is created. An owner needs to assign you to a game club before you can view finance data.",
+    "ownerOnly": "Access is approved by club owners only",
+    "signOut": "Sign out"
   },
   "auth": {
     "login": "Login",
