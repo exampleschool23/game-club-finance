@@ -20,6 +20,7 @@ if (!process.argv.includes('--confirm')) {
   console.error('⚠️  Pass --confirm to delete test data.');
   process.exit(1);
 }
+const clubIdArg = process.argv.find((arg) => arg.startsWith('--club-id='))?.slice('--club-id='.length);
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -28,21 +29,42 @@ if (!url || !key) { console.error('❌ Missing env vars.'); process.exit(1); }
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(url, key);
 
+async function getTargetClubId() {
+  if (clubIdArg) return clubIdArg;
+
+  const { data, error } = await supabase
+    .from('clubs')
+    .select('id, name')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    console.error('❌ Could not resolve target club. Pass --club-id=<uuid> after running the multi-club migration.');
+    process.exit(1);
+  }
+
+  console.log(`Target club: ${data.name} (${data.id})`);
+  return data.id;
+}
+
 async function reset() {
+  const clubId = await getTargetClubId();
   console.log('🗑️  Removing test data...\n');
 
   // Get test product IDs first
   const { data: testProducts } = await supabase
     .from('products')
     .select('id')
+    .eq('club_id', clubId)
     .like('name', '[TEST]%');
 
   const testProductIds = (testProducts ?? []).map((p) => p.id);
 
   if (testProductIds.length > 0) {
-    await supabase.from('daily_stock_counts').delete().in('product_id', testProductIds);
-    await supabase.from('stock_purchases').delete().in('product_id', testProductIds);
-    await supabase.from('products').delete().like('name', '[TEST]%');
+    await supabase.from('daily_stock_counts').delete().eq('club_id', clubId).in('product_id', testProductIds);
+    await supabase.from('stock_purchases').delete().eq('club_id', clubId).in('product_id', testProductIds);
+    await supabase.from('products').delete().eq('club_id', clubId).like('name', '[TEST]%');
     console.log(`   ✅ Removed ${testProductIds.length} test products and related stock data`);
   }
 
@@ -50,12 +72,13 @@ async function reset() {
   const { data: testDebts } = await supabase
     .from('new_debts')
     .select('id')
+    .eq('club_id', clubId)
     .like('person_name', '[TEST]%');
 
   const testDebtIds = (testDebts ?? []).map((d) => d.id);
   if (testDebtIds.length > 0) {
-    await supabase.from('debt_payments').delete().in('debt_id', testDebtIds);
-    await supabase.from('new_debts').delete().like('person_name', '[TEST]%');
+    await supabase.from('debt_payments').delete().eq('club_id', clubId).in('debt_id', testDebtIds);
+    await supabase.from('new_debts').delete().eq('club_id', clubId).like('person_name', '[TEST]%');
     console.log(`   ✅ Removed ${testDebtIds.length} test debts and payments`);
   }
 
@@ -63,6 +86,7 @@ async function reset() {
   const { data: removedExpenses, error: expErr } = await supabase
     .from('expenses')
     .delete()
+    .eq('club_id', clubId)
     .like('comment', '[TEST DATA]%')
     .select('id');
   if (!expErr) console.log(`   ✅ Removed ${removedExpenses?.length ?? 0} test expenses`);
@@ -71,6 +95,7 @@ async function reset() {
   const { data: removedCash, error: cashErr } = await supabase
     .from('daily_cash_entries')
     .delete()
+    .eq('club_id', clubId)
     .like('comment', '[TEST DATA]%')
     .select('id');
   if (!cashErr) console.log(`   ✅ Removed ${removedCash?.length ?? 0} test daily cash entries`);

@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDateOnly, parseCurrencyInput } from '@/lib/formatters';
@@ -61,10 +62,11 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
 
-async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
+async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
   const ordered = await supabase
     .from('products')
     .select('*')
+    .eq('club_id', clubId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
@@ -74,6 +76,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
   return supabase
     .from('products')
     .select('*')
+    .eq('club_id', clubId)
     .eq('is_active', true)
     .order('name', { ascending: true });
 }
@@ -81,6 +84,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
 export default function StockPurchasePage() {
   const t = useTranslations('stockPurchase');
   const tc = useTranslations('common');
+  const { selectedClubId } = useClub();
   const { locale } = useAppLocale();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -100,13 +104,20 @@ export default function StockPurchasePage() {
     comment: '',
   });
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!selectedClubId) {
+      setProducts([]);
+      setPurchases([]);
+      return;
+    }
+
     const supabase = createClient();
     const [productsRes, purchasesRes] = await Promise.all([
-      fetchActiveProductsOrdered(supabase),
+      fetchActiveProductsOrdered(supabase, selectedClubId),
       supabase
         .from('stock_purchases')
         .select('*, products(name, sale_price, cost_price)')
+        .eq('club_id', selectedClubId)
         .order('created_at', { ascending: false })
         .limit(30),
     ]);
@@ -118,11 +129,11 @@ export default function StockPurchasePage() {
 
     setProducts(productsRes.data ?? []);
     setPurchases((purchasesRes.data as PurchaseWithProduct[]) ?? []);
-  }
+  }, [selectedClubId, tc]);
 
   useEffect(() => {
     loadData().catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  }, [loadData]);
 
   const selectedProduct = products.find((product) => product.id === form.product_id) ?? null;
   const quantity = parseQuantity(form.quantity);
@@ -184,7 +195,7 @@ export default function StockPurchasePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.product_id || !form.quantity || !form.cost_price) {
+    if (!selectedClubId || !form.product_id || !form.quantity || !form.cost_price) {
       setError(tc('required'));
       return;
     }
@@ -197,6 +208,7 @@ export default function StockPurchasePage() {
     const { data: { session } } = await supabase.auth.getSession();
 
     const { error: err } = await supabase.from('stock_purchases').insert({
+      club_id: selectedClubId,
       date: form.date,
       product_id: form.product_id,
       quantity,

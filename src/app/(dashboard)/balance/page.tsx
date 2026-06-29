@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { Banknote, CreditCard, QrCode, Users, DollarSign, Plus } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
@@ -19,6 +20,7 @@ const ACCOUNTS = [
 export default function BalancePage() {
   const t  = useTranslations('balance');
   const td = useTranslations('dashboard');
+  const { selectedClubId } = useClub();
   const { toast, showToast, hideToast } = useToast();
 
   const [balances, setBalances] = useState<Record<string, number>>({});
@@ -33,22 +35,34 @@ export default function BalancePage() {
   const [loading, setLoading] = useState(false);
 
   const fetchAll = useCallback(async () => {
+    if (!selectedClubId) {
+      setBalances({});
+      setMovements([]);
+      return;
+    }
+
     const supabase = createClient();
     const [{ data: bals }, { data: movs }] = await Promise.all([
-      supabase.from('balances').select('*'),
-      supabase.from('cash_movements').select('*').order('created_at', { ascending: false }).limit(30),
+      supabase.from('balances').select('*').eq('club_id', selectedClubId),
+      supabase
+        .from('cash_movements')
+        .select('*')
+        .eq('club_id', selectedClubId)
+        .order('created_at', { ascending: false })
+        .limit(30),
     ]);
     const balMap: Record<string, number> = {};
     (bals ?? []).forEach((b: { account: string; amount: number }) => { balMap[b.account] = b.amount; });
     setBalances(balMap);
     setMovements((movs ?? []) as CashMovement[]);
-  }, []);
+  }, [selectedClubId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   async function handleMovement(e: React.FormEvent) {
     e.preventDefault();
     const raw = parseCurrencyInput(form.amount);
+    if (!selectedClubId) { showToast('Club is not selected', 'error'); return; }
     if (!raw || raw <= 0) { showToast('Введите сумму', 'error'); return; }
 
     const amount = form.movement_type === 'withdraw' ? -raw : raw;
@@ -58,6 +72,7 @@ export default function BalancePage() {
     const { data: { session } } = await supabase.auth.getSession();
 
     const { error } = await supabase.from('cash_movements').insert({
+      club_id: selectedClubId,
       movement_type: form.movement_type,
       account: form.account,
       amount,

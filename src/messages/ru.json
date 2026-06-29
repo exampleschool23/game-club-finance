@@ -13,7 +13,8 @@
     "monthlyReport": "Месячный отчёт",
     "team": "Команда",
     "settings": "Настройки",
-    "logout": "Выйти"
+    "logout": "Выйти",
+    "club": "Клуб"
   },
   "dashboard": {
     "title": "Панель управления",
@@ -359,7 +360,14 @@
     "version": "Версия",
     "emailLabel": "Email",
     "nameLabel": "Имя",
-    "roleLabel": "Роль"
+    "roleLabel": "Роль",
+    "clubs": "Клубы",
+    "clubName": "Название клуба",
+    "clubAddress": "Адрес",
+    "createClub": "Создать клуб",
+    "savingClub": "Создание...",
+    "clubCreated": "Клуб создан",
+    "clubNameRequired": "Введите название клуба"
   },
   "team": {
     "title": "Команда",

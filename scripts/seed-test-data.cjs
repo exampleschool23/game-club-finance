@@ -21,6 +21,7 @@ if (fs.existsSync(envPath)) {
 }
 
 const args = process.argv.slice(2);
+const clubIdArg = args.find((arg) => arg.startsWith('--club-id='))?.slice('--club-id='.length);
 if (!args.includes('--confirm')) {
   console.error('⚠️  Safety check: pass --confirm to run seed script.');
   console.error('   Example: node scripts/seed-test-data.cjs --confirm');
@@ -40,7 +41,27 @@ const supabase = createClient(url, key);
 
 const today = new Date().toISOString().split('T')[0];
 
+async function getTargetClubId() {
+  if (clubIdArg) return clubIdArg;
+
+  const { data, error } = await supabase
+    .from('clubs')
+    .select('id, name')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    console.error('❌ Could not resolve target club. Pass --club-id=<uuid> after running the multi-club migration.');
+    process.exit(1);
+  }
+
+  console.log(`Target club: ${data.name} (${data.id})`);
+  return data.id;
+}
+
 async function seed() {
+  const clubId = await getTargetClubId();
   console.log('🌱 Seeding test data for', today, '...\n');
 
   // 1. Insert products
@@ -56,7 +77,7 @@ async function seed() {
     { name: '[TEST] Monster Energy', category: 'energy', sale_price: 20000, cost_price: 12000, current_stock: 18, low_stock_threshold: 5, is_active: true },
     { name: '[TEST] KitKat', category: 'snacks', sale_price: 6000, cost_price: 3500, current_stock: 25, low_stock_threshold: 6, is_active: true },
     { name: '[TEST] Oreo', category: 'snacks', sale_price: 7000, cost_price: 4000, current_stock: 22, low_stock_threshold: 5, is_active: true },
-  ];
+  ].map((product) => ({ ...product, club_id: clubId }));
 
   const { data: insertedProducts, error: productsError } = await supabase
     .from('products')
@@ -71,13 +92,14 @@ async function seed() {
   // 2. Daily cash entry
   console.log('💰 Inserting daily cash entry...');
   const { error: cashError } = await supabase.from('daily_cash_entries').upsert({
+    club_id: clubId,
     date: today,
     cash_income: 1_200_000,
     terminal_income: 850_000,
     card_income: 350_000,
     comment: '[TEST DATA] Demo daily cash entry',
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'date' });
+  }, { onConflict: 'club_id,date' });
   if (cashError) { console.error('❌ Cash error:', cashError.message); process.exit(1); }
   console.log('   ✅ Daily cash entry: 1,200,000 cash + 850,000 terminal + 350,000 card = 2,400,000 UZS');
 
@@ -87,6 +109,7 @@ async function seed() {
   const redBull = p('[TEST] Red Bull');
   const { error: purchasesError } = await supabase.from('stock_purchases').insert([
     {
+      club_id: clubId,
       date: today,
       product_id: cocaCola.id,
       quantity: 24,
@@ -96,6 +119,7 @@ async function seed() {
       comment: '[TEST DATA] Demo purchase',
     },
     {
+      club_id: clubId,
       date: today,
       product_id: redBull.id,
       quantity: 12,
@@ -114,6 +138,7 @@ async function seed() {
   const water = p('[TEST] Water 1.5L');
   const closingEntries = [
     {
+      club_id: clubId,
       date: today,
       product_id: cocaCola.id,
       previous_stock: 50,
@@ -128,6 +153,7 @@ async function seed() {
       updated_at: new Date().toISOString(),
     },
     {
+      club_id: clubId,
       date: today,
       product_id: snickers.id,
       previous_stock: 30,
@@ -142,6 +168,7 @@ async function seed() {
       updated_at: new Date().toISOString(),
     },
     {
+      club_id: clubId,
       date: today,
       product_id: water.id,
       previous_stock: 60,
@@ -158,16 +185,16 @@ async function seed() {
   ];
   const { error: stockError } = await supabase
     .from('daily_stock_counts')
-    .upsert(closingEntries, { onConflict: 'date,product_id' });
+    .upsert(closingEntries, { onConflict: 'club_id,date,product_id' });
   if (stockError) { console.error('❌ Stock counts error:', stockError.message); process.exit(1); }
   console.log('   ✅ Closing stock for 3 products (bar income: 204,000 UZS)');
 
   // 5. Expenses
   console.log('💸 Inserting expenses...');
   const { error: expensesError } = await supabase.from('expenses').insert([
-    { date: today, amount: 300000, category: 'salary', payment_method: 'cash', comment: '[TEST DATA] Staff salary' },
-    { date: today, amount: 120000, category: 'cleaning', payment_method: 'cash', comment: '[TEST DATA] Cleaning service' },
-    { date: today, amount: 80000, category: 'electricity', payment_method: 'transfer', comment: '[TEST DATA] Electricity bill' },
+    { club_id: clubId, date: today, amount: 300000, category: 'salary', payment_method: 'cash', comment: '[TEST DATA] Staff salary' },
+    { club_id: clubId, date: today, amount: 120000, category: 'cleaning', payment_method: 'cash', comment: '[TEST DATA] Cleaning service' },
+    { club_id: clubId, date: today, amount: 80000, category: 'electricity', payment_method: 'transfer', comment: '[TEST DATA] Electricity bill' },
   ]);
   if (expensesError) { console.error('❌ Expenses error:', expensesError.message); process.exit(1); }
   console.log('   ✅ 3 expenses inserted (total: 500,000 UZS)');
@@ -177,8 +204,8 @@ async function seed() {
   const { data: insertedDebts, error: debtsError } = await supabase
     .from('new_debts')
     .insert([
-      { person_name: '[TEST] Alibek Karimov', amount: 500000, remaining_amount: 500000, paid_amount: 0, date: today, category: 'other', status: 'unpaid', comment: '[TEST DATA]' },
-      { person_name: '[TEST] Sardor Yusupov', amount: 300000, remaining_amount: 300000, paid_amount: 0, date: today, category: 'other', status: 'unpaid', comment: '[TEST DATA]' },
+      { club_id: clubId, person_name: '[TEST] Alibek Karimov', amount: 500000, remaining_amount: 500000, paid_amount: 0, date: today, category: 'other', status: 'unpaid', comment: '[TEST DATA]' },
+      { club_id: clubId, person_name: '[TEST] Sardor Yusupov', amount: 300000, remaining_amount: 300000, paid_amount: 0, date: today, category: 'other', status: 'unpaid', comment: '[TEST DATA]' },
     ])
     .select('id, person_name, remaining_amount');
   if (debtsError) { console.error('❌ Debts error:', debtsError.message); process.exit(1); }
@@ -188,6 +215,7 @@ async function seed() {
   console.log('💳 Inserting partial debt payment...');
   const firstDebt = insertedDebts[0];
   const { error: paymentError } = await supabase.from('debt_payments').insert({
+    club_id: clubId,
     debt_id: firstDebt.id,
     amount: 200000,
     payment_method: 'cash',

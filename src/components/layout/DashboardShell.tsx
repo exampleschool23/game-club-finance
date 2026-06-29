@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useCallback, useEffect, useMemo, useState, createContext, useContext } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Gamepad2, Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { DashboardContentLoading } from './DashboardContentLoading';
 import { createClient } from '@/lib/supabase/client';
-import type { UserRole } from '@/types';
+import type { Club, ClubMembership, UserRole } from '@/types';
 import { todayIso } from '@/lib/utils';
 
 interface DashboardShellProps {
@@ -20,18 +20,54 @@ interface DateContextValue {
   setSelectedDate: (date: string) => void;
 }
 
+interface ClubOption {
+  club: Club;
+  role: UserRole;
+}
+
+interface ClubContextValue {
+  selectedClubId: string;
+  selectedClub: Club | null;
+  memberships: ClubOption[];
+  role: UserRole;
+  loading: boolean;
+  setSelectedClubId: (clubId: string) => void;
+  refreshClubs: () => Promise<void>;
+}
+
 export const DateContext = createContext<DateContextValue>({
   selectedDate: todayIso(),
   setSelectedDate: () => {},
+});
+
+export const ClubContext = createContext<ClubContextValue>({
+  selectedClubId: '',
+  selectedClub: null,
+  memberships: [],
+  role: 'viewer',
+  loading: true,
+  setSelectedClubId: () => {},
+  refreshClubs: async () => {},
 });
 
 export function useDashboardDate() {
   return useContext(DateContext);
 }
 
+export function useClub() {
+  return useContext(ClubContext);
+}
+
 function isUserRole(role: string | null | undefined): role is UserRole {
   return role === 'owner' || role === 'admin' || role === 'viewer';
 }
+
+function relatedClub(relation: ClubMembership['clubs']): Club | null {
+  if (!relation) return null;
+  return Array.isArray(relation) ? relation[0] ?? null : relation;
+}
+
+const SELECTED_CLUB_STORAGE_KEY = 'game-club-finance:selected-club-id';
 
 export function DashboardShell({ initialEmail = '', children }: DashboardShellProps) {
   const pathname = usePathname();
@@ -39,43 +75,100 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayIso);
-  const [role, setRole] = useState<UserRole>('viewer');
+  const [profileRole, setProfileRole] = useState<UserRole>('viewer');
   const [fullName, setFullName] = useState(initialEmail);
+  const [memberships, setMemberships] = useState<ClubOption[]>([]);
+  const [selectedClubId, setSelectedClubIdState] = useState('');
+  const [clubLoading, setClubLoading] = useState(true);
+
+  const selectedMembership = useMemo(
+    () => memberships.find((membership) => membership.club.id === selectedClubId) ?? null,
+    [memberships, selectedClubId],
+  );
+  const role = selectedMembership?.role ?? profileRole;
+  const selectedClub = selectedMembership?.club ?? null;
+
+  const setSelectedClubId = useCallback((clubId: string) => {
+    setSelectedClubIdState(clubId);
+    window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, clubId);
+  }, []);
+
+  const refreshClubs = useCallback(async () => {
+    const supabase = createClient();
+    setClubLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      router.replace('/login');
+      return;
+    }
+
+    const [profileRes, membershipRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', session.user.id)
+        .maybeSingle(),
+      supabase
+        .from('club_memberships')
+        .select('club_id, role, created_at, updated_at, clubs(id, name, address, is_active, created_at, updated_at)')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true }),
+    ]);
+
+    setFullName(profileRes.data?.full_name ?? session.user.email ?? initialEmail);
+    setProfileRole(isUserRole(profileRes.data?.role) ? profileRes.data.role : 'viewer');
+
+    const nextMemberships = ((membershipRes.data as ClubMembership[] | null) ?? [])
+      .map((membership) => ({
+        club: relatedClub(membership.clubs),
+        role: isUserRole(membership.role) ? membership.role : 'viewer',
+      }))
+      .filter((membership): membership is ClubOption => Boolean(membership.club?.is_active))
+      .sort((a, b) => a.club.name.localeCompare(b.club.name));
+
+    setMemberships(nextMemberships);
+    setSelectedClubIdState((currentClubId) => {
+      const storedClubId = window.localStorage.getItem(SELECTED_CLUB_STORAGE_KEY) ?? '';
+      const preferredClubId = currentClubId || storedClubId;
+      const nextClubId =
+        nextMemberships.find((membership) => membership.club.id === preferredClubId)?.club.id ??
+        nextMemberships[0]?.club.id ??
+        '';
+
+      if (nextClubId) {
+        window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, nextClubId);
+      } else {
+        window.localStorage.removeItem(SELECTED_CLUB_STORAGE_KEY);
+      }
+
+      return nextClubId;
+    });
+    setClubLoading(false);
+  }, [initialEmail, router]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadProfile() {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session?.user) {
-        router.replace('/login');
-        return;
-      }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
+      await refreshClubs();
       if (cancelled) return;
-      setFullName(data?.full_name ?? session.user.email ?? initialEmail);
-      setRole(isUserRole(data?.role) ? data.role : 'viewer');
     }
 
     loadProfile().catch(() => {
       if (!cancelled) {
         setFullName(initialEmail);
-        setRole('viewer');
+        setProfileRole('viewer');
+        setMemberships([]);
+        setSelectedClubIdState('');
+        setClubLoading(false);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [initialEmail, router]);
+  }, [initialEmail, refreshClubs]);
 
   useEffect(() => {
     if (pendingPath === pathname) {
@@ -96,12 +189,29 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
     }
   }
 
+  const clubContextValue = useMemo(
+    () => ({
+      selectedClubId,
+      selectedClub,
+      memberships,
+      role,
+      loading: clubLoading,
+      setSelectedClubId,
+      refreshClubs,
+    }),
+    [clubLoading, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
+  );
+
   return (
     <DateContext.Provider value={{ selectedDate, setSelectedDate }}>
+      <ClubContext.Provider value={clubContextValue}>
       <div className="min-h-screen overflow-x-hidden" style={{ backgroundColor: '#f1f5f9' }}>
         <Sidebar
           role={role}
           fullName={fullName}
+          memberships={memberships}
+          selectedClubId={selectedClubId}
+          onSelectClub={setSelectedClubId}
           mobileOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           onNavigate={handleNavigate}
@@ -121,7 +231,7 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
                 <Gamepad2 size={20} />
               </div>
               <div className="min-w-0 leading-tight">
-                <p className="truncate text-sm font-extrabold text-gray-950">Game Club</p>
+                <p className="truncate text-sm font-extrabold text-gray-950">{selectedClub?.name ?? 'Game Club'}</p>
                 <p className="truncate text-xs font-bold text-primary-700">Finance</p>
               </div>
             </div>
@@ -134,6 +244,7 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
           </main>
         </div>
       </div>
+      </ClubContext.Provider>
     </DateContext.Provider>
   );
 }

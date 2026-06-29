@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -27,12 +28,19 @@ interface DayRow {
 export default function MonthlyReportPage() {
   const t = useTranslations('monthlyReport');
   const tc = useTranslations('common');
+  const { selectedClubId } = useClub();
   const { locale } = useAppLocale();
   const [month, setMonth] = useState(currentYearMonth());
   const [rows, setRows] = useState<DayRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async (selectedMonth: string) => {
+    if (!selectedClubId) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const supabase = createClient();
     const { from, to } = monthRange(selectedMonth);
@@ -41,10 +49,21 @@ export default function MonthlyReportPage() {
       supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income')
+        .eq('club_id', selectedClubId)
         .gte('date', from)
         .lte('date', to),
-      supabase.from('daily_stock_counts').select('date,bar_income').gte('date', from).lte('date', to),
-      supabase.from('expenses').select('date,amount').gte('date', from).lte('date', to),
+      supabase
+        .from('daily_stock_counts')
+        .select('date,bar_income')
+        .eq('club_id', selectedClubId)
+        .gte('date', from)
+        .lte('date', to),
+      supabase
+        .from('expenses')
+        .select('date,amount')
+        .eq('club_id', selectedClubId)
+        .gte('date', from)
+        .lte('date', to),
     ]);
 
     const cashEntries = cashRes.data ?? [];
@@ -81,7 +100,7 @@ export default function MonthlyReportPage() {
 
     setRows(dayRows);
     setLoading(false);
-  }, []);
+  }, [selectedClubId]);
 
   useEffect(() => {
     fetchData(month).catch(() => {});

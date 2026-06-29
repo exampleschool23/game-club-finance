@@ -15,6 +15,7 @@ export interface ClosingStockRowData {
 export interface ClosingStockDraft {
   version: 1;
   date: string;
+  clubId?: string;
   savedAt: string;
   rows: Array<{
     productId: string;
@@ -240,18 +241,20 @@ function formatStockValue(value: number): string {
   return Number.isInteger(value) ? String(value) : String(value);
 }
 
-export function closingStockDraftKey(date: string): string {
-  return `closing-stock-draft:${date}`;
+export function closingStockDraftKey(date: string, clubId?: string): string {
+  return clubId ? `closing-stock-draft:${clubId}:${date}` : `closing-stock-draft:${date}`;
 }
 
 export function createClosingStockDraft(
   date: string,
   rows: ClosingStockRowData[],
   savedAt = new Date().toISOString(),
+  clubId?: string,
 ): ClosingStockDraft {
   return {
     version: 1,
     date,
+    clubId,
     savedAt,
     rows: rows.map((row) => ({
       productId: row.product.id,
@@ -263,14 +266,14 @@ export function createClosingStockDraft(
   };
 }
 
-export function readClosingStockDraft(storage: StorageLike | null | undefined, date: string): ClosingStockDraft | null {
+export function readClosingStockDraft(storage: StorageLike | null | undefined, date: string, clubId?: string): ClosingStockDraft | null {
   if (!storage) return null;
 
   try {
-    const raw = storage.getItem(closingStockDraftKey(date));
+    const raw = storage.getItem(closingStockDraftKey(date, clubId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ClosingStockDraft;
-    return parsed.version === 1 && parsed.date === date && Array.isArray(parsed.rows)
+    return parsed.version === 1 && parsed.date === date && parsed.clubId === clubId && Array.isArray(parsed.rows)
       ? parsed
       : null;
   } catch {
@@ -283,22 +286,23 @@ export function saveClosingStockDraft(
   date: string,
   rows: ClosingStockRowData[],
   savedAt = new Date().toISOString(),
+  clubId?: string,
 ): boolean {
   if (!storage) return false;
 
   try {
-    storage.setItem(closingStockDraftKey(date), JSON.stringify(createClosingStockDraft(date, rows, savedAt)));
+    storage.setItem(closingStockDraftKey(date, clubId), JSON.stringify(createClosingStockDraft(date, rows, savedAt, clubId)));
     return true;
   } catch {
     return false;
   }
 }
 
-export function clearClosingStockDraft(storage: StorageLike | null | undefined, date: string): void {
+export function clearClosingStockDraft(storage: StorageLike | null | undefined, date: string, clubId?: string): void {
   if (!storage) return;
 
   try {
-    storage.removeItem(closingStockDraftKey(date));
+    storage.removeItem(closingStockDraftKey(date, clubId));
   } catch {
     // The submitted data is already persisted remotely.
   }

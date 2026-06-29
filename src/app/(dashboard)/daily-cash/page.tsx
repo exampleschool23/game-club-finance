@@ -20,10 +20,11 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
+import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDatePickerValue, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
-import type { DailyCashEntry, UserRole } from '@/types';
+import type { DailyCashEntry } from '@/types';
 
 interface CashFormData {
   date: string;
@@ -124,6 +125,7 @@ function PaymentCard({
 export default function DailyCashPage() {
   const t = useTranslations('dailyCash');
   const tc = useTranslations('common');
+  const { selectedClubId, role: currentRole } = useClub();
   const { locale } = useAppLocale();
   const [form, setForm] = useState<CashFormData>(emptyForm());
   const [entry, setEntry] = useState<DailyCashEntry | null>(null);
@@ -133,11 +135,18 @@ export default function DailyCashPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => new Date());
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [barSummary, setBarSummary] = useState<BarSummary>({ sales: 0, profit: 0 });
 
   const fetchExisting = useCallback(
     async (date: string) => {
+      if (!selectedClubId) {
+        setEntry(null);
+        setForm(emptyForm(date));
+        setBarSummary({ sales: 0, profit: 0 });
+        setLoading(false);
+        return;
+      }
+
       const supabase = createClient();
       setLoading(true);
       setMessage('');
@@ -147,11 +156,13 @@ export default function DailyCashPage() {
         supabase
           .from('daily_cash_entries')
           .select('*')
+          .eq('club_id', selectedClubId)
           .eq('date', date)
           .maybeSingle(),
         supabase
           .from('daily_stock_counts')
           .select('bar_income,bar_profit')
+          .eq('club_id', selectedClubId)
           .eq('date', date),
       ]);
 
@@ -194,7 +205,7 @@ export default function DailyCashPage() {
 
       setLoading(false);
     },
-    [],
+    [selectedClubId],
   );
 
   useEffect(() => {
@@ -203,30 +214,6 @@ export default function DailyCashPage() {
       setLoading(false);
     });
   }, [form.date, fetchExisting]);
-
-  useEffect(() => {
-    async function fetchCurrentRole() {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.user?.id) {
-        setCurrentRole(null);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
-      setCurrentRole((data?.role as UserRole | undefined) ?? null);
-    }
-
-    fetchCurrentRole().catch(() => setCurrentRole(null));
-  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -264,6 +251,11 @@ export default function DailyCashPage() {
       return;
     }
 
+    if (!selectedClubId) {
+      setError(tc('error'));
+      return;
+    }
+
     setSaving(true);
     setError('');
     setMessage('');
@@ -275,6 +267,7 @@ export default function DailyCashPage() {
 
     const payload = {
       date: form.date,
+      club_id: selectedClubId,
       cash_income: values.cashIncome,
       terminal_income: values.terminalIncome,
       card_income: values.cardIncome,
@@ -283,7 +276,7 @@ export default function DailyCashPage() {
     };
 
     const result = entry
-      ? await supabase.from('daily_cash_entries').update(payload).eq('id', entry.id)
+      ? await supabase.from('daily_cash_entries').update(payload).eq('id', entry.id).eq('club_id', selectedClubId)
       : await supabase.from('daily_cash_entries').insert({
           ...payload,
           created_by: session?.user?.id ?? null,
@@ -301,7 +294,7 @@ export default function DailyCashPage() {
   }
 
   async function handleDelete() {
-    if (!entry || locked) return;
+    if (!entry || locked || !selectedClubId) return;
 
     const supabase = createClient();
     setSaving(true);
@@ -311,6 +304,7 @@ export default function DailyCashPage() {
     const { error: deleteError } = await supabase
       .from('daily_cash_entries')
       .delete()
+      .eq('club_id', selectedClubId)
       .eq('id', entry.id);
 
     setSaving(false);

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -26,6 +27,7 @@ function statusVariant(status: string): DebtStatusVariant {
 export default function DebtsPage() {
   const t = useTranslations('debts');
   const tc = useTranslations('common');
+  const { selectedClubId } = useClub();
   const { locale } = useAppLocale();
 
   const [debts, setDebts] = useState<NewDebt[]>([]);
@@ -51,23 +53,32 @@ export default function DebtsPage() {
   });
 
   const fetchDebts = useCallback(async () => {
+    if (!selectedClubId) {
+      setDebts([]);
+      return;
+    }
+
     const supabase = createClient();
     const { data } = await supabase
       .from('new_debts')
       .select('*')
+      .eq('club_id', selectedClubId)
       .order('date', { ascending: false });
     setDebts((data as NewDebt[]) ?? []);
-  }, []);
+  }, [selectedClubId]);
 
   useEffect(() => {
     fetchDebts().catch(() => {});
   }, [fetchDebts]);
 
   async function loadPayments(debtId: string) {
+    if (!selectedClubId) return;
+
     const supabase = createClient();
     const { data } = await supabase
       .from('debt_payments')
       .select('*')
+      .eq('club_id', selectedClubId)
       .eq('debt_id', debtId)
       .order('date', { ascending: false });
     setPaymentsMap((prev) => ({ ...prev, [debtId]: (data as DebtPayment[]) ?? [] }));
@@ -83,6 +94,7 @@ export default function DebtsPage() {
   async function handleAddDebt(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseCurrencyInput(addForm.amount);
+    if (!selectedClubId) { setError(tc('error')); return; }
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     if (!addForm.person_name.trim()) { setError(tc('required')); return; }
     setSaving(true);
@@ -92,6 +104,7 @@ export default function DebtsPage() {
     const { data: { session } } = await supabase.auth.getSession();
 
     const { error: err } = await supabase.from('new_debts').insert({
+      club_id: selectedClubId,
       person_name: addForm.person_name.trim(),
       amount,
       remaining_amount: amount,
@@ -116,12 +129,14 @@ export default function DebtsPage() {
     e.preventDefault();
     if (!payDebtId) return;
     const amount = parseCurrencyInput(payForm.amount);
+    if (!selectedClubId) { setError(tc('error')); return; }
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     setSaving(true);
     setError('');
 
     const supabase = createClient();
     const { error: err } = await supabase.from('debt_payments').insert({
+      club_id: selectedClubId,
       debt_id: payDebtId,
       amount,
       payment_method: payForm.payment_method,

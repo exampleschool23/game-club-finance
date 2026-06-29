@@ -19,23 +19,26 @@ export default async function TestChecklistPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
+  const { data: memberships } = await supabase
+    .from('club_memberships')
+    .select('club_id, role')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true });
 
-  if (profile?.role !== 'owner' && profile?.role !== 'admin') {
+  const activeMembership = (memberships ?? []).find((membership) => membership.role === 'owner' || membership.role === 'admin');
+  const clubId = activeMembership?.club_id;
+
+  if (!clubId) {
     redirect('/');
   }
 
   const today = todayIso();
 
   const [cashRes, stockRes, expenseRes, debtRes] = await Promise.all([
-    supabase.from('daily_cash_entries').select('*').eq('date', today).maybeSingle(),
-    supabase.from('daily_stock_counts').select('*').eq('date', today),
-    supabase.from('expenses').select('*').eq('date', today),
-    supabase.from('new_debts').select('*').neq('status', 'paid'),
+    supabase.from('daily_cash_entries').select('*').eq('club_id', clubId).eq('date', today).maybeSingle(),
+    supabase.from('daily_stock_counts').select('*').eq('club_id', clubId).eq('date', today),
+    supabase.from('expenses').select('*').eq('club_id', clubId).eq('date', today),
+    supabase.from('new_debts').select('*').eq('club_id', clubId).neq('status', 'paid'),
   ]);
 
   const cashEntry = cashRes.data;

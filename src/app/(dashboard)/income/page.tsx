@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { todayIso } from '@/lib/utils';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
@@ -14,6 +15,7 @@ const CATEGORIES: IncomeCategory[] = ['game_time', 'food', 'drinks', 'other'];
 export default function IncomePage() {
   const t = useTranslations('income');
   const tc = useTranslations('common');
+  const { selectedClubId } = useClub();
   const { toast, showToast, hideToast } = useToast();
 
   const [form, setForm] = useState({
@@ -33,6 +35,10 @@ export default function IncomePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseCurrencyInput(form.amount);
+    if (!selectedClubId) {
+      showToast(tc('error'), 'error');
+      return;
+    }
     if (!amount || amount <= 0) {
       showToast(tc('invalidAmount'), 'error');
       return;
@@ -43,6 +49,7 @@ export default function IncomePage() {
     const { data: { session } } = await supabase.auth.getSession();
 
     const { error } = await supabase.from('income_transactions').insert({
+      club_id: selectedClubId,
       amount,
       payment_method: form.payment_method,
       category: form.category,

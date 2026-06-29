@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -12,6 +13,11 @@ import { ShieldCheck, Users } from 'lucide-react';
 import type { Profile, UserRole } from '@/types';
 
 const ROLES: UserRole[] = ['owner', 'admin', 'viewer'];
+
+interface TeamMember extends Profile {
+  membershipRole: UserRole;
+  membershipCreatedAt: string;
+}
 
 interface TeamPageClientProps {
   currentUserId?: string;
@@ -22,36 +28,81 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const t = useTranslations('team');
   const tc = useTranslations('common');
   const { locale } = useAppLocale();
+  const { selectedClubId, role: currentClubRole, loading: clubLoading } = useClub();
   const [currentUserId, setCurrentUserId] = useState(initialCurrentUserId ?? '');
   const [authorized, setAuthorized] = useState(Boolean(initialCurrentUserId));
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   const loadProfiles = useCallback(async () => {
+    if (!selectedClubId) {
+      setProfiles([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     const supabase = createClient();
-    const { data, error: loadError } = await supabase
-      .from('profiles')
-      .select('id, full_name, role, created_at, updated_at')
-      .order('full_name', { ascending: true });
+    const { data: memberships, error: loadError } = await supabase
+      .from('club_memberships')
+      .select('user_id, role, created_at, updated_at')
+      .eq('club_id', selectedClubId);
 
     if (loadError) {
       setError(loadError.message);
       setProfiles([]);
+      setLoading(false);
+      return;
+    }
+
+    const userIds = ((memberships ?? []) as Array<{ user_id: string }>).map((membership) => membership.user_id);
+
+    if (userIds.length === 0) {
+      setProfiles([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data: profileRows, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, created_at, updated_at')
+      .in('id', userIds)
+      .order('full_name', { ascending: true });
+
+    if (profileError) {
+      setError(profileError.message);
+      setProfiles([]);
     } else {
-      setProfiles((data as Profile[]) ?? []);
+      const membershipByUser = new Map(
+        ((memberships ?? []) as Array<{ user_id: string; role: UserRole; created_at: string }>).map((membership) => [
+          membership.user_id,
+          membership,
+        ]),
+      );
+      setProfiles(
+        (((profileRows as Profile[] | null) ?? []).map((profile) => {
+          const membership = membershipByUser.get(profile.id);
+          return {
+            ...profile,
+            membershipRole: membership?.role ?? 'viewer',
+            membershipCreatedAt: membership?.created_at ?? profile.created_at,
+          };
+        }) as TeamMember[]),
+      );
     }
     setLoading(false);
-  }, []);
+  }, [selectedClubId]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function authorize() {
+      if (clubLoading) return;
+
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -60,15 +111,9 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         return;
       }
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
       if (cancelled) return;
 
-      if (data?.role !== 'owner') {
+      if (currentClubRole !== 'owner') {
         router.replace('/');
         return;
       }
@@ -84,7 +129,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [clubLoading, currentClubRole, router]);
 
   useEffect(() => {
     if (!authorized) return;
@@ -92,19 +137,19 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   }, [authorized, loadProfiles]);
 
   const ownerCount = useMemo(
-    () => profiles.filter((profile) => profile.role === 'owner').length,
+    () => profiles.filter((profile) => profile.membershipRole === 'owner').length,
     [profiles],
   );
 
-  async function updateRole(profile: Profile, role: UserRole) {
-    if (profile.role === role) return;
+  async function updateRole(profile: TeamMember, role: UserRole) {
+    if (profile.membershipRole === role || !selectedClubId) return;
 
-    if (profile.id === currentUserId && profile.role === 'owner' && role !== 'owner') {
+    if (profile.id === currentUserId && profile.membershipRole === 'owner' && role !== 'owner') {
       setError(t('selfDemoteBlocked'));
       return;
     }
 
-    if (profile.role === 'owner' && role !== 'owner' && ownerCount <= 1) {
+    if (profile.membershipRole === 'owner' && role !== 'owner' && ownerCount <= 1) {
       setError(t('lastOwnerBlocked'));
       return;
     }
@@ -115,9 +160,10 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
     const supabase = createClient();
     const { error: updateError } = await supabase
-      .from('profiles')
+      .from('club_memberships')
       .update({ role, updated_at: new Date().toISOString() })
-      .eq('id', profile.id);
+      .eq('club_id', selectedClubId)
+      .eq('user_id', profile.id);
 
     setSavingId(null);
     if (updateError) {
@@ -126,7 +172,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     }
 
     setProfiles((current) =>
-      current.map((row) => (row.id === profile.id ? { ...row, role } : row)),
+      current.map((row) => (row.id === profile.id ? { ...row, membershipRole: role } : row)),
     );
     setMessage(t('saved'));
   }
@@ -162,7 +208,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                 {t(`roles.${role}`)}
               </p>
               <p className="mt-1 text-2xl font-bold text-gray-900">
-                {profiles.filter((profile) => profile.role === role).length}
+                {profiles.filter((profile) => profile.membershipRole === role).length}
               </p>
             </div>
             <ShieldCheck className="text-primary-500" size={22} />
@@ -205,11 +251,11 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                       <p className="text-xs text-gray-400">{t('you')}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3">{roleBadge(profile.role)}</td>
+                  <td className="px-4 py-3">{roleBadge(profile.membershipRole)}</td>
                   <td className="px-4 py-3">
                     <select
                       className="input-field w-40"
-                      value={profile.role}
+                      value={profile.membershipRole}
                       disabled={savingId === profile.id}
                       onChange={(event) => updateRole(profile, event.target.value as UserRole)}
                     >
@@ -220,7 +266,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.created_at, locale)}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDateTime(profile.membershipCreatedAt, locale)}</td>
                 </tr>
               ))}
             </tbody>

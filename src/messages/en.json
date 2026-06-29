@@ -13,7 +13,8 @@
     "monthlyReport": "Monthly Report",
     "team": "Team",
     "settings": "Settings",
-    "logout": "Logout"
+    "logout": "Logout",
+    "club": "Club"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -359,7 +360,14 @@
     "version": "Version",
     "emailLabel": "Email",
     "nameLabel": "Name",
-    "roleLabel": "Role"
+    "roleLabel": "Role",
+    "clubs": "Clubs",
+    "clubName": "Club name",
+    "clubAddress": "Address",
+    "createClub": "Create club",
+    "savingClub": "Creating...",
+    "clubCreated": "Club created",
+    "clubNameRequired": "Club name is required"
   },
   "team": {
     "title": "Team",

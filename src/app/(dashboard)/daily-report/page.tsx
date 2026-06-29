@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -28,6 +29,7 @@ export default function DailyReportPage() {
   const t = useTranslations('dailyReport');
   const tc = useTranslations('common');
   const te = useTranslations('expenses');
+  const { selectedClubId } = useClub();
 
   const [date, setDate] = useState(todayIso());
   const [cashEntry, setCashEntry] = useState<DailyCashEntry | null>(null);
@@ -36,22 +38,42 @@ export default function DailyReportPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async (selectedDate: string) => {
+    if (!selectedClubId) {
+      setCashEntry(null);
+      setStockCounts([]);
+      setExpenses([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const supabase = createClient();
 
     let [cashRes, stockRes, expRes] = await Promise.all([
-      supabase.from('daily_cash_entries').select('*').eq('date', selectedDate).maybeSingle(),
+      supabase
+        .from('daily_cash_entries')
+        .select('*')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate)
+        .maybeSingle(),
       supabase
         .from('daily_stock_counts')
         .select('*, products(name, sort_order)')
+        .eq('club_id', selectedClubId)
         .eq('date', selectedDate),
-      supabase.from('expenses').select('*').eq('date', selectedDate).order('created_at'),
+      supabase
+        .from('expenses')
+        .select('*')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate)
+        .order('created_at'),
     ]);
 
     if (isMissingSortOrder(stockRes.error)) {
       stockRes = await supabase
         .from('daily_stock_counts')
         .select('*, products(name)')
+        .eq('club_id', selectedClubId)
         .eq('date', selectedDate);
     }
 
@@ -66,7 +88,7 @@ export default function DailyReportPage() {
     );
     setExpenses((expRes.data as Expense[]) ?? []);
     setLoading(false);
-  }, []);
+  }, [selectedClubId]);
 
   useEffect(() => {
     fetchData(date).catch(() => {});

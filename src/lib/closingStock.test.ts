@@ -50,6 +50,7 @@ class ThrowingStorage implements StorageLike {
 function product(overrides: Partial<Product>): Product {
   return {
     id: overrides.id ?? 'product-1',
+    club_id: overrides.club_id ?? 'club-1',
     name: overrides.name ?? 'Cola 1.5L',
     category: overrides.category ?? null,
     sale_price: overrides.sale_price ?? 15000,

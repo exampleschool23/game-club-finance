@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
-import type { Product, UserRole } from '@/types';
+import type { Product } from '@/types';
 
 interface ProductForm {
   name: string;
@@ -42,6 +43,7 @@ function isForeignKeyDeleteError(error: { message?: string; code?: string } | nu
 export default function ProductsPage() {
   const t = useTranslations('products');
   const tc = useTranslations('common');
+  const { selectedClubId, role: currentRole } = useClub();
   const [products, setProducts] = useState<Product[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,30 +51,20 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
 
   const isOwner = currentRole === 'owner';
 
-  useEffect(() => {
-    async function fetchRole() {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle();
-      setCurrentRole((data?.role as UserRole | undefined) ?? null);
+  const loadProducts = useCallback(async () => {
+    if (!selectedClubId) {
+      setProducts([]);
+      return;
     }
-    fetchRole().catch(() => {});
-  }, []);
 
-  async function loadProducts() {
     const supabase = createClient();
     const ordered = await supabase
       .from('products')
       .select('*')
+      .eq('club_id', selectedClubId)
       .eq('is_deleted', false)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
@@ -86,6 +78,7 @@ export default function ProductsPage() {
       const named = await supabase
         .from('products')
         .select('*')
+        .eq('club_id', selectedClubId)
         .eq('is_deleted', false)
         .order('name', { ascending: true });
 
@@ -98,6 +91,7 @@ export default function ProductsPage() {
     const orderedWithoutDeletedFilter = await supabase
       .from('products')
       .select('*')
+      .eq('club_id', selectedClubId)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
 
@@ -109,14 +103,15 @@ export default function ProductsPage() {
     const fallback = await supabase
       .from('products')
       .select('*')
+      .eq('club_id', selectedClubId)
       .order('name', { ascending: true });
 
     setProducts(fallback.data ?? []);
-  }
+  }, [selectedClubId]);
 
   useEffect(() => {
     loadProducts().catch(() => {});
-  }, []);
+  }, [loadProducts]);
 
   function openAdd() {
     setEditingId(null);
@@ -151,7 +146,7 @@ export default function ProductsPage() {
       return;
     }
 
-    if (!form.name.trim()) {
+    if (!selectedClubId || !form.name.trim()) {
       setError(tc('required'));
       return;
     }
@@ -176,6 +171,7 @@ export default function ProductsPage() {
       const { error: e } = await supabase
         .from('products')
         .update(payload)
+        .eq('club_id', selectedClubId)
         .eq('id', editingId);
       err = e?.message ?? null;
     } else {
@@ -185,10 +181,11 @@ export default function ProductsPage() {
       );
       const insertWithOrder = await supabase.from('products').insert({
         ...payload,
+        club_id: selectedClubId,
         sort_order: maxSortOrder + 1,
       });
       if (isMissingSortOrder(insertWithOrder.error)) {
-        const { error: e } = await supabase.from('products').insert(payload);
+        const { error: e } = await supabase.from('products').insert({ ...payload, club_id: selectedClubId });
         err = e?.message ?? null;
       } else {
         err = insertWithOrder.error?.message ?? null;
@@ -205,7 +202,7 @@ export default function ProductsPage() {
   }
 
   async function handleDelete() {
-    if (!editingId || !isOwner) return;
+    if (!editingId || !isOwner || !selectedClubId) return;
     if (!window.confirm(t('deleteConfirm'))) return;
 
     setDeleting(true);
@@ -215,6 +212,7 @@ export default function ProductsPage() {
     const { error: deleteError } = await supabase
       .from('products')
       .delete()
+      .eq('club_id', selectedClubId)
       .eq('id', editingId);
 
     if (deleteError) {
@@ -232,6 +230,7 @@ export default function ProductsPage() {
           deleted_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
+        .eq('club_id', selectedClubId)
         .eq('id', editingId);
 
       setDeleting(false);
@@ -264,6 +263,7 @@ export default function ProductsPage() {
       supabase
         .from('products')
         .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
+        .eq('club_id', selectedClubId)
         .eq('id', product.id),
     );
     const results = await Promise.all(updates);

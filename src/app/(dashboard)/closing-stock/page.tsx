@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatDatePickerValue } from '@/lib/formatters';
@@ -37,7 +38,7 @@ import {
   TrendingUp,
   Upload,
 } from 'lucide-react';
-import type { Product, UserRole } from '@/types';
+import type { Product } from '@/types';
 
 interface PurchaseQuantity {
   product_id: string;
@@ -68,8 +69,8 @@ interface StockCountRow {
   sale_price: number;
   cost_price: number;
   products?:
-    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>
-    | Pick<Product, 'id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>[]
+    | Pick<Product, 'id' | 'club_id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>
+    | Pick<Product, 'id' | 'club_id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>[]
     | null;
 }
 
@@ -83,8 +84,8 @@ function getBrowserStorage(): StorageLike | null {
   return typeof window === 'undefined' ? null : window.localStorage;
 }
 
-function applyBrowserDraft(date: string, rows: RowData[]): RowData[] {
-  const draft = readClosingStockDraft(getBrowserStorage(), date);
+function applyBrowserDraft(date: string, clubId: string, rows: RowData[]): RowData[] {
+  const draft = readClosingStockDraft(getBrowserStorage(), date, clubId);
   return applyClosingStockDraft(rows, draft);
 }
 
@@ -116,10 +117,11 @@ function isMissingDeletedColumn(error: { message?: string } | null | undefined) 
   return error?.message?.includes('is_deleted') ?? false;
 }
 
-async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
+async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
   const ordered = await supabase
     .from('products')
     .select('*')
+    .eq('club_id', clubId)
     .eq('is_active', true)
     .eq('is_deleted', false)
     .order('sort_order', { ascending: true })
@@ -131,6 +133,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
     const named = await supabase
       .from('products')
       .select('*')
+      .eq('club_id', clubId)
       .eq('is_active', true)
       .eq('is_deleted', false)
       .order('name', { ascending: true });
@@ -143,14 +146,16 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
   return supabase
     .from('products')
     .select('*')
+    .eq('club_id', clubId)
     .eq('is_active', true)
     .order('name', { ascending: true });
 }
 
-async function fetchPreviousClosings(supabase: ReturnType<typeof createClient>, selectedDate: string) {
+async function fetchPreviousClosings(supabase: ReturnType<typeof createClient>, selectedDate: string, clubId: string) {
   const { data, error } = await supabase
     .from('daily_stock_counts')
     .select('product_id,closing_stock')
+    .eq('club_id', clubId)
     .lt('date', selectedDate)
     .order('date', { ascending: false });
 
@@ -173,6 +178,7 @@ async function recalculateSavedFutureRows(
   supabase: ReturnType<typeof createClient>,
   selectedDate: string,
   savedClosings: Record<string, number>,
+  clubId: string,
 ) {
   const productIds = Object.keys(savedClosings);
   if (productIds.length === 0) return null;
@@ -180,6 +186,7 @@ async function recalculateSavedFutureRows(
   const { data, error } = await supabase
     .from('daily_stock_counts')
     .select('id,product_id,date,added_today,closing_stock,sale_price,cost_price')
+    .eq('club_id', clubId)
     .in('product_id', productIds)
     .gt('date', selectedDate)
     .order('date', { ascending: true });
@@ -221,6 +228,7 @@ async function recalculateSavedFutureRows(
           bar_profit: row.bar_profit,
           updated_at: row.updated_at,
         })
+        .eq('club_id', clubId)
         .eq('id', row.id),
     ),
   );
@@ -231,6 +239,7 @@ async function recalculateSavedFutureRows(
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
+  const { selectedClubId, role: currentRole } = useClub();
   const { locale } = useAppLocale();
   const today = todayIso();
   const [date, setDate] = useState(todayIso());
@@ -240,7 +249,6 @@ export default function ClosingStockPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
@@ -289,6 +297,12 @@ export default function ClosingStockPage() {
   );
 
   const loadData = useCallback(async (selectedDate: string) => {
+    if (!selectedClubId) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     const supabase = createClient();
@@ -298,7 +312,8 @@ export default function ClosingStockPage() {
     if (readOnlyDate) {
       const countsWithOrder = await supabase
         .from('daily_stock_counts')
-        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
+        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
+        .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
 
@@ -308,7 +323,8 @@ export default function ClosingStockPage() {
       if (isMissingSortOrder(countsWithOrder.error)) {
         const countsWithoutOrder = await supabase
           .from('daily_stock_counts')
-          .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,name,category,current_stock,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
+          .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
+          .eq('club_id', selectedClubId)
           .eq('date', selectedDate)
           .order('updated_at', { ascending: false });
 
@@ -327,9 +343,13 @@ export default function ClosingStockPage() {
 
       if (stockCountRows.length === 0 && currentRole === 'owner') {
         const [productsRes, purchasesRes, previousClosingsRes] = await Promise.all([
-          fetchActiveProductsOrdered(supabase),
-          supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
-          fetchPreviousClosings(supabase, selectedDate),
+          fetchActiveProductsOrdered(supabase, selectedClubId),
+          supabase
+            .from('stock_purchases')
+            .select('product_id, quantity')
+            .eq('club_id', selectedClubId)
+            .eq('date', selectedDate),
+          fetchPreviousClosings(supabase, selectedDate, selectedClubId),
         ]);
 
         if (productsRes.error || purchasesRes.error || previousClosingsRes.error) {
@@ -345,7 +365,7 @@ export default function ClosingStockPage() {
             ((purchasesRes.data as PurchaseQuantity[]) ?? []),
             previousClosingsRes.data ?? {},
         );
-        setRows(canUseDraft ? applyBrowserDraft(selectedDate, editableRows) : editableRows);
+        setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, editableRows) : editableRows);
         setLoading(false);
         return;
       }
@@ -355,6 +375,7 @@ export default function ClosingStockPage() {
           if (relation?.is_deleted) return [];
           const product: Product = {
             id: relation?.id ?? count.product_id,
+            club_id: relation?.club_id ?? selectedClubId,
             name: relation?.name ?? 'Unknown product',
             category: relation?.category ?? null,
             sale_price: Number(count.sale_price ?? 0),
@@ -376,16 +397,24 @@ export default function ClosingStockPage() {
             soldQuantity: String(count.sold_quantity ?? 0),
           }];
         }));
-      setRows(canUseDraft ? applyBrowserDraft(selectedDate, savedRows) : savedRows);
+      setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, savedRows) : savedRows);
       setLoading(false);
       return;
     }
 
     const [productsRes, countsRes, purchasesRes, previousClosingsRes] = await Promise.all([
-      fetchActiveProductsOrdered(supabase),
-      supabase.from('daily_stock_counts').select('*').eq('date', selectedDate),
-      supabase.from('stock_purchases').select('product_id, quantity').eq('date', selectedDate),
-      fetchPreviousClosings(supabase, selectedDate),
+      fetchActiveProductsOrdered(supabase, selectedClubId),
+      supabase
+        .from('daily_stock_counts')
+        .select('*')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate),
+      supabase
+        .from('stock_purchases')
+        .select('product_id, quantity')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate),
+      fetchPreviousClosings(supabase, selectedDate, selectedClubId),
     ]);
 
     if (productsRes.error || countsRes.error || purchasesRes.error || previousClosingsRes.error) {
@@ -401,9 +430,9 @@ export default function ClosingStockPage() {
         ((purchasesRes.data as PurchaseQuantity[]) ?? []),
         previousClosingsRes.data ?? {},
     );
-    setRows(canUseDraft ? applyBrowserDraft(selectedDate, editableRows) : editableRows);
+    setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, editableRows) : editableRows);
     setLoading(false);
-  }, [buildEditableRows, currentRole]);
+  }, [buildEditableRows, currentRole, selectedClubId]);
 
   useEffect(() => {
     loadData(date).catch((err) => {
@@ -411,28 +440,6 @@ export default function ClosingStockPage() {
       setLoading(false);
     });
   }, [date, loadData]);
-
-  useEffect(() => {
-    async function loadCurrentRole() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user?.id) {
-        setCurrentRole(null);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      setCurrentRole((data?.role as UserRole | undefined) ?? null);
-    }
-
-    loadCurrentRole().catch(() => setCurrentRole(null));
-  }, []);
 
   function updateRow(index: number, field: 'previousStock' | 'addedToday' | 'closingStock', value: string) {
     setRows((prev) => {
@@ -514,7 +521,7 @@ export default function ClosingStockPage() {
     setError('');
     setSuccess('');
 
-    if (!saveClosingStockDraft(getBrowserStorage(), date, rows)) {
+    if (!selectedClubId || !saveClosingStockDraft(getBrowserStorage(), date, rows, undefined, selectedClubId)) {
       setError(t('draftSaveFailed'));
       return;
     }
@@ -597,6 +604,11 @@ export default function ClosingStockPage() {
       return;
     }
 
+    if (!selectedClubId) {
+      setError(tc('error'));
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
@@ -607,10 +619,11 @@ export default function ClosingStockPage() {
       rows,
       createdBy: session?.user?.id ?? null,
     });
+    const clubUpserts = upserts.map((row) => ({ ...row, club_id: selectedClubId }));
 
     const { error: err } = await supabase
       .from('daily_stock_counts')
-      .upsert(upserts, { onConflict: 'date,product_id' });
+      .upsert(clubUpserts, { onConflict: 'club_id,date,product_id' });
 
     if (err) {
       setSaving(false);
@@ -618,7 +631,7 @@ export default function ClosingStockPage() {
       return;
     }
 
-    const cascadeError = await recalculateSavedFutureRows(supabase, date, savedClosings);
+    const cascadeError = await recalculateSavedFutureRows(supabase, date, savedClosings, selectedClubId);
 
     setSaving(false);
 
@@ -627,7 +640,7 @@ export default function ClosingStockPage() {
       return;
     }
 
-    clearClosingStockDraft(getBrowserStorage(), date);
+    clearClosingStockDraft(getBrowserStorage(), date, selectedClubId);
     await loadData(date);
     setSuccess(t('success'));
   }

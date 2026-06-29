@@ -11,6 +11,7 @@ export type DebtStatus = 'unpaid' | 'partial' | 'paid';
 // Legacy types for old pages
 export interface Balance {
   id: string;
+  club_id: string;
   account: 'cash' | 'terminal' | 'bank' | 'debt';
   amount: number;
   updated_at: string;
@@ -18,6 +19,7 @@ export interface Balance {
 
 export interface IncomeTransaction {
   id: string;
+  club_id: string;
   amount: number;
   payment_method: PaymentMethod;
   category: IncomeCategory;
@@ -29,6 +31,7 @@ export interface IncomeTransaction {
 
 export interface ExpenseTransaction {
   id: string;
+  club_id: string;
   amount: number;
   category: ExpenseCategory;
   payment_source: PaymentSource;
@@ -40,6 +43,7 @@ export interface ExpenseTransaction {
 
 export interface CashMovement {
   id: string;
+  club_id: string;
   movement_type: MovementType;
   account: string;
   amount: number;
@@ -50,6 +54,7 @@ export interface CashMovement {
 
 export interface LegacyDebt {
   id: string;
+  club_id: string;
   customer_name: string;
   amount: number;
   comment: string | null;
@@ -69,8 +74,27 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface Club {
+  id: string;
+  name: string;
+  address: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembership {
+  club_id: string;
+  user_id: string;
+  role: UserRole;
+  created_at: string;
+  updated_at: string;
+  clubs?: Club | Club[] | null;
+}
+
 export interface Product {
   id: string;
+  club_id: string;
   name: string;
   category: string | null;
   sale_price: number;
@@ -87,6 +111,7 @@ export interface Product {
 
 export interface DailyCashEntry {
   id: string;
+  club_id: string;
   date: string;
   cash_income: number;
   terminal_income: number;
@@ -99,6 +124,7 @@ export interface DailyCashEntry {
 
 export interface StockPurchase {
   id: string;
+  club_id: string;
   date: string;
   product_id: string;
   quantity: number;
@@ -112,6 +138,7 @@ export interface StockPurchase {
 
 export interface DailyStockCount {
   id: string;
+  club_id: string;
   date: string;
   product_id: string;
   previous_stock: number;
@@ -130,6 +157,7 @@ export interface DailyStockCount {
 
 export interface Expense {
   id: string;
+  club_id: string;
   date: string;
   amount: number;
   payment_method: string;
@@ -142,6 +170,7 @@ export interface Expense {
 
 export interface NewDebt {
   id: string;
+  club_id: string;
   person_name: string;
   date: string;
   amount: number;
@@ -157,6 +186,7 @@ export interface NewDebt {
 
 export interface DebtPayment {
   id: string;
+  club_id: string;
   debt_id: string;
   date: string;
   amount: number;

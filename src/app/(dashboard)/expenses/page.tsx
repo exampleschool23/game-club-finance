@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { FormSection } from '@/components/ui/FormSection';
 import { DataTable } from '@/components/ui/DataTable';
@@ -21,6 +22,7 @@ const CATEGORIES = [
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
   const tc = useTranslations('common');
+  const { selectedClubId } = useClub();
   const { locale } = useAppLocale();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [saving, setSaving] = useState(false);
@@ -34,20 +36,26 @@ export default function ExpensesPage() {
     comment: '',
   });
 
-  async function loadExpenses() {
+  const loadExpenses = useCallback(async () => {
+    if (!selectedClubId) {
+      setExpenses([]);
+      return;
+    }
+
     const supabase = createClient();
     const { data } = await supabase
       .from('expenses')
       .select('*')
+      .eq('club_id', selectedClubId)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(50);
     setExpenses(data ?? []);
-  }
+  }, [selectedClubId]);
 
   useEffect(() => {
     loadExpenses().catch(() => {});
-  }, []);
+  }, [loadExpenses]);
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -56,6 +64,10 @@ export default function ExpensesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseCurrencyInput(form.amount);
+    if (!selectedClubId) {
+      setError(tc('error'));
+      return;
+    }
     if (!amount || amount <= 0) {
       setError(tc('invalidAmount'));
       return;
@@ -68,6 +80,7 @@ export default function ExpensesPage() {
     const { data: { session } } = await supabase.auth.getSession();
 
     const { error: err } = await supabase.from('expenses').insert({
+      club_id: selectedClubId,
       date: form.date,
       amount,
       category: form.category,

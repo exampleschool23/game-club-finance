@@ -17,6 +17,7 @@ function parseArgs(argv) {
     date: DEFAULT_TARGET_DATE,
     email: '',
     password: '',
+    clubId: '',
   };
 
   argv.forEach((arg) => {
@@ -26,6 +27,7 @@ function parseArgs(argv) {
     else if (arg.startsWith('--date=')) args.date = arg.slice('--date='.length);
     else if (arg.startsWith('--email=')) args.email = arg.slice('--email='.length);
     else if (arg.startsWith('--password=')) args.password = arg.slice('--password='.length);
+    else if (arg.startsWith('--club-id=')) args.clubId = arg.slice('--club-id='.length);
   });
 
   return args;
@@ -114,6 +116,24 @@ async function signInIfNeeded(supabase, args, env) {
   return data.session?.user?.id ?? null;
 }
 
+async function getTargetClubId(supabase, args) {
+  if (args.clubId) return args.clubId;
+
+  const { data, error } = await supabase
+    .from('clubs')
+    .select('id, name')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    throw new Error('Could not resolve target club. Pass --club-id=<uuid> after running the multi-club migration.');
+  }
+
+  console.log(`Target club: ${data.name} (${data.id})`);
+  return data.id;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const env = {
@@ -160,10 +180,12 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const userId = await signInIfNeeded(supabase, args, env);
+  const clubId = await getTargetClubId(supabase, args);
 
   const { data: existingProducts, error: existingError } = await supabase
     .from('products')
-    .select('id,name,sale_price,cost_price');
+    .select('id,name,sale_price,cost_price')
+    .eq('club_id', clubId);
   if (existingError) throw existingError;
 
   const byKey = new Map((existingProducts ?? []).map((product) => [productKey(product), product]));
@@ -174,6 +196,7 @@ async function main() {
       .from('products')
       .insert(
         productsToInsert.map((item) => ({
+          club_id: clubId,
           name: item.name,
           category: item.category,
           sale_price: item.sale_price,
@@ -194,6 +217,7 @@ async function main() {
 
     return {
       date: args.date,
+      club_id: clubId,
       product_id: product.id,
       previous_stock: item.current_stock,
       added_today: 0,
@@ -211,7 +235,7 @@ async function main() {
 
   const { error: upsertError } = await supabase
     .from('daily_stock_counts')
-    .upsert(stockRows, { onConflict: 'date,product_id' });
+    .upsert(stockRows, { onConflict: 'club_id,date,product_id' });
   if (upsertError) throw upsertError;
 
   const { error: stockUpdateError } = await supabase
@@ -221,6 +245,7 @@ async function main() {
         const product = byKey.get(productKey(item));
         return {
           id: product.id,
+          club_id: clubId,
           name: item.name,
           category: item.category,
           sale_price: item.sale_price,

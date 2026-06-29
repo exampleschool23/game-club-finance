@@ -15,17 +15,27 @@ import {
   LogOut,
   X,
   Gamepad2,
+  Building2,
+  ChevronDown,
   MinusCircle,
   Archive,
   Settings,
   Shield,
 } from 'lucide-react';
-import type { UserRole } from '@/types';
+import type { Club, UserRole } from '@/types';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+
+interface SidebarClubOption {
+  club: Club;
+  role: UserRole;
+}
 
 interface SidebarProps {
   role: UserRole;
   fullName: string;
+  memberships?: SidebarClubOption[];
+  selectedClubId?: string;
+  onSelectClub?: (clubId: string) => void;
   mobileOpen?: boolean;
   onClose?: () => void;
   onNavigate?: (href: string) => void;
@@ -77,10 +87,20 @@ function NavLink({
   );
 }
 
-export function Sidebar({ role, fullName, mobileOpen, onClose, onNavigate }: SidebarProps) {
+export function Sidebar({
+  role,
+  fullName,
+  memberships = [],
+  selectedClubId = '',
+  onSelectClub,
+  mobileOpen,
+  onClose,
+  onNavigate,
+}: SidebarProps) {
   const t = useTranslations('nav');
   const pathname = usePathname();
   const router = useRouter();
+  const selectedClub = memberships.find((membership) => membership.club.id === selectedClubId)?.club ?? null;
 
   async function handleLogout() {
     const supabase = createClient();
@@ -162,7 +182,7 @@ export function Sidebar({ role, fullName, mobileOpen, onClose, onNavigate }: Sid
           </div>
           <div className="min-w-0 leading-tight">
             <p className="truncate text-[15px] font-extrabold text-white">
-              Game Club
+              {selectedClub?.name ?? 'Game Club'}
             </p>
             <p className="truncate text-[13px] font-bold text-primary-100">
               Finance
@@ -175,6 +195,27 @@ export function Sidebar({ role, fullName, mobileOpen, onClose, onNavigate }: Sid
           </button>
         )}
       </div>
+
+      {memberships.length > 0 && (
+        <div className="border-b border-white/10 px-3 py-3">
+          <label className="relative flex h-11 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-semibold text-white">
+            <Building2 size={17} className="shrink-0 text-primary-100" />
+            <select
+              className="min-w-0 flex-1 appearance-none bg-transparent pr-7 text-sm font-semibold text-white outline-none"
+              value={selectedClubId}
+              onChange={(event) => onSelectClub?.(event.target.value)}
+              aria-label={t('club')}
+            >
+              {memberships.map((membership) => (
+                <option key={membership.club.id} value={membership.club.id} className="text-gray-900">
+                  {membership.club.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} className="pointer-events-none absolute right-3 text-slate-300" />
+          </label>
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">

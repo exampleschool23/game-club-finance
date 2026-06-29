@@ -18,7 +18,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatDateShort, formatDateTime } from '@/lib/formatters';
-import { useDashboardDate } from '@/components/layout/DashboardShell';
+import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
 import { DashboardBarChart } from '@/components/dashboard/DashboardBarChart';
@@ -110,10 +110,11 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
 
-async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>) {
+async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
   const ordered = await supabase
     .from('products')
     .select('*')
+    .eq('club_id', clubId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
@@ -123,6 +124,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
   return supabase
     .from('products')
     .select('*')
+    .eq('club_id', clubId)
     .eq('is_active', true)
     .order('name', { ascending: true });
 }
@@ -146,6 +148,7 @@ function productName(relation: StockPurchaseRow['products']): string | null {
 
 export default function DashboardPage() {
   const { selectedDate } = useDashboardDate();
+  const { selectedClubId } = useClub();
   const { locale } = useAppLocale();
   const [period, setPeriod] = useState<DashboardPeriod>('today');
   const [customFrom, setCustomFrom] = useState(todayIso);
@@ -161,6 +164,12 @@ export default function DashboardPage() {
   );
 
   const fetchDashboard = useCallback(async () => {
+    if (!selectedClubId) {
+      setData(emptyData);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -183,65 +192,85 @@ export default function DashboardPage() {
       trendExpenseRes,
     ] = await Promise.all([
       inRangeQuery(
-        supabase.from('daily_cash_entries').select('date,cash_income,terminal_income,card_income,created_at'),
+        supabase
+          .from('daily_cash_entries')
+          .select('date,cash_income,terminal_income,card_income,created_at')
+          .eq('club_id', selectedClubId),
         range,
       ),
       inRangeQuery(
         supabase
           .from('daily_stock_counts')
-          .select('date,bar_income,bar_profit,bar_cost,sold_quantity,updated_at'),
+          .select('date,bar_income,bar_profit,bar_cost,sold_quantity,updated_at')
+          .eq('club_id', selectedClubId),
         range,
       ),
       inRangeQuery(
         supabase
           .from('expenses')
           .select('id,date,amount,category,comment,created_at')
+          .eq('club_id', selectedClubId)
           .order('created_at', { ascending: false }),
         range,
       ),
-      fetchActiveProductsOrdered(supabase),
+      fetchActiveProductsOrdered(supabase, selectedClubId),
       supabase
         .from('new_debts')
         .select('id,person_name,remaining_amount,status')
+        .eq('club_id', selectedClubId)
         .order('created_at', { ascending: false }),
       inRangeQuery(
         supabase
           .from('stock_purchases')
           .select('id,date,quantity,cost_price,comment,created_at,products(name)')
+          .eq('club_id', selectedClubId)
           .order('created_at', { ascending: false }),
         range,
       ),
       supabase
         .from('debt_payments')
         .select('id,debt_id,amount,created_at')
+        .eq('club_id', selectedClubId)
         .gte('created_at', `${range.from}T00:00:00`)
         .lte('created_at', `${range.to}T23:59:59`)
         .order('created_at', { ascending: false }),
       inRangeQuery(
-        supabase.from('daily_cash_entries').select('date,cash_income,terminal_income,card_income'),
+        supabase
+          .from('daily_cash_entries')
+          .select('date,cash_income,terminal_income,card_income')
+          .eq('club_id', selectedClubId),
         previousRange,
       ),
       inRangeQuery(
-        supabase.from('daily_stock_counts').select('date,bar_income,bar_profit,bar_cost,sold_quantity'),
+        supabase
+          .from('daily_stock_counts')
+          .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
+          .eq('club_id', selectedClubId),
         previousRange,
       ),
       inRangeQuery(
-        supabase.from('expenses').select('id,date,amount,category,comment,created_at'),
+        supabase
+          .from('expenses')
+          .select('id,date,amount,category,comment,created_at')
+          .eq('club_id', selectedClubId),
         previousRange,
       ),
       supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income')
+        .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to),
       supabase
         .from('daily_stock_counts')
         .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
+        .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to),
       supabase
         .from('expenses')
         .select('id,date,amount,category,comment,created_at')
+        .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to),
     ]);
@@ -384,7 +413,7 @@ export default function DashboardPage() {
       recentTransactions: transactions,
     });
     setLoading(false);
-  }, [range]);
+  }, [range, selectedClubId]);
 
   useEffect(() => {
     fetchDashboard().catch((fetchError) => {

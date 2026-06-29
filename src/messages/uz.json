@@ -13,7 +13,8 @@
     "monthlyReport": "Oylik hisobot",
     "team": "Jamoa",
     "settings": "Sozlamalar",
-    "logout": "Chiqish"
+    "logout": "Chiqish",
+    "club": "Klub"
   },
   "dashboard": {
     "title": "Boshqaruv paneli",
@@ -359,7 +360,14 @@
     "version": "Versiya",
     "emailLabel": "Email",
     "nameLabel": "Ism",
-    "roleLabel": "Lavozim"
+    "roleLabel": "Lavozim",
+    "clubs": "Klublar",
+    "clubName": "Klub nomi",
+    "clubAddress": "Manzil",
+    "createClub": "Klub yaratish",
+    "savingClub": "Yaratilmoqda...",
+    "clubCreated": "Klub yaratildi",
+    "clubNameRequired": "Klub nomini kiriting"
   },
   "team": {
     "title": "Jamoa",
