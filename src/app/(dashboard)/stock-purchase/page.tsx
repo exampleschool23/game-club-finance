@@ -6,7 +6,13 @@ import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatCurrencyInput, formatDateOnly, parseCurrencyInput } from '@/lib/formatters';
+import {
+  formatCurrency,
+  formatCurrencyInput,
+  formatDateOnly,
+  formatDatePickerValue,
+  parseCurrencyInput,
+} from '@/lib/formatters';
 import { calculateWeightedAverageCost } from '@/lib/calculations/stock';
 import {
   Calendar,
@@ -269,15 +275,20 @@ export default function StockPurchasePage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">{t('date')} <span className="text-danger-500">*</span></label>
-              <div className="flex h-11 items-center gap-3 rounded-lg border border-gray-200 bg-white px-3">
-                <Calendar size={17} className="text-primary-600" />
+              <label className="relative block h-11 w-full cursor-pointer">
                 <input
                   type="date"
-                  className="min-w-0 flex-1 bg-transparent font-semibold text-gray-900 outline-none"
+                  className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                   value={form.date}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
                   onChange={(event) => set('date', event.target.value)}
                 />
-              </div>
+                <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+                  <Calendar size={17} className="shrink-0 text-primary-600" />
+                  <span className="font-semibold text-gray-950">{formatDatePickerValue(form.date, locale)}</span>
+                  <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
+                </span>
+              </label>
             </div>
 
             <div>
