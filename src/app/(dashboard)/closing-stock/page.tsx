@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -8,7 +8,6 @@ import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatDatePickerValue } from '@/lib/formatters';
 import {
-  calculateClosingStockDefaults,
   calculateClosingStockFromSold,
   recalculateFutureStockCounts,
   calculateStockCountSummary,
@@ -16,12 +15,14 @@ import {
 import {
   applyClosingStockDraft,
   applyClosingStockImport,
+  buildEditableClosingStockRows,
   buildClosingStockUpserts,
   clearClosingStockDraft,
-  parseClosingStockNumber,
+  normalizeStockCount,
   readClosingStockDraft,
   saveClosingStockDraft,
   selectClosingStockImportRows,
+  type ClosingStockExistingCount,
   type ClosingStockRowData,
   type StorageLike,
 } from '@/lib/closingStock';
@@ -77,7 +78,17 @@ interface StockCountRow {
 type RowData = ClosingStockRowData;
 
 function parseNum(value: string): number {
-  return parseClosingStockNumber(value) ?? 0;
+  return normalizeStockCount(value);
+}
+
+function isWholeNumberInput(value: string): boolean {
+  return value === '' || /^\d+$/.test(value);
+}
+
+function preventNonIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
+  if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) {
+    event.preventDefault();
+  }
 }
 
 function getBrowserStorage(): StorageLike | null {
@@ -116,6 +127,9 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
 function isMissingDeletedColumn(error: { message?: string } | null | undefined) {
   return error?.message?.includes('is_deleted') ?? false;
 }
+
+const stickyHeaderCellClass = 'sticky top-0 z-20 border-b border-gray-100 bg-gray-50 px-4 py-4';
+const addedTodayHeaderCellClass = 'sticky top-0 z-20 border-b border-success-500/20 bg-success-50 px-4 py-4 text-success-600';
 
 async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
   const ordered = await supabase
@@ -262,35 +276,17 @@ export default function ClosingStockPage() {
   const buildEditableRows = useCallback(
     (
       products: Product[],
-      counts: Array<Record<string, number | string>>,
+      counts: ClosingStockExistingCount[],
       purchases: PurchaseQuantity[],
       previousClosings: Record<string, number>,
+      isCurrentDate: boolean,
     ) => {
-      const purchasesByProduct = purchases.reduce<Record<string, number>>(
-        (acc, purchase) => {
-          acc[purchase.product_id] = (acc[purchase.product_id] ?? 0) + Number(purchase.quantity ?? 0);
-          return acc;
-        },
-        {},
-      );
-
-      return sortRowsByProductOrder(products.map((product) => {
-        const existing = counts.find((count) => count.product_id === product.id);
-        const addedToday = purchasesByProduct[product.id] ?? 0;
-        const defaults = calculateClosingStockDefaults({
-          currentStock: product.current_stock,
-          purchasedToday: addedToday,
-        });
-        const previousClosing = previousClosings[product.id];
-        const previousStock = previousClosing ?? defaults.previousStock;
-
-        return {
-          product,
-          previousStock: existing ? String(existing.previous_stock) : String(previousStock),
-          addedToday: existing ? String(existing.added_today) : String(defaults.addedToday),
-          closingStock: existing ? String(existing.closing_stock) : String(previousClosing === undefined ? defaults.closingStock : previousStock + addedToday),
-          soldQuantity: existing ? String(existing.sold_quantity ?? 0) : '0',
-        };
+      return sortRowsByProductOrder(buildEditableClosingStockRows({
+        products,
+        counts,
+        purchases,
+        previousClosings,
+        isCurrentDate,
       }));
     },
     [],
@@ -364,6 +360,7 @@ export default function ClosingStockPage() {
             [],
             ((purchasesRes.data as PurchaseQuantity[]) ?? []),
             previousClosingsRes.data ?? {},
+            false,
         );
         setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, editableRows) : editableRows);
         setLoading(false);
@@ -426,9 +423,10 @@ export default function ClosingStockPage() {
 
     const editableRows = buildEditableRows(
         (productsRes.data ?? []) as Product[],
-        (countsRes.data ?? []) as Array<Record<string, number | string>>,
+        (countsRes.data ?? []) as ClosingStockExistingCount[],
         ((purchasesRes.data as PurchaseQuantity[]) ?? []),
         previousClosingsRes.data ?? {},
+        selectedDate === todayIso(),
     );
     setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, editableRows) : editableRows);
     setLoading(false);
@@ -443,6 +441,8 @@ export default function ClosingStockPage() {
 
   function updateRow(index: number, field: 'previousStock' | 'addedToday' | 'closingStock', value: string) {
     setRows((prev) => {
+      if (!isWholeNumberInput(value)) return prev;
+
       const copy = [...prev];
       const nextRow = { ...copy[index], [field]: value };
       nextRow.soldQuantity = String(calculateStockCountSummary({
@@ -459,6 +459,8 @@ export default function ClosingStockPage() {
 
   function updateSoldQuantity(index: number, value: string) {
     setRows((prev) => {
+      if (!isWholeNumberInput(value)) return prev;
+
       const copy = [...prev];
       const current = copy[index];
       const closingStock = calculateClosingStockFromSold(
@@ -780,23 +782,23 @@ export default function ClosingStockPage() {
           ) : rows.length === 0 ? (
             <div className="p-8 text-gray-500">{tc('noData')}</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-14rem)] overflow-auto">
               <table className="w-full min-w-[1120px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    <th className="w-12 px-5 py-4 text-left">#</th>
-                    <th className="min-w-[250px] px-4 py-4 text-left">{t('product')}</th>
-                    <th className="px-4 py-4 text-right">{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className="px-4 py-4 text-center">{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
-                    <th className="px-4 py-4 text-center">{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
-                    <th className="px-4 py-4 text-center">
+                    <th className={`${stickyHeaderCellClass} w-12 px-5 text-left`}>#</th>
+                    <th className={`${stickyHeaderCellClass} min-w-[250px] text-left`}>{t('product')}</th>
+                    <th className={`${stickyHeaderCellClass} text-right`}>{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                    <th className={`${stickyHeaderCellClass} text-center`}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className={`${addedTodayHeaderCellClass} text-center`}>{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className={`${stickyHeaderCellClass} text-center`}>
                       {t('closingStock')}
                       <br />
                       <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
                         {isReadOnly ? t('snapshot') : usesSoldEntry ? t('calculated') : t('youEnter')}
                       </span>
                     </th>
-                    <th className="px-4 py-4 text-center">
+                    <th className={`${stickyHeaderCellClass} text-center`}>
                       {t('soldQty')}
                       <br />
                       <span className="font-normal normal-case">({t('pcs')})</span>
@@ -809,8 +811,8 @@ export default function ClosingStockPage() {
                         </>
                       )}
                     </th>
-                    <th className="px-4 py-4 text-right">{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className="px-5 py-4 text-right">{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                    <th className={`${stickyHeaderCellClass} text-right`}>{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                    <th className={`${stickyHeaderCellClass} px-5 text-right`}>{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -839,7 +841,7 @@ export default function ClosingStockPage() {
                           </p>
                         </td>
                         <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.previousStock)}</td>
-                        <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.addedToday)}</td>
+                        <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{parseNum(row.addedToday)}</td>
                         <td className="px-4 py-4">
                           {isReadOnly || usesSoldEntry ? (
                             <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
@@ -847,9 +849,12 @@ export default function ClosingStockPage() {
                             <input
                               type="number"
                               min="0"
-                              step="0.01"
+                              step="1"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               className="input-field mx-auto h-10 w-32 text-center font-semibold"
                               value={row.closingStock}
+                              onKeyDown={preventNonIntegerNumberInput}
                               onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
                             />
                           )}
@@ -859,9 +864,12 @@ export default function ClosingStockPage() {
                             <input
                               type="number"
                               min="0"
-                              step="0.01"
+                              step="1"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               className="input-field mx-auto h-10 w-28 text-center font-semibold"
                               value={row.soldQuantity}
+                              onKeyDown={preventNonIntegerNumberInput}
                               onChange={(event) => updateSoldQuantity(originalIndex, event.target.value)}
                             />
                           ) : (
@@ -878,7 +886,7 @@ export default function ClosingStockPage() {
                     <td className="px-4 py-4">{t('totalRow', { count: rows.length })}</td>
                     <td className="px-4 py-4 text-right">{formatCurrency(totals.stockValue)}</td>
                     <td className="px-4 py-4 text-center">{totals.previous}</td>
-                    <td className="px-4 py-4 text-center">{totals.added}</td>
+                    <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{totals.added}</td>
                     <td className="px-4 py-4 text-center">—</td>
                     <td className="px-4 py-4 text-center">{totals.sold}</td>
                     <td className="px-4 py-4 text-right text-success-600">{formatCurrency(totals.income)}</td>

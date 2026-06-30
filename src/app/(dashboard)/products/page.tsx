@@ -302,6 +302,7 @@ export default function ProductsPage() {
         <DataTable
           keyExtractor={(r) => r.id}
           data={products}
+          stickyHeader
           columns={[
             { key: 'name', header: t('name') },
             {

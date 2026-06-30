@@ -4,6 +4,7 @@ import type { Product } from '@/types';
 import {
   applyClosingStockDraft,
   applyClosingStockImport,
+  buildEditableClosingStockRows,
   buildClosingStockUpserts,
   clearClosingStockDraft,
   closingStockDraftKey,
@@ -105,6 +106,105 @@ function sheetsFromWorkbook(sheets: Array<{ name: string; rows: unknown[][] }>):
     }),
   }));
 }
+
+describe('closing stock row defaults', () => {
+  it('does not leak current stock from later purchases into an unsaved historical date', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [
+        product({
+          id: 'cola-05',
+          name: 'Koka kola 0.5',
+          current_stock: 21,
+          cost_price: 5833,
+        }),
+      ],
+      counts: [],
+      purchases: [],
+      previousClosings: {},
+      isCurrentDate: false,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '0',
+      addedToday: '0',
+      closingStock: '0',
+      soldQuantity: '0',
+    });
+  });
+
+  it('keeps current-date defaults as live stock left after today purchases', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [
+        product({
+          id: 'cola-05',
+          name: 'Koka kola 0.5',
+          current_stock: 21,
+          cost_price: 5833,
+        }),
+      ],
+      counts: [],
+      purchases: [{ product_id: 'cola-05', quantity: 21 }],
+      previousClosings: {},
+      isCurrentDate: true,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '0',
+      addedToday: '21',
+      closingStock: '21',
+      soldQuantity: '0',
+    });
+  });
+
+  it('uses previous saved closing plus same-day purchases for historical defaults', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [
+        product({
+          id: 'cola-05',
+          name: 'Koka kola 0.5',
+          current_stock: 21,
+          cost_price: 5833,
+        }),
+      ],
+      counts: [],
+      purchases: [{ product_id: 'cola-05', quantity: 4 }],
+      previousClosings: { 'cola-05': 10 },
+      isCurrentDate: false,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '10',
+      addedToday: '4',
+      closingStock: '14',
+      soldQuantity: '0',
+    });
+  });
+
+  it('keeps saved stock count rows unchanged', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'cola-05', current_stock: 21 })],
+      counts: [
+        {
+          product_id: 'cola-05',
+          previous_stock: 7,
+          added_today: 2,
+          closing_stock: 6,
+          sold_quantity: 3,
+        },
+      ],
+      purchases: [{ product_id: 'cola-05', quantity: 21 }],
+      previousClosings: {},
+      isCurrentDate: false,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '7',
+      addedToday: '2',
+      closingStock: '6',
+      soldQuantity: '3',
+    });
+  });
+});
 
 describe('closing stock Excel import', () => {
   it('imports owner closing-stock values from an Excel sheet by product name', () => {
@@ -286,6 +386,26 @@ describe('closing stock Excel import', () => {
     expect(result.rows[1]).toMatchObject({ closingStock: '15', soldQuantity: '5' });
   });
 
+  it('normalizes decimal imported stock counts to whole numbers', () => {
+    const rows = [
+      row({
+        product: product({ id: 'cola', name: 'Cola 0.5L' }),
+        previousStock: '0',
+        addedToday: '21',
+        closingStock: '21',
+        soldQuantity: '0',
+      }),
+    ];
+    const importedRows = parseClosingStockImportRecords([
+      { Product: 'Cola 0.5L', 'Closing Stock': 20.2 },
+    ]);
+
+    const result = applyClosingStockImport(rows, importedRows, 'closingStock');
+
+    expect(result.matchedCount).toBe(1);
+    expect(result.rows[0]).toMatchObject({ closingStock: '20', soldQuantity: '1' });
+  });
+
   it('reports unmatched product rows instead of silently applying them to the wrong product', () => {
     const rows = [
       row({ product: product({ id: 'cola', name: 'Cola 1.5L' }) }),
@@ -424,6 +544,32 @@ describe('closing stock save payloads', () => {
       sold_quantity: 0,
       bar_income: 0,
       bar_profit: 0,
+    });
+  });
+
+  it('saves stock count quantities as integers', () => {
+    const { upserts } = buildClosingStockUpserts({
+      date: '2026-06-30',
+      createdBy: null,
+      updatedAt: '2026-06-30T18:00:00.000Z',
+      rows: [
+        row({
+          product: product({ id: 'cola', sale_price: 10000, cost_price: 5833 }),
+          previousStock: '0',
+          addedToday: '21',
+          closingStock: '20.2',
+        }),
+      ],
+    });
+
+    expect(upserts[0]).toMatchObject({
+      previous_stock: 0,
+      added_today: 21,
+      closing_stock: 20,
+      sold_quantity: 1,
+      bar_income: 10000,
+      bar_cost: 5833,
+      bar_profit: 4167,
     });
   });
 });

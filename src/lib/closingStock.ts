@@ -1,5 +1,6 @@
 import type { Product } from '../types';
 import {
+  calculateClosingStockDefaults,
   calculateClosingStockFromSold,
   calculateStockCountSummary,
 } from './calculations/stock';
@@ -76,6 +77,27 @@ export interface ClosingStockUpsert {
   bar_profit: number;
   created_by: string | null;
   updated_at: string;
+}
+
+export interface ClosingStockExistingCount {
+  product_id: string;
+  previous_stock?: number | string | null;
+  added_today?: number | string | null;
+  closing_stock?: number | string | null;
+  sold_quantity?: number | string | null;
+}
+
+export interface ClosingStockPurchaseQuantity {
+  product_id: string;
+  quantity: number | string | null;
+}
+
+export interface BuildEditableClosingStockRowsInput {
+  products: Product[];
+  counts: ClosingStockExistingCount[];
+  purchases: ClosingStockPurchaseQuantity[];
+  previousClosings: Record<string, number>;
+  isCurrentDate: boolean;
 }
 
 const headerAliases = {
@@ -237,8 +259,17 @@ export function parseClosingStockNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatStockValue(value: number): string {
-  return Number.isInteger(value) ? String(value) : String(value);
+export function normalizeStockCount(value: unknown): number {
+  const parsed = parseClosingStockNumber(value);
+  return parsed === null ? 0 : Math.max(0, Math.trunc(parsed));
+}
+
+function formatStockValue(value: unknown): string {
+  return String(normalizeStockCount(value));
+}
+
+function formatEditableStockValue(value: unknown): string {
+  return String(value ?? '').trim() === '' ? '' : formatStockValue(value);
 }
 
 export function closingStockDraftKey(date: string, clubId?: string): string {
@@ -321,10 +352,10 @@ export function applyClosingStockDraft(
 
     return {
       ...row,
-      previousStock: draftRow.previousStock,
-      addedToday: draftRow.addedToday,
-      closingStock: draftRow.closingStock,
-      soldQuantity: draftRow.soldQuantity,
+      previousStock: formatEditableStockValue(draftRow.previousStock),
+      addedToday: formatEditableStockValue(draftRow.addedToday),
+      closingStock: formatEditableStockValue(draftRow.closingStock),
+      soldQuantity: formatEditableStockValue(draftRow.soldQuantity),
     };
   });
 }
@@ -403,22 +434,24 @@ function applyImportToRow(
     next.addedToday = formatStockValue(imported.addedToday);
   }
 
-  const previousStock = parseClosingStockNumber(next.previousStock) ?? 0;
-  const addedToday = parseClosingStockNumber(next.addedToday) ?? 0;
+  const previousStock = normalizeStockCount(next.previousStock);
+  const addedToday = normalizeStockCount(next.addedToday);
 
   if (mode === 'soldQuantity') {
     if (imported.soldQuantity !== undefined) {
-      next.soldQuantity = formatStockValue(imported.soldQuantity);
-      next.closingStock = formatStockValue(calculateClosingStockFromSold(previousStock, addedToday, imported.soldQuantity));
+      const soldQuantity = normalizeStockCount(imported.soldQuantity);
+      next.soldQuantity = formatStockValue(soldQuantity);
+      next.closingStock = formatStockValue(calculateClosingStockFromSold(previousStock, addedToday, soldQuantity));
       return next;
     }
 
     if (imported.closingStock !== undefined) {
-      next.closingStock = formatStockValue(imported.closingStock);
+      const closingStock = normalizeStockCount(imported.closingStock);
+      next.closingStock = formatStockValue(closingStock);
       next.soldQuantity = formatStockValue(calculateStockCountSummary({
         previousStock,
         addedToday,
-        closingStock: imported.closingStock,
+        closingStock,
         salePrice: row.product.sale_price,
         costPrice: row.product.cost_price,
       }).soldQuantity);
@@ -428,11 +461,12 @@ function applyImportToRow(
   }
 
   if (imported.closingStock !== undefined) {
-    next.closingStock = formatStockValue(imported.closingStock);
+    const closingStock = normalizeStockCount(imported.closingStock);
+    next.closingStock = formatStockValue(closingStock);
     next.soldQuantity = formatStockValue(calculateStockCountSummary({
       previousStock,
       addedToday,
-      closingStock: imported.closingStock,
+      closingStock,
       salePrice: row.product.sale_price,
       costPrice: row.product.cost_price,
     }).soldQuantity);
@@ -440,8 +474,9 @@ function applyImportToRow(
   }
 
   if (imported.soldQuantity !== undefined) {
-    next.soldQuantity = formatStockValue(imported.soldQuantity);
-    next.closingStock = formatStockValue(calculateClosingStockFromSold(previousStock, addedToday, imported.soldQuantity));
+    const soldQuantity = normalizeStockCount(imported.soldQuantity);
+    next.soldQuantity = formatStockValue(soldQuantity);
+    next.closingStock = formatStockValue(calculateClosingStockFromSold(previousStock, addedToday, soldQuantity));
   }
 
   return next;
@@ -520,6 +555,44 @@ export function applyClosingStockImport(
   };
 }
 
+export function buildEditableClosingStockRows({
+  products,
+  counts,
+  purchases,
+  previousClosings,
+  isCurrentDate,
+}: BuildEditableClosingStockRowsInput): ClosingStockRowData[] {
+  const purchasesByProduct = purchases.reduce<Record<string, number>>(
+    (acc, purchase) => {
+      acc[purchase.product_id] = (acc[purchase.product_id] ?? 0) + Number(purchase.quantity ?? 0);
+      return acc;
+    },
+    {},
+  );
+
+  return products.map((product) => {
+    const existing = counts.find((count) => count.product_id === product.id);
+    const addedToday = purchasesByProduct[product.id] ?? 0;
+    const defaults = calculateClosingStockDefaults({
+      currentStock: product.current_stock,
+      purchasedToday: addedToday,
+    });
+    const previousClosing = previousClosings[product.id];
+    const previousStock = previousClosing ?? (isCurrentDate ? defaults.previousStock : 0);
+    const closingStock = previousClosing === undefined && isCurrentDate
+      ? defaults.closingStock
+      : previousStock + addedToday;
+
+    return {
+      product,
+      previousStock: existing ? formatStockValue(existing.previous_stock) : formatStockValue(previousStock),
+      addedToday: existing ? formatStockValue(existing.added_today) : formatStockValue(defaults.addedToday),
+      closingStock: existing ? formatStockValue(existing.closing_stock) : formatStockValue(closingStock),
+      soldQuantity: existing ? formatStockValue(existing.sold_quantity) : '0',
+    };
+  });
+}
+
 export function buildClosingStockUpserts({
   date,
   rows,
@@ -532,9 +605,9 @@ export function buildClosingStockUpserts({
   updatedAt?: string;
 }): { upserts: ClosingStockUpsert[]; savedClosings: Record<string, number> } {
   const upserts = rows.map((row) => {
-    const previousStock = parseClosingStockNumber(row.previousStock) ?? 0;
-    const addedToday = parseClosingStockNumber(row.addedToday) ?? 0;
-    const closingStock = parseClosingStockNumber(row.closingStock) ?? 0;
+    const previousStock = normalizeStockCount(row.previousStock);
+    const addedToday = normalizeStockCount(row.addedToday);
+    const closingStock = normalizeStockCount(row.closingStock);
     const { soldQuantity, barIncome, barCost, barProfit } = calculateStockCountSummary({
       previousStock,
       addedToday,
