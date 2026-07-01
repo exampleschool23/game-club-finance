@@ -291,6 +291,8 @@
     "submit": "Save Expense",
     "success": "Expense saved",
     "recentExpenses": "Recent Expenses",
+    "addCategory": "Add new category",
+    "customCategoryPlaceholder": "New category name",
     "categories": {
       "rent": "Rent",
       "salary": "Salary",

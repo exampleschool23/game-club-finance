@@ -291,6 +291,8 @@
     "submit": "Сохранить расход",
     "success": "Расход сохранён",
     "recentExpenses": "Последние расходы",
+    "addCategory": "Добавить категорию",
+    "customCategoryPlaceholder": "Название новой категории",
     "categories": {
       "rent": "Аренда",
       "salary": "Зарплата",

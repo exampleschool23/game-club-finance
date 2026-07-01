@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -18,6 +18,11 @@ const CATEGORIES = [
   'rent', 'salary', 'electricity', 'internet', 'repair',
   'cleaning', 'food_drinks', 'marketing', 'equipment', 'tax', 'other',
 ];
+const CUSTOM_CATEGORY_VALUE = '__custom__';
+
+function normalizeCustomCategory(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
 
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
@@ -32,9 +37,28 @@ export default function ExpensesPage() {
     date: todayIso(),
     amount: '',
     category: 'other',
+    custom_category: '',
     payment_method: 'cash',
     comment: '',
   });
+
+  const customCategories = useMemo(() => {
+    const known = new Set(CATEGORIES);
+    return Array.from(
+      new Set(
+        expenses
+          .map((expense) => expense.category)
+          .filter((category) => category && !known.has(category)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+  }, [expenses]);
+
+  function categoryLabel(category: string): string {
+    if (CATEGORIES.includes(category)) {
+      return t(`categories.${category}` as Parameters<typeof t>[0]);
+    }
+    return category;
+  }
 
   const loadExpenses = useCallback(async () => {
     if (!selectedClubId) {
@@ -72,6 +96,13 @@ export default function ExpensesPage() {
       setError(tc('invalidAmount'));
       return;
     }
+    const category = form.category === CUSTOM_CATEGORY_VALUE
+      ? normalizeCustomCategory(form.custom_category)
+      : form.category;
+    if (!category) {
+      setError(tc('required'));
+      return;
+    }
     setSaving(true);
     setError('');
     setSuccess('');
@@ -83,7 +114,7 @@ export default function ExpensesPage() {
       club_id: selectedClubId,
       date: form.date,
       amount,
-      category: form.category,
+      category,
       payment_method: form.payment_method,
       comment: form.comment || null,
       created_by: session?.user?.id ?? null,
@@ -94,7 +125,7 @@ export default function ExpensesPage() {
       setError(err.message);
     } else {
       setSuccess(t('success'));
-      setForm({ date: todayIso(), amount: '', category: 'other', payment_method: 'cash', comment: '' });
+      setForm({ date: todayIso(), amount: '', category: 'other', custom_category: '', payment_method: 'cash', comment: '' });
       await loadExpenses();
     }
   }
@@ -145,10 +176,27 @@ export default function ExpensesPage() {
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
-                      {t(`categories.${c}`)}
+                      {categoryLabel(c)}
                     </option>
                   ))}
+                  {customCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_CATEGORY_VALUE}>{t('addCategory')}</option>
                 </select>
+                {form.category === CUSTOM_CATEGORY_VALUE && (
+                  <input
+                    type="text"
+                    className="input-field mt-2"
+                    value={form.custom_category}
+                    onChange={(e) => set('custom_category', e.target.value)}
+                    placeholder={t('customCategoryPlaceholder')}
+                    maxLength={80}
+                    required
+                  />
+                )}
               </div>
               <div>
                 <label className="label">{t('paymentMethod')}</label>
@@ -204,7 +252,7 @@ export default function ExpensesPage() {
                 {
                   key: 'category',
                   header: t('category'),
-                  render: (r) => t(`categories.${r.category}` as Parameters<typeof t>[0]),
+                  render: (r) => categoryLabel(r.category),
                 },
                 { key: 'payment_method', header: t('paymentMethod') },
                 { key: 'comment', header: tc('noData'), render: (r) => r.comment ?? '-' },

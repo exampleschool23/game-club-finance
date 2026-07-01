@@ -291,6 +291,8 @@
     "submit": "Xarajatni saqlash",
     "success": "Xarajat saqlandi",
     "recentExpenses": "So'nggi xarajatlar",
+    "addCategory": "Yangi kategoriya qo'shish",
+    "customCategoryPlaceholder": "Yangi kategoriya nomi",
     "categories": {
       "rent": "Ijara",
       "salary": "Maosh",
