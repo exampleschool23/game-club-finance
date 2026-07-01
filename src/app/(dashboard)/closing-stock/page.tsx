@@ -253,7 +253,7 @@ async function recalculateSavedFutureRows(
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
-  const { selectedClubId, role: currentRole } = useClub();
+  const { selectedClubId, selectedClub, role: currentRole } = useClub();
   const { locale } = useAppLocale();
   const today = todayIso();
   const [date, setDate] = useState(todayIso());
@@ -267,8 +267,10 @@ export default function ClosingStockPage() {
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
   const isAdmin = currentRole === 'admin';
-  const usesSoldEntry = isAdmin && !isHistoricalDate;
-  const usesClosingEntry = isOwner;
+  const canEditStockCounts = isOwner || (isAdmin && !isHistoricalDate);
+  const isPixelGameClub = selectedClub?.name.toLowerCase().includes('pixel') ?? false;
+  const usesSoldEntry = canEditStockCounts && isPixelGameClub;
+  const usesClosingEntry = canEditStockCounts && !usesSoldEntry;
   const canSave = usesClosingEntry || usesSoldEntry;
   const isReadOnly = !canSave;
   const isHistoricalReadOnly = isHistoricalDate && !isOwner;
