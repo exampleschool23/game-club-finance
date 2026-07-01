@@ -13,7 +13,7 @@ import {
   formatDatePickerValue,
   parseCurrencyInput,
 } from '@/lib/formatters';
-import { calculateWeightedAverageCost } from '@/lib/calculations/stock';
+import { calculateStockCountSummary, calculateWeightedAverageCost } from '@/lib/calculations/stock';
 import {
   Calendar,
   Check,
@@ -273,13 +273,59 @@ export default function StockPurchasePage() {
       .eq('club_id', selectedClubId)
       .eq('id', purchase.product_id);
 
-    setDeletingId(null);
-
     if (stockError) {
+      setDeletingId(null);
       setError(stockError.message);
       await loadData();
       return;
     }
+
+    const { data: savedCount, error: savedCountError } = await supabase
+      .from('daily_stock_counts')
+      .select('id,previous_stock,added_today,closing_stock,sale_price,cost_price')
+      .eq('club_id', selectedClubId)
+      .eq('date', purchase.date)
+      .eq('product_id', purchase.product_id)
+      .maybeSingle();
+
+    if (savedCountError) {
+      setDeletingId(null);
+      setError(savedCountError.message);
+      await loadData();
+      return;
+    }
+
+    if (savedCount) {
+      const addedToday = Math.max(0, Number(savedCount.added_today ?? 0) - Number(purchase.quantity ?? 0));
+      const summary = calculateStockCountSummary({
+        previousStock: Number(savedCount.previous_stock ?? 0),
+        addedToday,
+        closingStock: Number(savedCount.closing_stock ?? 0),
+        salePrice: Number(savedCount.sale_price ?? purchase.sale_price ?? purchase.products?.sale_price ?? 0),
+        costPrice: Number(savedCount.cost_price ?? purchase.cost_price ?? purchase.products?.cost_price ?? 0),
+      });
+      const { error: countUpdateError } = await supabase
+        .from('daily_stock_counts')
+        .update({
+          added_today: addedToday,
+          sold_quantity: summary.soldQuantity,
+          bar_income: summary.barIncome,
+          bar_cost: summary.barCost,
+          bar_profit: summary.barProfit,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('club_id', selectedClubId)
+        .eq('id', savedCount.id);
+
+      if (countUpdateError) {
+        setDeletingId(null);
+        setError(countUpdateError.message);
+        await loadData();
+        return;
+      }
+    }
+
+    setDeletingId(null);
 
     setSuccess(t('deleteSuccess'));
     await loadData();

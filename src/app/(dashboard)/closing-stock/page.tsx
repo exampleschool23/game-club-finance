@@ -394,7 +394,7 @@ export default function ClosingStockPage() {
             soldQuantity: String(count.sold_quantity ?? 0),
           }];
         }));
-      setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, savedRows) : savedRows);
+      setRows(savedRows);
       setLoading(false);
       return;
     }
@@ -421,14 +421,15 @@ export default function ClosingStockPage() {
       return;
     }
 
+    const existingCounts = (countsRes.data ?? []) as ClosingStockExistingCount[];
     const editableRows = buildEditableRows(
         (productsRes.data ?? []) as Product[],
-        (countsRes.data ?? []) as ClosingStockExistingCount[],
+        existingCounts,
         ((purchasesRes.data as PurchaseQuantity[]) ?? []),
         previousClosingsRes.data ?? {},
         selectedDate === todayIso(),
     );
-    setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, editableRows) : editableRows);
+    setRows(canUseDraft && existingCounts.length === 0 ? applyBrowserDraft(selectedDate, selectedClubId, editableRows) : editableRows);
     setLoading(false);
   }, [buildEditableRows, currentRole, selectedClubId]);
 
