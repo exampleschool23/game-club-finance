@@ -181,6 +181,7 @@
     "importEmpty": "Excel faylda import qilinadigan qatorlar yo'q",
     "importNoMatches": "Excel faylda mos mahsulotlar topilmadi",
     "importFailed": "Bu Excel faylni import qilib bo'lmadi",
+    "salePrice": "Sotish narxi",
     "costBasis": "Xarid narxi",
     "youEnter": "Siz kiritasiz",
     "calculated": "Hisoblangan",

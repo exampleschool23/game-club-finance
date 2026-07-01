@@ -783,11 +783,12 @@ export default function ClosingStockPage() {
             <div className="p-8 text-gray-500">{tc('noData')}</div>
           ) : (
             <div className="max-h-[calc(100vh-14rem)] overflow-auto">
-              <table className="w-full min-w-[1120px] text-sm">
+              <table className="w-full min-w-[1240px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     <th className={`${stickyHeaderCellClass} w-12 px-5 text-left`}>#</th>
                     <th className={`${stickyHeaderCellClass} min-w-[250px] text-left`}>{t('product')}</th>
+                    <th className={`${stickyHeaderCellClass} text-right`}>{t('salePrice')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className={`${stickyHeaderCellClass} text-right`}>{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className={`${stickyHeaderCellClass} text-center`}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className={`${addedTodayHeaderCellClass} text-center`}>{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
@@ -829,11 +830,11 @@ export default function ClosingStockPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="font-bold text-gray-900">{row.product.name}</p>
-                              <p className="mt-1 text-xs text-gray-500">{t('saleLabel')} {formatCurrency(row.product.sale_price)} {tc('currency')}</p>
-                              <p className="text-xs text-gray-500">{t('costLabel')} {formatCurrency(row.product.cost_price)} {tc('currency')}</p>
+                              <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatCurrency(row.product.cost_price)} {tc('currency')}</p>
                             </div>
                           </div>
                         </td>
+                        <td className="px-4 py-4 text-right font-semibold text-gray-900">{formatCurrency(row.product.sale_price)}</td>
                         <td className="px-4 py-4 text-right">
                           <p className="font-semibold text-gray-900">{formatCurrency(row.product.cost_price)}</p>
                           <p className="mt-1 text-xs text-gray-500">
@@ -884,6 +885,7 @@ export default function ClosingStockPage() {
                   <tr className="bg-white font-bold text-gray-900">
                     <td className="px-5 py-4" />
                     <td className="px-4 py-4">{t('totalRow', { count: rows.length })}</td>
+                    <td className="px-4 py-4" />
                     <td className="px-4 py-4 text-right">{formatCurrency(totals.stockValue)}</td>
                     <td className="px-4 py-4 text-center">{totals.previous}</td>
                     <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{totals.added}</td>

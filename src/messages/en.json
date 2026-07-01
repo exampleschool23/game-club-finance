@@ -181,6 +181,7 @@
     "importEmpty": "The Excel file does not contain importable rows",
     "importNoMatches": "No matching products were found in the Excel file",
     "importFailed": "Could not import this Excel file",
+    "salePrice": "Sale Price",
     "costBasis": "Cost Basis",
     "youEnter": "You enter",
     "calculated": "Calculated",

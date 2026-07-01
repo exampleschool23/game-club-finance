@@ -181,6 +181,7 @@
     "importEmpty": "В Excel-файле нет строк для импорта",
     "importNoMatches": "В Excel-файле не найдены совпадающие товары",
     "importFailed": "Не удалось импортировать этот Excel-файл",
+    "salePrice": "Цена продажи",
     "costBasis": "Себестоимость",
     "youEnter": "Вы вводите",
     "calculated": "Рассчитано",
