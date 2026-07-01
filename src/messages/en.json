@@ -221,6 +221,8 @@
     "comment": "Comment",
     "submit": "Record Purchase",
     "success": "Purchase recorded",
+    "deleteSuccess": "Purchase deleted",
+    "deleteConfirm": "Delete this purchase and subtract its quantity from current stock?",
     "recentPurchases": "Recent Purchases",
     "importFromExcel": "Import from Excel",
     "addNewPurchase": "Add New Purchase",

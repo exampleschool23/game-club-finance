@@ -35,7 +35,7 @@ import {
 import type { Product, StockPurchase } from '@/types';
 
 interface PurchaseWithProduct extends StockPurchase {
-  products: { name: string; sale_price?: number | null; cost_price?: number | null } | null;
+  products: { name: string; sale_price?: number | null; cost_price?: number | null; current_stock?: number | null } | null;
 }
 
 function parseQuantity(value: string) {
@@ -96,6 +96,7 @@ export default function StockPurchasePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<PurchaseWithProduct[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -122,7 +123,7 @@ export default function StockPurchasePage() {
       fetchActiveProductsOrdered(supabase, selectedClubId),
       supabase
         .from('stock_purchases')
-        .select('*, products(name, sale_price, cost_price)')
+        .select('*, products(name, sale_price, cost_price, current_stock)')
         .eq('club_id', selectedClubId)
         .order('created_at', { ascending: false })
         .limit(30),
@@ -233,6 +234,54 @@ export default function StockPurchasePage() {
 
     setSuccess(t('success'));
     resetForm();
+    await loadData();
+  }
+
+  async function handleDeletePurchase(purchase: PurchaseWithProduct) {
+    if (!selectedClubId) {
+      setError(tc('error'));
+      return;
+    }
+
+    if (!window.confirm(t('deleteConfirm'))) return;
+
+    setDeletingId(purchase.id);
+    setError('');
+    setSuccess('');
+
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from('stock_purchases')
+      .delete()
+      .eq('club_id', selectedClubId)
+      .eq('id', purchase.id);
+
+    if (deleteError) {
+      setDeletingId(null);
+      setError(deleteError.message);
+      return;
+    }
+
+    const currentStock = Number(purchase.products?.current_stock ?? 0);
+    const nextStock = Math.max(0, currentStock - Number(purchase.quantity ?? 0));
+    const { error: stockError } = await supabase
+      .from('products')
+      .update({
+        current_stock: nextStock,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('club_id', selectedClubId)
+      .eq('id', purchase.product_id);
+
+    setDeletingId(null);
+
+    if (stockError) {
+      setError(stockError.message);
+      await loadData();
+      return;
+    }
+
+    setSuccess(t('deleteSuccess'));
     await loadData();
   }
 
@@ -569,7 +618,12 @@ export default function StockPurchasePage() {
                         <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-200 text-primary-600">
                           <Plus size={16} />
                         </button>
-                        <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-danger-200 text-danger-500">
+                        <button
+                          type="button"
+                          disabled={deletingId === purchase.id}
+                          onClick={() => handleDeletePurchase(purchase)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-danger-200 text-danger-500 transition hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
                           <Trash2 size={16} />
                         </button>
                       </div>

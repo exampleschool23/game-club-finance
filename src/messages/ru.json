@@ -221,6 +221,8 @@
     "comment": "Комментарий",
     "submit": "Записать закупку",
     "success": "Закупка записана",
+    "deleteSuccess": "Закупка удалена",
+    "deleteConfirm": "Удалить эту закупку и вычесть количество из текущего остатка?",
     "recentPurchases": "Последние закупки",
     "importFromExcel": "Импорт из Excel",
     "addNewPurchase": "Добавить закупку",

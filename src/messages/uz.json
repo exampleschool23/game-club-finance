@@ -221,6 +221,8 @@
     "comment": "Izoh",
     "submit": "Xaridni qayd etish",
     "success": "Xarid qayd etildi",
+    "deleteSuccess": "Xarid o'chirildi",
+    "deleteConfirm": "Bu xarid o'chirilib, miqdori joriy qoldiqdan ayrilsinmi?",
     "recentPurchases": "So'nggi xaridlar",
     "importFromExcel": "Exceldan import",
     "addNewPurchase": "Yangi xarid qo'shish",
