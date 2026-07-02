@@ -10,6 +10,7 @@ import {
   Clock3,
   CreditCard,
   Edit3,
+  Gamepad2,
   Info,
   MonitorSmartphone,
   RefreshCcw,
@@ -31,6 +32,7 @@ interface CashFormData {
   cash_income: string;
   terminal_income: string;
   card_income: string;
+  playstation_income: string;
   comment: string;
 }
 
@@ -44,6 +46,7 @@ const emptyForm = (date = todayIso()): CashFormData => ({
   cash_income: '',
   terminal_income: '',
   card_income: '',
+  playstation_income: '',
   comment: '',
 });
 
@@ -70,6 +73,7 @@ function entryToForm(entry: DailyCashEntry): CashFormData {
     cash_income: amountToInput(entry.cash_income),
     terminal_income: amountToInput(entry.terminal_income),
     card_income: amountToInput(entry.card_income),
+    playstation_income: amountToInput(entry.playstation_income),
     comment: entry.comment ?? '',
   };
 }
@@ -96,23 +100,23 @@ function PaymentCard({
   const amount = parseAmount(value);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex items-start gap-4">
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconBgClassName}`}>
-          <Icon size={24} className={iconClassName} />
+    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconBgClassName}`}>
+          <Icon size={19} className={iconClassName} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-700">{label}</p>
-          <p className="mt-2 break-words text-xl font-bold leading-tight text-gray-950 sm:text-2xl">
+          <p className="text-xs font-bold text-gray-700">{label}</p>
+          <p className="mt-1 break-words text-lg font-bold leading-tight text-gray-950">
             {formatCurrency(amount)}
           </p>
-          <p className="text-xs font-medium text-gray-500">UZS</p>
+          <p className="text-[11px] font-medium text-gray-500">UZS</p>
         </div>
       </div>
       <input
         type="text"
         inputMode="numeric"
-        className="mt-6 h-12 w-full rounded-lg border border-gray-200 bg-white px-4 text-base font-semibold text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400"
+        className="mt-3 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400"
         placeholder="0"
         value={value}
         disabled={disabled}
@@ -231,8 +235,9 @@ export default function DailyCashPage() {
       cashIncome: parseAmount(form.cash_income),
       terminalIncome: parseAmount(form.terminal_income),
       cardIncome: parseAmount(form.card_income),
+      playstationIncome: parseAmount(form.playstation_income),
     }),
-    [form.cash_income, form.terminal_income, form.card_income],
+    [form.cash_income, form.terminal_income, form.card_income, form.playstation_income],
   );
 
   const total = calculateGameClubIncome(values);
@@ -271,6 +276,7 @@ export default function DailyCashPage() {
       cash_income: values.cashIncome,
       terminal_income: values.terminalIncome,
       card_income: values.cardIncome,
+      playstation_income: values.playstationIncome,
       comment: form.comment.trim() ? form.comment.trim() : null,
       updated_at: new Date().toISOString(),
     };
@@ -326,11 +332,11 @@ export default function DailyCashPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
-          <p className="mt-2 text-base text-gray-600">
+          <p className="mt-1 text-sm text-gray-600">
             {t('subtitle')}
           </p>
         </div>
@@ -345,7 +351,7 @@ export default function DailyCashPage() {
 
       <form
         onSubmit={handleSave}
-        className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6"
+        className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full sm:max-w-[300px]">
@@ -381,14 +387,14 @@ export default function DailyCashPage() {
           )}
         </div>
 
-        <div className="mt-6 rounded-lg border border-primary-200 bg-primary-50 p-4">
-          <div className="flex gap-3">
-            <Info size={21} className="mt-0.5 shrink-0 text-primary-600" />
+        <div className="mt-4 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2.5">
+          <div className="flex gap-2.5">
+            <Info size={18} className="mt-0.5 shrink-0 text-primary-600" />
             <div>
-              <p className="font-semibold text-primary-900">
+              <p className="text-sm font-semibold text-primary-900">
                 {t('gameClubOnly')}
               </p>
-              <p className="mt-1 text-sm text-primary-800">
+              <p className="text-xs text-primary-800">
                 {t('barSalesNote')}
               </p>
             </div>
@@ -401,14 +407,14 @@ export default function DailyCashPage() {
           </div>
         )}
 
-        <div className="mt-8">
-          <h2 className="text-lg font-bold text-gray-950">{t('incomeByMethod')}</h2>
-          <p className="mt-1 text-sm text-gray-600">
+        <div className="mt-5">
+          <h2 className="text-base font-bold text-gray-950">{t('incomeByMethod')}</h2>
+          <p className="mt-0.5 text-xs text-gray-600">
             {t('enterIncome')}
           </p>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <PaymentCard
             label={t('cash')}
             value={form.cash_income}
@@ -436,38 +442,47 @@ export default function DailyCashPage() {
             iconBgClassName="bg-purple-100"
             iconClassName="text-purple-600"
           />
+          <PaymentCard
+            label={t('playstation')}
+            value={form.playstation_income}
+            disabled={disabled}
+            onChange={(value) => setField('playstation_income', value)}
+            icon={Gamepad2}
+            iconBgClassName="bg-amber-100"
+            iconClassName="text-amber-600"
+          />
         </div>
 
-        <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4 sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-gray-600">{t('totalGameClubIncome')}</p>
-              <p className="mt-2 break-words text-2xl font-bold text-green-600 sm:text-3xl">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('totalGameClubIncome')}</p>
+              <p className="mt-1 break-words text-2xl font-bold text-green-600">
                 {formatCurrency(total)} UZS
               </p>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
-              <TrendingUp size={22} className="text-green-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-100">
+              <TrendingUp size={19} className="text-green-600" />
             </div>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-sm font-semibold text-gray-500">{t('barSales')}</p>
-            <p className="mt-2 break-words text-xl font-bold text-gray-950 sm:text-2xl">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs font-semibold text-gray-500">{t('barSales')}</p>
+            <p className="mt-1 break-words text-lg font-bold text-gray-950">
               {formatCurrency(barSummary.sales)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-sm font-semibold text-gray-500">{t('barProfit')}</p>
-            <p className="mt-2 break-words text-xl font-bold text-green-600 sm:text-2xl">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs font-semibold text-gray-500">{t('barProfit')}</p>
+            <p className="mt-1 break-words text-lg font-bold text-green-600">
               {formatCurrency(barSummary.profit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-sm font-semibold text-gray-500">{t('netProfit')}</p>
-            <p className="mt-2 break-words text-xl font-bold text-primary-600 sm:text-2xl">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs font-semibold text-gray-500">{t('netProfit')}</p>
+            <p className="mt-1 break-words text-lg font-bold text-primary-600">
               {formatCurrency(netProfit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
@@ -545,7 +560,7 @@ export default function DailyCashPage() {
             )}
           </div>
 
-          <div className="mt-6 grid grid-cols-1 divide-y divide-gray-100 rounded-lg border border-gray-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 divide-x divide-y divide-gray-100 rounded-lg border border-gray-200 lg:grid-cols-5 lg:divide-y-0">
             <div className="p-4">
               <p className="text-sm font-medium text-gray-500">{t('cash')}</p>
               <p className="mt-1 text-lg font-bold text-gray-950">
@@ -565,6 +580,12 @@ export default function DailyCashPage() {
               </p>
             </div>
             <div className="p-4">
+              <p className="text-sm font-medium text-gray-500">{t('playstation')}</p>
+              <p className="mt-1 text-lg font-bold text-gray-950">
+                {formatCurrency(entry.playstation_income ?? 0)} <span className="text-sm font-medium">UZS</span>
+              </p>
+            </div>
+            <div className="p-4">
               <p className="text-sm font-medium text-gray-500">{t('total')}</p>
               <p className="mt-1 text-lg font-bold text-green-600">
                 {formatCurrency(
@@ -572,6 +593,7 @@ export default function DailyCashPage() {
                     cashIncome: entry.cash_income,
                     terminalIncome: entry.terminal_income,
                     cardIncome: entry.card_income,
+                    playstationIncome: entry.playstation_income ?? 0,
                   }),
                 )}{' '}
                 UZS

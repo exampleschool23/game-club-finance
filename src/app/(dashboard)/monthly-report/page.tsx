@@ -48,7 +48,7 @@ export default function MonthlyReportPage() {
     const [cashRes, stockRes, expRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
-        .select('date,cash_income,terminal_income,card_income')
+        .select('date,cash_income,terminal_income,card_income,playstation_income')
         .eq('club_id', selectedClubId)
         .gte('date', from)
         .lte('date', to),
@@ -85,6 +85,7 @@ export default function MonthlyReportPage() {
             cashIncome: cashEntry.cash_income,
             terminalIncome: cashEntry.terminal_income,
             cardIncome: cashEntry.card_income,
+            playstationIncome: cashEntry.playstation_income ?? 0,
           })
         : 0;
       const barIncome = stockCounts

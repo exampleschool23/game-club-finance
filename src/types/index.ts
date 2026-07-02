@@ -117,6 +117,7 @@ export interface DailyCashEntry {
   cash_income: number;
   terminal_income: number;
   card_income: number;
+  playstation_income: number;
   comment: string | null;
   created_by: string | null;
   created_at: string;

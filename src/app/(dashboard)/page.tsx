@@ -5,13 +5,12 @@ import {
   Banknote,
   Boxes,
   ChartNoAxesCombined,
-  CreditCard,
   Gamepad2,
+  MonitorSmartphone,
   Receipt,
   ShoppingBag,
   TrendingUp,
   UserRoundCheck,
-  WalletCards,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
@@ -43,6 +42,7 @@ import {
   type DashboardTotals,
   type ExpenseRow,
   type StockCountRow,
+  type StockPurchaseCostRow,
   type TrendRow,
 } from '@/lib/calculations/dashboardMetrics';
 import type { Product } from '@/types';
@@ -75,6 +75,7 @@ type DashboardDescriptionKey =
   | 'cashIncomeDesc'
   | 'terminalIncomeDesc'
   | 'cardIncomeDesc'
+  | 'playstationIncomeDesc'
   | 'barSalesDesc'
   | 'productPurchaseDesc'
   | 'debtPaymentSuffix'
@@ -146,6 +147,12 @@ function productName(relation: StockPurchaseRow['products']): string | null {
   return Array.isArray(relation) ? relation[0]?.name ?? null : relation.name;
 }
 
+function transactionTimeMs(row: DashboardTransactionRow): number {
+  if (!row.timeValue) return 0;
+  const parsed = Date.parse(row.timeValue);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export default function DashboardPage() {
   const { selectedDate } = useDashboardDate();
   const { selectedClubId } = useClub();
@@ -186,15 +193,17 @@ export default function DashboardPage() {
       debtPaymentsRes,
       prevCashRes,
       prevStockRes,
+      prevPurchaseRes,
       prevExpenseRes,
       trendCashRes,
       trendStockRes,
+      trendPurchaseRes,
       trendExpenseRes,
     ] = await Promise.all([
       inRangeQuery(
         supabase
           .from('daily_cash_entries')
-          .select('date,cash_income,terminal_income,card_income,created_at')
+          .select('date,cash_income,terminal_income,card_income,playstation_income,created_at')
           .eq('club_id', selectedClubId),
         range,
       ),
@@ -237,7 +246,7 @@ export default function DashboardPage() {
       inRangeQuery(
         supabase
           .from('daily_cash_entries')
-          .select('date,cash_income,terminal_income,card_income')
+          .select('date,cash_income,terminal_income,card_income,playstation_income')
           .eq('club_id', selectedClubId),
         previousRange,
       ),
@@ -250,6 +259,13 @@ export default function DashboardPage() {
       ),
       inRangeQuery(
         supabase
+          .from('stock_purchases')
+          .select('date,quantity,cost_price,created_at')
+          .eq('club_id', selectedClubId),
+        previousRange,
+      ),
+      inRangeQuery(
+        supabase
           .from('expenses')
           .select('id,date,amount,category,comment,created_at')
           .eq('club_id', selectedClubId),
@@ -257,13 +273,19 @@ export default function DashboardPage() {
       ),
       supabase
         .from('daily_cash_entries')
-        .select('date,cash_income,terminal_income,card_income')
+        .select('date,cash_income,terminal_income,card_income,playstation_income')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to),
       supabase
         .from('daily_stock_counts')
         .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
+        .eq('club_id', selectedClubId)
+        .gte('date', range.from)
+        .lte('date', range.to),
+      supabase
+        .from('stock_purchases')
+        .select('date,quantity,cost_price,created_at')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to),
@@ -285,9 +307,11 @@ export default function DashboardPage() {
       debtPaymentsRes.error,
       prevCashRes.error,
       prevStockRes.error,
+      prevPurchaseRes.error,
       prevExpenseRes.error,
       trendCashRes.error,
       trendStockRes.error,
+      trendPurchaseRes.error,
       trendExpenseRes.error,
     ].find(Boolean);
 
@@ -307,10 +331,11 @@ export default function DashboardPage() {
     const activeDebts = debts.filter((debt) => debt.status !== 'paid');
     const debtNameById = new Map(debts.map((debt) => [debt.id, debt.person_name]));
 
-    const totals = calculateDashboardTotals(cashRows, stockRows, expenseRows, products, activeDebts);
+    const totals = calculateDashboardTotals(cashRows, stockRows, purchases, expenseRows, products, activeDebts);
     const previousTotals = calculateDashboardTotals(
       (prevCashRes.data ?? []) as DailyCashRow[],
       (prevStockRes.data ?? []) as StockCountRow[],
+      (prevPurchaseRes.data ?? []) as StockPurchaseCostRow[],
       (prevExpenseRes.data ?? []) as ExpenseRow[],
       products,
       activeDebts,
@@ -318,8 +343,9 @@ export default function DashboardPage() {
 
     const trendCashRows = (trendCashRes.data ?? []) as DailyCashRow[];
     const trendStockRows = (trendStockRes.data ?? []) as StockCountRow[];
+    const trendPurchaseRows = (trendPurchaseRes.data ?? []) as StockPurchaseCostRow[];
     const trendExpenseRows = (trendExpenseRes.data ?? []) as ExpenseRow[];
-    const trend = buildPeriodTrend(range, trendCashRows, trendStockRows, trendExpenseRows);
+    const trend = buildPeriodTrend(range, trendCashRows, trendStockRows, trendPurchaseRows, trendExpenseRows);
 
     const lowStockCount = products.filter(
       (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
@@ -333,7 +359,7 @@ export default function DashboardPage() {
       ([category, value]) => ({ category, value }),
     ).sort((a, b) => b.value - a.value);
 
-    const transactions: DashboardTransactionRow[] = [
+    const transactions = ([
       ...cashRows.flatMap((row) => {
         const createdAt = row.created_at ?? `${row.date}T00:00:00`;
         return [
@@ -361,6 +387,15 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 descriptionKey: 'cardIncomeDesc' as const,
                 amount: row.card_income,
+                timeValue: createdAt,
+              }
+            : null,
+          (row.playstation_income ?? 0) > 0
+            ? {
+                id: `playstation-${row.date}`,
+                type: 'Income' as const,
+                descriptionKey: 'playstationIncomeDesc' as const,
+                amount: row.playstation_income ?? 0,
                 timeValue: createdAt,
               }
             : null,
@@ -400,9 +435,10 @@ export default function DashboardPage() {
         amount: row.amount,
         timeValue: row.created_at,
       })),
-    ]
-      .filter(Boolean)
-      .slice(0, 8) as DashboardTransactionRow[];
+    ] as Array<DashboardTransactionRow | null>)
+      .filter((row): row is DashboardTransactionRow => Boolean(row))
+      .sort((a, b) => transactionTimeMs(b) - transactionTimeMs(a))
+      .slice(0, 8);
 
     setData({
       totals,
@@ -477,8 +513,10 @@ export default function DashboardPage() {
   });
 
   const incomeExpenseData = [
-    { name: t('gameClubIncome'), value: totals.gameClubIncome, fill: '#2563eb' },
-    { name: t('barIncome'), value: totals.barIncome, fill: '#f97316' },
+    { name: t('gameClubIncome'), value: totals.computerIncome, fill: '#2563eb' },
+    { name: t('playstationIncome'), value: totals.playstationIncome, fill: '#f59e0b' },
+    { name: t('barSales'), value: totals.barSales, fill: '#f97316' },
+    { name: t('stockPurchases'), value: totals.stockPurchaseCost, fill: '#dc2626' },
     { name: t('totalExpenses'), value: totals.totalExpenses, fill: '#ef4444' },
     { name: t('netProfit'), value: totals.netProfit, fill: '#22c55e' },
   ];
@@ -490,9 +528,11 @@ export default function DashboardPage() {
   ];
 
   const categoryData = [
-    { name: t('gameClub'), value: totals.gameClubIncome, color: '#2563eb' },
-    { name: t('bar'), value: totals.barIncome, color: '#f97316' },
+    { name: t('gameClub'), value: totals.computerIncome, color: '#2563eb' },
+    { name: t('playstation'), value: totals.playstationIncome, color: '#f59e0b' },
+    { name: t('barMoneyLeft'), value: Math.max(0, totals.barIncome), color: '#f97316' },
   ];
+  const incomeCategoryTotal = categoryData.reduce((sum, row) => sum + row.value, 0);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -509,30 +549,50 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
         <MetricCard
           label={t('gameClubIncome')}
-          amount={totals.gameClubIncome}
-          icon={Gamepad2}
+          amount={totals.computerIncome}
+          icon={MonitorSmartphone}
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
-          comparison={{ value: percentChange(totals.gameClubIncome, previousTotals.gameClubIncome), label: incomeComparisonLabel }}
+          helper={t('gameClubIncomeMetricDesc')}
+          comparison={{ value: percentChange(totals.computerIncome, previousTotals.computerIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label={t('barIncome')}
-          amount={totals.barIncome}
-          icon={ShoppingBag}
+          label={t('totalBarMoney')}
+          amount={totals.barSales}
+          icon={Banknote}
           iconBgClassName="bg-orange-100"
           iconClassName="text-orange-600"
-          comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
+          helper={t('totalBarMoneyDesc')}
+          comparison={{ value: percentChange(totals.barSales, previousTotals.barSales), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label={t('totalIncome')}
-          amount={totals.totalIncome}
-          icon={Banknote}
+          label={t('stockPurchase')}
+          amount={totals.stockPurchaseCost}
+          icon={ShoppingBag}
+          iconBgClassName="bg-red-100"
+          iconClassName="text-red-500"
+          helper={t('stockPurchaseMetricDesc')}
+        />
+        <MetricCard
+          label={t('playstationIncome')}
+          amount={totals.playstationIncome}
+          icon={Gamepad2}
+          iconBgClassName="bg-amber-100"
+          iconClassName="text-amber-600"
+          helper={t('playstationIncomeMetricDesc')}
+          comparison={{ value: percentChange(totals.playstationIncome, previousTotals.playstationIncome), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label={t('barMoneyNetProfit')}
+          amount={totals.barIncome}
+          icon={ChartNoAxesCombined}
           iconBgClassName="bg-green-100"
           iconClassName="text-green-600"
-          comparison={{ value: percentChange(totals.totalIncome, previousTotals.totalIncome), label: incomeComparisonLabel }}
+          helper={t('barMoneyNetProfitDesc')}
+          comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
           label={t('totalExpenses')}
@@ -540,15 +600,8 @@ export default function DashboardPage() {
           icon={Receipt}
           iconBgClassName="bg-red-100"
           iconClassName="text-red-500"
+          helper={t('totalExpensesDesc')}
           comparison={{ value: percentChange(totals.totalExpenses, previousTotals.totalExpenses), label: incomeComparisonLabel }}
-        />
-        <MetricCard
-          label={t('netProfit')}
-          amount={totals.netProfit}
-          icon={ChartNoAxesCombined}
-          iconBgClassName="bg-purple-100"
-          iconClassName="text-purple-600"
-          comparison={{ value: percentChange(totals.netProfit, previousTotals.netProfit), label: incomeComparisonLabel }}
         />
         <MetricCard
           label={t('inventoryValue')}
@@ -556,7 +609,7 @@ export default function DashboardPage() {
           icon={Boxes}
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
-          helper={t('lowStockAlertsCount', { count: data.lowStockCount })}
+          helper={`${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
         />
       </div>
 
@@ -582,7 +635,7 @@ export default function DashboardPage() {
             <PaymentMethodChart
               title={`${t('incomeByPaymentMethod')} (${periodLabel})`}
               data={paymentData}
-              total={totals.gameClubIncome}
+              total={totals.computerIncome}
             />
             <IncomeTrendChart data={trend} />
           </div>
@@ -590,33 +643,43 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             <ExpensesByCategoryChart data={data.expenseCategories} total={totals.totalExpenses} />
             <RecentTransactionsTable rows={recentTransactions} />
-            <IncomeCategoryChart data={categoryData} total={totals.totalIncome} />
+            <IncomeCategoryChart data={categoryData} total={incomeCategoryTotal} />
           </div>
 
           <SummaryStrip
             items={[
               {
-                label: t('cashBalance'),
-                value: totals.cashIncome,
-                icon: Banknote,
+                label: t('computerCashier'),
+                value: totals.computerIncome,
+                icon: MonitorSmartphone,
                 iconBgClassName: 'bg-green-100',
                 iconClassName: 'text-green-600',
                 isCurrency: true,
               },
               {
-                label: t('terminalBalance'),
-                value: totals.terminalIncome,
-                icon: WalletCards,
-                iconBgClassName: 'bg-blue-100',
-                iconClassName: 'text-blue-600',
+                label: t('playstationCashier'),
+                value: totals.playstationIncome,
+                icon: Gamepad2,
+                iconBgClassName: 'bg-amber-100',
+                iconClassName: 'text-amber-600',
                 isCurrency: true,
               },
               {
-                label: t('cardIncome'),
-                value: totals.cardIncome,
-                icon: CreditCard,
-                iconBgClassName: 'bg-purple-100',
-                iconClassName: 'text-purple-600',
+                label: t('barMoneyLeft'),
+                value: totals.barIncome,
+                helper: `${t('barSales')}: ${formatCurrency(totals.barSales)} / ${t('stockPurchases')}: ${formatCurrency(totals.stockPurchaseCost)}`,
+                icon: ShoppingBag,
+                iconBgClassName: 'bg-orange-100',
+                iconClassName: 'text-orange-600',
+                isCurrency: true,
+              },
+              {
+                label: t('stockPurchases'),
+                value: totals.stockPurchaseCost,
+                helper: t('deductedFromBarSales'),
+                icon: Boxes,
+                iconBgClassName: 'bg-red-100',
+                iconClassName: 'text-red-500',
                 isCurrency: true,
               },
               {

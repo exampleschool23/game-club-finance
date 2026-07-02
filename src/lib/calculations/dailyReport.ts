@@ -4,6 +4,7 @@ export interface DailyCashEntry {
   cash_income: number;
   terminal_income: number;
   card_income: number;
+  playstation_income?: number;
 }
 
 export function calculateManualIncome(entry: DailyCashEntry): number {
@@ -11,6 +12,7 @@ export function calculateManualIncome(entry: DailyCashEntry): number {
     cashIncome: entry.cash_income,
     terminalIncome: entry.terminal_income,
     cardIncome: entry.card_income,
+    playstationIncome: entry.playstation_income ?? 0,
   });
 }
 

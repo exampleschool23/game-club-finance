@@ -42,17 +42,16 @@ export function MetricCard({
           <p className="text-sm font-medium text-gray-600">UZS</p>
         </div>
       </div>
+      {helper && <p className="mt-3 text-xs font-medium leading-snug text-gray-500">{helper}</p>}
       {comparison ? (
         <p
-          className={`mt-4 flex flex-wrap items-center gap-1 text-xs font-semibold ${
+          className={`mt-3 flex flex-wrap items-center gap-1 text-xs font-semibold ${
             isPositive ? 'text-green-600' : 'text-red-500'
           }`}
         >
           {isPositive ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
           {Math.abs(comparison.value)}% <span className="font-medium text-gray-500">{comparison.label}</span>
         </p>
-      ) : helper ? (
-        <p className="mt-4 text-xs font-medium text-gray-500">{helper}</p>
       ) : null}
     </div>
   );

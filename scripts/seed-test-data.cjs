@@ -97,11 +97,12 @@ async function seed() {
     cash_income: 1_200_000,
     terminal_income: 850_000,
     card_income: 350_000,
+    playstation_income: 250_000,
     comment: '[TEST DATA] Demo daily cash entry',
     updated_at: new Date().toISOString(),
   }, { onConflict: 'club_id,date' });
   if (cashError) { console.error('❌ Cash error:', cashError.message); process.exit(1); }
-  console.log('   ✅ Daily cash entry: 1,200,000 cash + 850,000 terminal + 350,000 card = 2,400,000 UZS');
+  console.log('   ✅ Daily cash entry: 1,200,000 cash + 850,000 terminal + 350,000 card + 250,000 PlayStation = 2,650,000 UZS');
 
   // 3. Stock purchases
   console.log('🛒 Inserting stock purchases...');

@@ -11,8 +11,9 @@ describe('calculateManualIncome', () => {
       cash_income: 100000,
       terminal_income: 50000,
       card_income: 30000,
+      playstation_income: 20000,
     };
-    expect(calculateManualIncome(entry)).toBe(180000);
+    expect(calculateManualIncome(entry)).toBe(200000);
   });
 
   it('returns 0 when all fields are 0', () => {
@@ -20,6 +21,7 @@ describe('calculateManualIncome', () => {
       cash_income: 0,
       terminal_income: 0,
       card_income: 0,
+      playstation_income: 0,
     };
     expect(calculateManualIncome(entry)).toBe(0);
   });

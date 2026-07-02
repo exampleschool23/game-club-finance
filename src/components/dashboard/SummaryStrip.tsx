@@ -19,7 +19,7 @@ interface SummaryStripProps {
 
 export function SummaryStrip({ items }: SummaryStripProps) {
   return (
-    <section className="grid grid-cols-1 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-3 2xl:grid-cols-5">
+    <section className="grid grid-cols-1 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-3 2xl:grid-cols-6">
       {items.map((item) => {
         const Icon = item.icon;
         return (

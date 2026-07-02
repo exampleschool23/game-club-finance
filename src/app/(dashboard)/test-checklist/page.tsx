@@ -54,12 +54,17 @@ export default async function TestChecklistPage() {
       cashIncome: cashEntry.cash_income,
       terminalIncome: cashEntry.terminal_income,
       cardIncome: cashEntry.card_income ?? 0,
+      playstationIncome: cashEntry.playstation_income ?? 0,
     });
     // No stored total field — this checks the logic is self-consistent
     checks.push({
       name: 'Daily cash fields are all non-negative',
-      pass: cashEntry.cash_income >= 0 && cashEntry.terminal_income >= 0 && (cashEntry.card_income ?? 0) >= 0,
-      explanation: `Cash: ${cashEntry.cash_income}, Terminal: ${cashEntry.terminal_income}, Card: ${cashEntry.card_income ?? 0} → Total: ${expected}`,
+      pass:
+        cashEntry.cash_income >= 0 &&
+        cashEntry.terminal_income >= 0 &&
+        (cashEntry.card_income ?? 0) >= 0 &&
+        (cashEntry.playstation_income ?? 0) >= 0,
+      explanation: `Cash: ${cashEntry.cash_income}, Terminal: ${cashEntry.terminal_income}, Card: ${cashEntry.card_income ?? 0}, PlayStation: ${cashEntry.playstation_income ?? 0} → Total: ${expected}`,
       link: '/daily-cash',
     });
   } else {
@@ -119,6 +124,7 @@ export default async function TestChecklistPage() {
       cashIncome: cashEntry.cash_income,
       terminalIncome: cashEntry.terminal_income,
       cardIncome: cashEntry.card_income ?? 0,
+      playstationIncome: cashEntry.playstation_income ?? 0,
     });
     const barIncome = stockRows.reduce((s, r) => s + (r.bar_income ?? 0), 0);
     const totalIncome = gameClub + barIncome;

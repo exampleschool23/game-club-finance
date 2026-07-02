@@ -1,5 +1,7 @@
 import { calculateGameClubIncome } from './dailyCash';
 
+export const STOCK_PURCHASE_DEDUCTION_START_DATE = '2026-07-02';
+
 export type DashboardPeriod =
   | 'today'
   | 'yesterday'
@@ -15,6 +17,7 @@ export interface DailyCashRow {
   cash_income: number;
   terminal_income: number;
   card_income: number;
+  playstation_income?: number;
   created_at?: string;
 }
 
@@ -25,6 +28,13 @@ export interface StockCountRow {
   bar_cost: number;
   sold_quantity: number;
   updated_at?: string;
+}
+
+export interface StockPurchaseCostRow {
+  date: string;
+  quantity: number;
+  cost_price: number;
+  created_at?: string;
 }
 
 export interface ExpenseRow {
@@ -50,7 +60,11 @@ export interface DashboardTotals {
   cashIncome: number;
   terminalIncome: number;
   cardIncome: number;
+  playstationIncome: number;
+  computerIncome: number;
   gameClubIncome: number;
+  barSales: number;
+  stockPurchaseCost: number;
   barIncome: number;
   totalIncome: number;
   totalExpenses: number;
@@ -71,7 +85,11 @@ export const emptyDashboardTotals: DashboardTotals = {
   cashIncome: 0,
   terminalIncome: 0,
   cardIncome: 0,
+  playstationIncome: 0,
+  computerIncome: 0,
   gameClubIncome: 0,
+  barSales: 0,
+  stockPurchaseCost: 0,
   barIncome: 0,
   totalIncome: 0,
   totalExpenses: 0,
@@ -165,28 +183,50 @@ export function getPreviousDashboardRange(range: {
 
 export function sumGameClubRows(rows: DailyCashRow[]): Pick<
   DashboardTotals,
-  'cashIncome' | 'terminalIncome' | 'cardIncome' | 'gameClubIncome'
+  | 'cashIncome'
+  | 'terminalIncome'
+  | 'cardIncome'
+  | 'playstationIncome'
+  | 'computerIncome'
+  | 'gameClubIncome'
 > {
   const cashIncome = rows.reduce((sum, row) => sum + Number(row.cash_income ?? 0), 0);
   const terminalIncome = rows.reduce((sum, row) => sum + Number(row.terminal_income ?? 0), 0);
   const cardIncome = rows.reduce((sum, row) => sum + Number(row.card_income ?? 0), 0);
+  const playstationIncome = rows.reduce((sum, row) => sum + Number(row.playstation_income ?? 0), 0);
+  const computerIncome = cashIncome + terminalIncome + cardIncome;
   return {
     cashIncome,
     terminalIncome,
     cardIncome,
-    gameClubIncome: calculateGameClubIncome({ cashIncome, terminalIncome, cardIncome }),
+    playstationIncome,
+    computerIncome,
+    gameClubIncome: calculateGameClubIncome({ cashIncome, terminalIncome, cardIncome, playstationIncome }),
   };
+}
+
+export function sumStockPurchaseCost(rows: StockPurchaseCostRow[]): number {
+  return rows.reduce(
+    (sum, row) =>
+      row.date >= STOCK_PURCHASE_DEDUCTION_START_DATE
+        ? sum + Number(row.quantity ?? 0) * Number(row.cost_price ?? 0)
+        : sum,
+    0,
+  );
 }
 
 export function calculateDashboardTotals(
   cashRows: DailyCashRow[],
   stockRows: StockCountRow[],
+  purchaseRows: StockPurchaseCostRow[],
   expenseRows: ExpenseRow[],
   products: ProductValueRow[],
   debts: DebtValueRow[],
 ): DashboardTotals {
   const gameClub = sumGameClubRows(cashRows);
-  const barIncome = stockRows.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
+  const barSales = stockRows.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
+  const stockPurchaseCost = sumStockPurchaseCost(purchaseRows);
+  const barIncome = barSales - stockPurchaseCost;
   const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
   const totalIncome = gameClub.gameClubIncome + barIncome;
   const netProfit = totalIncome - totalExpenses;
@@ -202,6 +242,8 @@ export function calculateDashboardTotals(
 
   return {
     ...gameClub,
+    barSales,
+    stockPurchaseCost,
     barIncome,
     totalIncome,
     totalExpenses,
@@ -222,19 +264,21 @@ export function buildIncomeTrend(
   endDate: string,
   cashRows: DailyCashRow[],
   stockRows: StockCountRow[],
+  purchaseRows: StockPurchaseCostRow[],
   expenseRows: ExpenseRow[],
 ): TrendRow[] {
   const trendDates = Array.from({ length: 7 }, (_, index) =>
     localIsoDate(addDays(parseLocalIsoDate(endDate), index - 6)),
   );
 
-  return buildTrendForDates(trendDates, cashRows, stockRows, expenseRows);
+  return buildTrendForDates(trendDates, cashRows, stockRows, purchaseRows, expenseRows);
 }
 
 export function buildPeriodTrend(
   range: { from: string; to: string },
   cashRows: DailyCashRow[],
   stockRows: StockCountRow[],
+  purchaseRows: StockPurchaseCostRow[],
   expenseRows: ExpenseRow[],
 ): TrendRow[] {
   const from = parseLocalIsoDate(range.from);
@@ -242,25 +286,28 @@ export function buildPeriodTrend(
   const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
   const trendDates = Array.from({ length: days }, (_, index) => localIsoDate(addDays(from, index)));
 
-  return buildTrendForDates(trendDates, cashRows, stockRows, expenseRows);
+  return buildTrendForDates(trendDates, cashRows, stockRows, purchaseRows, expenseRows);
 }
 
 function buildTrendForDates(
   trendDates: string[],
   cashRows: DailyCashRow[],
   stockRows: StockCountRow[],
+  purchaseRows: StockPurchaseCostRow[],
   expenseRows: ExpenseRow[],
 ): TrendRow[] {
   return trendDates.map((date) => {
     const dayCash = cashRows.filter((row) => row.date === date);
     const dayStock = stockRows.filter((row) => row.date === date);
+    const dayPurchases = purchaseRows.filter((row) => row.date === date);
     const dayExpenses = expenseRows.filter((row) => row.date === date);
     const dayGame = sumGameClubRows(dayCash).gameClubIncome;
-    const dayBar = dayStock.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
+    const dayBarSales = dayStock.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
+    const dayPurchaseCost = sumStockPurchaseCost(dayPurchases);
 
     return {
       date,
-      income: dayGame + dayBar,
+      income: dayGame + dayBarSales - dayPurchaseCost,
       expenses: dayExpenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
     };
   });

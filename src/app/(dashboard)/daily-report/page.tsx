@@ -99,6 +99,7 @@ export default function DailyReportPage() {
         cashIncome: cashEntry.cash_income,
         terminalIncome: cashEntry.terminal_income,
         cardIncome: cashEntry.card_income,
+        playstationIncome: cashEntry.playstation_income ?? 0,
       })
     : 0;
 
@@ -181,6 +182,12 @@ export default function DailyReportPage() {
                   <div>
                     <p className="text-gray-500">Card</p>
                     <p className="font-semibold">{formatCurrency(cashEntry.card_income)}</p>
+                  </div>
+                )}
+                {(cashEntry.playstation_income ?? 0) > 0 && (
+                  <div>
+                    <p className="text-gray-500">PlayStation</p>
+                    <p className="font-semibold">{formatCurrency(cashEntry.playstation_income ?? 0)}</p>
                   </div>
                 )}
               </div>
