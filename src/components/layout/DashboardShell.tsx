@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, createContext, useContext } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Clock3, Gamepad2, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { Sidebar } from './Sidebar';
@@ -108,10 +108,8 @@ function PendingApproval({ fullName }: { fullName: string }) {
 }
 
 export function DashboardShell({ initialEmail = '', children }: DashboardShellProps) {
-  const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [profileRole, setProfileRole] = useState<UserRole>('viewer');
   const [fullName, setFullName] = useState(initialEmail);
@@ -208,23 +206,8 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
     };
   }, [initialEmail, refreshClubs]);
 
-  useEffect(() => {
-    if (pendingPath === pathname) {
-      setPendingPath(null);
-    }
-  }, [pathname, pendingPath]);
-
-  useEffect(() => {
-    if (!pendingPath) return;
-    const timeout = window.setTimeout(() => setPendingPath(null), 10000);
-    return () => window.clearTimeout(timeout);
-  }, [pendingPath]);
-
-  function handleNavigate(href: string) {
+  function handleNavigate() {
     setSidebarOpen(false);
-    if (href !== pathname) {
-      setPendingPath(href);
-    }
   }
 
   const clubContextValue = useMemo(
@@ -281,8 +264,6 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
                 <DashboardContentLoading />
               ) : memberships.length === 0 ? (
                 <PendingApproval fullName={fullName} />
-              ) : pendingPath ? (
-                <DashboardContentLoading />
               ) : (
                 children
               )}
