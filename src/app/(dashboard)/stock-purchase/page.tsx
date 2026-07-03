@@ -19,6 +19,8 @@ import {
   Check,
   CheckCircle,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   CreditCard,
   Filter,
@@ -29,10 +31,11 @@ import {
   Search,
   ShoppingCart,
   Trash2,
-  Upload,
   Wallet,
 } from 'lucide-react';
 import type { Product, StockPurchase } from '@/types';
+
+const PURCHASES_PAGE_SIZE = 10;
 
 interface PurchaseWithProduct extends StockPurchase {
   products: { name: string; sale_price?: number | null; cost_price?: number | null; current_stock?: number | null } | null;
@@ -43,6 +46,9 @@ function parseQuantity(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function sanitizePurchaseSearch(value: string) {
+  return value.replace(/[,%()]/g, ' ').trim();
+}
 
 function productInitials(name: string) {
   return name
@@ -100,6 +106,9 @@ export default function StockPurchasePage() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [purchaseCount, setPurchaseCount] = useState(0);
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
 
   const [form, setForm] = useState({
     date: todayIso(),
@@ -111,36 +120,87 @@ export default function StockPurchasePage() {
     comment: '',
   });
 
-  const loadData = useCallback(async () => {
+  const purchaseSearch = query.trim();
+  const matchingProductIds = useMemo(() => {
+    const needle = purchaseSearch.toLowerCase();
+    if (!needle) return null;
+    return products
+      .filter((product) => product.name.toLowerCase().includes(needle))
+      .map((product) => product.id);
+  }, [products, purchaseSearch]);
+
+  const loadProducts = useCallback(async () => {
     if (!selectedClubId) {
       setProducts([]);
-      setPurchases([]);
       return;
     }
 
     const supabase = createClient();
-    const [productsRes, purchasesRes] = await Promise.all([
-      fetchActiveProductsOrdered(supabase, selectedClubId),
-      supabase
-        .from('stock_purchases')
-        .select('*, products(name, sale_price, cost_price, current_stock)')
-        .eq('club_id', selectedClubId)
-        .order('created_at', { ascending: false })
-        .limit(30),
-    ]);
+    const productsRes = await fetchActiveProductsOrdered(supabase, selectedClubId);
 
-    if (productsRes.error || purchasesRes.error) {
-      setError(productsRes.error?.message ?? purchasesRes.error?.message ?? tc('error'));
+    if (productsRes.error) {
+      setError(productsRes.error.message);
       return;
     }
 
     setProducts(productsRes.data ?? []);
-    setPurchases((purchasesRes.data as PurchaseWithProduct[]) ?? []);
-  }, [selectedClubId, tc]);
+  }, [selectedClubId]);
+
+  const loadPurchases = useCallback(async (page: number) => {
+    if (!selectedClubId) {
+      setPurchases([]);
+      setPurchaseCount(0);
+      return;
+    }
+
+    setPurchasesLoading(true);
+    const from = (page - 1) * PURCHASES_PAGE_SIZE;
+    const to = from + PURCHASES_PAGE_SIZE - 1;
+    const supabase = createClient();
+    let purchasesQuery = supabase
+      .from('stock_purchases')
+      .select('*, products(name, sale_price, cost_price, current_stock)', { count: 'exact' })
+      .eq('club_id', selectedClubId);
+
+    const paymentSearch = sanitizePurchaseSearch(purchaseSearch);
+    const filters: string[] = [];
+    if (paymentSearch) filters.push(`payment_method.ilike.%${paymentSearch}%`);
+    if (matchingProductIds?.length) filters.push(`product_id.in.(${matchingProductIds.join(',')})`);
+    if (filters.length > 0) {
+      purchasesQuery = purchasesQuery.or(filters.join(','));
+    }
+
+    const { data, error: purchasesError, count } = await purchasesQuery
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    setPurchasesLoading(false);
+
+    if (purchasesError) {
+      setError(purchasesError.message);
+      return;
+    }
+
+    setPurchases((data as PurchaseWithProduct[]) ?? []);
+    setPurchaseCount(count ?? 0);
+  }, [matchingProductIds, purchaseSearch, selectedClubId]);
 
   useEffect(() => {
-    loadData().catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, [loadData]);
+    setPurchasePage(1);
+    setPurchases([]);
+    setPurchaseCount(0);
+  }, [selectedClubId]);
+
+  useEffect(() => {
+    loadProducts().catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, [loadProducts]);
+
+  useEffect(() => {
+    loadPurchases(purchasePage).catch((err) => {
+      setPurchasesLoading(false);
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  }, [loadPurchases, purchasePage]);
 
   const selectedProduct = products.find((product) => product.id === form.product_id) ?? null;
   const quantity = parseQuantity(form.quantity);
@@ -160,17 +220,12 @@ export default function StockPurchasePage() {
       })
     : 0;
 
-  const filteredPurchases = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return purchases;
-    return purchases.filter((purchase) =>
-      (purchase.products?.name ?? '').toLowerCase().includes(needle) ||
-      purchase.payment_method.toLowerCase().includes(needle),
-    );
-  }, [purchases, query]);
   const selectedProductLastPurchase = selectedProduct
     ? purchases.find((purchase) => purchase.product_id === selectedProduct.id)
     : undefined;
+  const purchasePageCount = Math.max(1, Math.ceil(purchaseCount / PURCHASES_PAGE_SIZE));
+  const purchaseRangeFrom = purchaseCount === 0 ? 0 : (purchasePage - 1) * PURCHASES_PAGE_SIZE + 1;
+  const purchaseRangeTo = Math.min(purchasePage * PURCHASES_PAGE_SIZE, purchaseCount);
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -234,7 +289,12 @@ export default function StockPurchasePage() {
 
     setSuccess(t('success'));
     resetForm();
-    await loadData();
+    await loadProducts();
+    if (purchasePage === 1) {
+      await loadPurchases(1);
+    } else {
+      setPurchasePage(1);
+    }
   }
 
   async function handleDeletePurchase(purchase: PurchaseWithProduct) {
@@ -276,7 +336,8 @@ export default function StockPurchasePage() {
     if (stockError) {
       setDeletingId(null);
       setError(stockError.message);
-      await loadData();
+      await loadProducts();
+      await loadPurchases(purchasePage);
       return;
     }
 
@@ -291,7 +352,8 @@ export default function StockPurchasePage() {
     if (savedCountError) {
       setDeletingId(null);
       setError(savedCountError.message);
-      await loadData();
+      await loadProducts();
+      await loadPurchases(purchasePage);
       return;
     }
 
@@ -320,7 +382,8 @@ export default function StockPurchasePage() {
       if (countUpdateError) {
         setDeletingId(null);
         setError(countUpdateError.message);
-        await loadData();
+        await loadProducts();
+        await loadPurchases(purchasePage);
         return;
       }
     }
@@ -328,7 +391,13 @@ export default function StockPurchasePage() {
     setDeletingId(null);
 
     setSuccess(t('deleteSuccess'));
-    await loadData();
+    const nextPage = purchases.length === 1 && purchasePage > 1 ? purchasePage - 1 : purchasePage;
+    await loadProducts();
+    if (nextPage === purchasePage) {
+      await loadPurchases(nextPage);
+    } else {
+      setPurchasePage(nextPage);
+    }
   }
 
   const paymentMethods = ['cash', 'terminal', 'qr', 'transfer'];
@@ -347,10 +416,6 @@ export default function StockPurchasePage() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button className="btn-secondary min-h-11 w-full border border-gray-200 bg-white px-5 sm:w-auto">
-            <Upload size={17} />
-            {t('importFromExcel')}
-          </button>
           <button className="btn-primary min-h-11 w-full px-5 sm:w-auto">
             <Plus size={18} />
             {t('addNewPurchase')}
@@ -606,7 +671,10 @@ export default function StockPurchasePage() {
                 className="input-field h-10 pl-9"
                 placeholder={t('searchPlaceholder')}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPurchasePage(1);
+                }}
               />
             </div>
             <button className="btn-secondary min-h-10 w-full border border-gray-200 bg-white sm:w-auto">
@@ -616,10 +684,12 @@ export default function StockPurchasePage() {
           </div>
         </div>
 
-        {filteredPurchases.length === 0 ? (
+        {purchasesLoading && purchases.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-gray-500">{tc('loading')}</div>
+        ) : purchases.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-gray-500">{tc('noData')}</div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-100">
+          <div className={`overflow-x-auto rounded-lg border border-gray-100 ${purchasesLoading ? 'opacity-60' : ''}`}>
             <table className="w-full min-w-[1080px] text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -635,9 +705,11 @@ export default function StockPurchasePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredPurchases.map((purchase, index) => (
+                {purchases.map((purchase, index) => (
                   <tr key={purchase.id} className="hover:bg-gray-50/80">
-                    <td className="px-4 py-3 font-semibold text-gray-700">{index + 1}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">
+                      {(purchasePage - 1) * PURCHASES_PAGE_SIZE + index + 1}
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-gray-900">{formatDateOnly(purchase.date, locale)}</p>
                     </td>
@@ -680,6 +752,35 @@ export default function StockPurchasePage() {
             </table>
           </div>
         )}
+
+        <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-medium text-gray-600">
+            {t('paginationShowing', { from: purchaseRangeFrom, to: purchaseRangeTo, total: purchaseCount })}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary flex min-h-10 items-center gap-2 border border-gray-200 bg-white px-3 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={purchasePage <= 1 || purchasesLoading}
+              onClick={() => setPurchasePage((page) => Math.max(1, page - 1))}
+            >
+              <ChevronLeft size={16} />
+              {t('previousPage')}
+            </button>
+            <span className="min-w-20 text-center text-sm font-bold text-gray-700">
+              {t('paginationPage', { page: purchasePage, total: purchasePageCount })}
+            </span>
+            <button
+              type="button"
+              className="btn-secondary flex min-h-10 items-center gap-2 border border-gray-200 bg-white px-3 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={purchasePage >= purchasePageCount || purchasesLoading}
+              onClick={() => setPurchasePage((page) => Math.min(purchasePageCount, page + 1))}
+            >
+              {t('nextPage')}
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   );

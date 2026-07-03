@@ -239,7 +239,6 @@
     "deleteSuccess": "Xarid o'chirildi",
     "deleteConfirm": "Bu xarid o'chirilib, miqdori joriy qoldiqdan ayrilsinmi?",
     "recentPurchases": "So'nggi xaridlar",
-    "importFromExcel": "Exceldan import",
     "addNewPurchase": "Yangi xarid qo'shish",
     "addStockPurchase": "Xarid qo'shish",
     "pcs": "dona",
@@ -271,6 +270,10 @@
     "totalCostHeader": "Jami xarajat",
     "payment": "To'lov",
     "actions": "Amallar",
+    "paginationShowing": "{total} tadan {from}-{to} ko'rsatilmoqda",
+    "paginationPage": "{page}/{total} sahifa",
+    "previousPage": "Oldingi",
+    "nextPage": "Keyingi",
     "reset": "Qayta o'rnatish"
   },
   "products": {

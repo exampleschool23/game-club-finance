@@ -239,7 +239,6 @@
     "deleteSuccess": "Purchase deleted",
     "deleteConfirm": "Delete this purchase and subtract its quantity from current stock?",
     "recentPurchases": "Recent Purchases",
-    "importFromExcel": "Import from Excel",
     "addNewPurchase": "Add New Purchase",
     "addStockPurchase": "Add Stock Purchase",
     "pcs": "pcs",
@@ -271,6 +270,10 @@
     "totalCostHeader": "Total Cost",
     "payment": "Payment",
     "actions": "Actions",
+    "paginationShowing": "Showing {from}-{to} of {total}",
+    "paginationPage": "Page {page} of {total}",
+    "previousPage": "Previous",
+    "nextPage": "Next",
     "reset": "Reset"
   },
   "products": {

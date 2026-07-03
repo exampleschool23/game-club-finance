@@ -239,7 +239,6 @@
     "deleteSuccess": "Закупка удалена",
     "deleteConfirm": "Удалить эту закупку и вычесть количество из текущего остатка?",
     "recentPurchases": "Последние закупки",
-    "importFromExcel": "Импорт из Excel",
     "addNewPurchase": "Добавить закупку",
     "addStockPurchase": "Добавить закупку",
     "pcs": "шт",
@@ -271,6 +270,10 @@
     "totalCostHeader": "Общая стоимость",
     "payment": "Оплата",
     "actions": "Действия",
+    "paginationShowing": "Показано {from}-{to} из {total}",
+    "paginationPage": "Страница {page} из {total}",
+    "previousPage": "Назад",
+    "nextPage": "Вперёд",
     "reset": "Сбросить"
   },
   "products": {
