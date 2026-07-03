@@ -7,16 +7,14 @@ import {
   ChartNoAxesCombined,
   Gamepad2,
   MonitorSmartphone,
-  Receipt,
   ShoppingBag,
-  TrendingUp,
-  UserRoundCheck,
+  Wallet,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatDateShort, formatDateTime } from '@/lib/formatters';
+import { formatDateShort, formatDateTime } from '@/lib/formatters';
 import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
@@ -29,7 +27,6 @@ import {
   RecentTransactionsTable,
   type RecentTransactionRow,
 } from '@/components/dashboard/RecentTransactionsTable';
-import { SummaryStrip } from '@/components/dashboard/SummaryStrip';
 import {
   buildPeriodTrend,
   calculateDashboardTotals,
@@ -595,13 +592,13 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label={t('totalExpenses')}
-          amount={totals.totalExpenses}
-          icon={Receipt}
-          iconBgClassName="bg-red-100"
-          iconClassName="text-red-500"
-          helper={t('totalExpensesDesc')}
-          comparison={{ value: percentChange(totals.totalExpenses, previousTotals.totalExpenses), label: incomeComparisonLabel }}
+          label={t('totalMoneyLeft')}
+          amount={totals.gameClubMoneyLeft}
+          icon={Wallet}
+          iconBgClassName="bg-emerald-100"
+          iconClassName="text-emerald-600"
+          helper={t('totalMoneyLeftDesc')}
+          comparison={{ value: percentChange(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft), label: incomeComparisonLabel }}
         />
         <MetricCard
           label={t('inventoryValue')}
@@ -645,62 +642,6 @@ export default function DashboardPage() {
             <RecentTransactionsTable rows={recentTransactions} />
             <IncomeCategoryChart data={categoryData} total={incomeCategoryTotal} />
           </div>
-
-          <SummaryStrip
-            items={[
-              {
-                label: t('computerCashier'),
-                value: totals.computerIncome,
-                icon: MonitorSmartphone,
-                iconBgClassName: 'bg-green-100',
-                iconClassName: 'text-green-600',
-                isCurrency: true,
-              },
-              {
-                label: t('playstationCashier'),
-                value: totals.playstationIncome,
-                icon: Gamepad2,
-                iconBgClassName: 'bg-amber-100',
-                iconClassName: 'text-amber-600',
-                isCurrency: true,
-              },
-              {
-                label: t('barMoneyLeft'),
-                value: totals.barIncome,
-                helper: `${t('barSales')}: ${formatCurrency(totals.barSales)} / ${t('stockPurchases')}: ${formatCurrency(totals.stockPurchaseCost)}`,
-                icon: ShoppingBag,
-                iconBgClassName: 'bg-orange-100',
-                iconClassName: 'text-orange-600',
-                isCurrency: true,
-              },
-              {
-                label: t('stockPurchases'),
-                value: totals.stockPurchaseCost,
-                helper: t('deductedFromBarSales'),
-                icon: Boxes,
-                iconBgClassName: 'bg-red-100',
-                iconClassName: 'text-red-500',
-                isCurrency: true,
-              },
-              {
-                label: t('activeDebts'),
-                value: totals.activeDebts,
-                helper: t('peopleCount', { count: totals.activeDebtCount }),
-                icon: UserRoundCheck,
-                iconBgClassName: 'bg-orange-100',
-                iconClassName: 'text-orange-600',
-                isCurrency: true,
-              },
-              {
-                label: t('profitMargin'),
-                value: `${totals.profitMargin}%`,
-                helper: totals.profitMargin >= 0 ? t('good') : t('needsAttention'),
-                icon: TrendingUp,
-                iconBgClassName: 'bg-green-100',
-                iconClassName: 'text-green-600',
-              },
-            ]}
-          />
         </>
       )}
     </div>

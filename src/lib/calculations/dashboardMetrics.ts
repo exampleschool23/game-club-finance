@@ -68,6 +68,7 @@ export interface DashboardTotals {
   barIncome: number;
   totalIncome: number;
   totalExpenses: number;
+  gameClubMoneyLeft: number;
   netProfit: number;
   inventoryValue: number;
   activeDebts: number;
@@ -93,6 +94,7 @@ export const emptyDashboardTotals: DashboardTotals = {
   barIncome: 0,
   totalIncome: 0,
   totalExpenses: 0,
+  gameClubMoneyLeft: 0,
   netProfit: 0,
   inventoryValue: 0,
   activeDebts: 0,
@@ -228,6 +230,7 @@ export function calculateDashboardTotals(
   const stockPurchaseCost = sumStockPurchaseCost(purchaseRows);
   const barIncome = barSales - stockPurchaseCost;
   const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  const gameClubMoneyLeft = gameClub.gameClubIncome - totalExpenses;
   const totalIncome = gameClub.gameClubIncome + barIncome;
   const netProfit = totalIncome - totalExpenses;
   const inventoryValue = products.reduce(
@@ -247,6 +250,7 @@ export function calculateDashboardTotals(
     barIncome,
     totalIncome,
     totalExpenses,
+    gameClubMoneyLeft,
     netProfit,
     inventoryValue,
     activeDebts,

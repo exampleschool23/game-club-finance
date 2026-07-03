@@ -32,6 +32,7 @@ describe('dashboard metrics', () => {
     expect(totals.playstationIncome).toBe(200_000);
     expect(totals.gameClubIncome).toBe(3_572_222);
     expect(totals.totalIncome).toBe(3_572_222);
+    expect(totals.gameClubMoneyLeft).toBe(3_572_222);
   });
 
   it('deducts stock purchases from July 2 onward from closing stock bar income', () => {
@@ -112,6 +113,7 @@ describe('dashboard metrics', () => {
     expect(totals.barIncome).toBe(58_000);
     expect(totals.totalIncome).toBe(3_380_222);
     expect(totals.totalExpenses).toBe(120_000);
+    expect(totals.gameClubMoneyLeft).toBe(3_202_222);
     expect(totals.netProfit).toBe(3_260_222);
     expect(totals.inventoryValue).toBeCloseTo(153_428.57142857145);
     expect(totals.activeDebts).toBe(100_000);
