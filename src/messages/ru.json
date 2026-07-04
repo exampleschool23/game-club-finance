@@ -390,7 +390,15 @@
     "createClub": "Создать клуб",
     "savingClub": "Создание...",
     "clubCreated": "Клуб создан",
-    "clubNameRequired": "Введите название клуба"
+    "clubNameRequired": "Введите название клуба",
+    "businessDay": "Рабочий день",
+    "businessDayStartTime": "День начинается в",
+    "businessDayHelp": "Касса, закрытие склада, отчёты бара и даты по умолчанию используют это время как начало нового дня клуба.",
+    "saveBusinessDay": "Сохранить время дня",
+    "savingBusinessDay": "Сохранение...",
+    "businessDaySaved": "Время рабочего дня сохранено",
+    "businessDayInvalid": "Выберите корректное время начала.",
+    "businessDayOwnerOnly": "Только владельцы могут менять эту настройку."
   },
   "team": {
     "title": "Команда",

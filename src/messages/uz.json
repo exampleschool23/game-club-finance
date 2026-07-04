@@ -390,7 +390,15 @@
     "createClub": "Klub yaratish",
     "savingClub": "Yaratilmoqda...",
     "clubCreated": "Klub yaratildi",
-    "clubNameRequired": "Klub nomini kiriting"
+    "clubNameRequired": "Klub nomini kiriting",
+    "businessDay": "Ish kuni",
+    "businessDayStartTime": "Kun boshlanish vaqti",
+    "businessDayHelp": "Kassa, ombor yopilishi, bar hisobotlari va standart sanalar yangi klub kuni uchun shu vaqtni ishlatadi.",
+    "saveBusinessDay": "Ish kunini saqlash",
+    "savingBusinessDay": "Saqlanmoqda...",
+    "businessDaySaved": "Ish kuni vaqti saqlandi",
+    "businessDayInvalid": "To'g'ri boshlanish vaqtini tanlang.",
+    "businessDayOwnerOnly": "Bu sozlamani faqat ownerlar o'zgartira oladi."
   },
   "team": {
     "title": "Jamoa",

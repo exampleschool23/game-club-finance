@@ -390,7 +390,15 @@
     "createClub": "Create club",
     "savingClub": "Creating...",
     "clubCreated": "Club created",
-    "clubNameRequired": "Club name is required"
+    "clubNameRequired": "Club name is required",
+    "businessDay": "Business Day",
+    "businessDayStartTime": "Day starts at",
+    "businessDayHelp": "Cashier, closing stock, bar reports, and date defaults use this time as the start of a new club day.",
+    "saveBusinessDay": "Save business day",
+    "savingBusinessDay": "Saving...",
+    "businessDaySaved": "Business day time saved",
+    "businessDayInvalid": "Select a valid start time.",
+    "businessDayOwnerOnly": "Only owners can change this setting."
   },
   "team": {
     "title": "Team",

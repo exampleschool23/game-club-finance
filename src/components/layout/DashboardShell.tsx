@@ -1,5 +1,7 @@
 'use client';
 
+// Dashboard layout shell and shared club/date context.
+
 import { useCallback, useEffect, useMemo, useState, createContext, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -8,7 +10,7 @@ import { Sidebar } from './Sidebar';
 import { DashboardContentLoading } from './DashboardContentLoading';
 import { createClient } from '@/lib/supabase/client';
 import type { Club, ClubMembership, UserRole } from '@/types';
-import { todayIso } from '@/lib/utils';
+import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
 
 interface DashboardShellProps {
   initialEmail?: string;
@@ -31,6 +33,7 @@ interface ClubContextValue {
   selectedClub: Club | null;
   memberships: ClubOption[];
   role: UserRole;
+  businessDayStartHour: number;
   loading: boolean;
   setSelectedClubId: (clubId: string) => void;
   refreshClubs: () => Promise<void>;
@@ -46,6 +49,7 @@ export const ClubContext = createContext<ClubContextValue>({
   selectedClub: null,
   memberships: [],
   role: 'viewer',
+  businessDayStartHour: 0,
   loading: true,
   setSelectedClubId: () => {},
   refreshClubs: async () => {},
@@ -123,6 +127,7 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
   );
   const role = selectedMembership?.role ?? profileRole;
   const selectedClub = selectedMembership?.club ?? null;
+  const businessDayStartHour = normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour);
 
   const setSelectedClubId = useCallback((clubId: string) => {
     setSelectedClubIdState(clubId);
@@ -147,7 +152,7 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
         .maybeSingle(),
       supabase
         .from('club_memberships')
-        .select('club_id, role, created_at, updated_at, clubs(id, name, address, is_active, created_at, updated_at)')
+        .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true }),
     ]);
@@ -206,6 +211,12 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
     };
   }, [initialEmail, refreshClubs]);
 
+  useEffect(() => {
+    if (selectedClubId) {
+      setSelectedDate(todayIso(new Date(), businessDayStartHour));
+    }
+  }, [businessDayStartHour, selectedClubId]);
+
   function handleNavigate() {
     setSidebarOpen(false);
   }
@@ -216,11 +227,12 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
       selectedClub,
       memberships,
       role,
+      businessDayStartHour,
       loading: clubLoading,
       setSelectedClubId,
       refreshClubs,
     }),
-    [clubLoading, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
+    [businessDayStartHour, clubLoading, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
   );
 
   return (

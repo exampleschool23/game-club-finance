@@ -1,3 +1,5 @@
+// Shared application data types.
+
 export type UserRole = 'owner' | 'admin' | 'viewer';
 export type PaymentMethod = 'cash' | 'terminal' | 'qr' | 'transfer' | 'debt';
 export type PaymentSource = 'cash' | 'terminal' | 'bank';
@@ -79,6 +81,7 @@ export interface Club {
   id: string;
   name: string;
   address: string | null;
+  business_day_start_hour?: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
