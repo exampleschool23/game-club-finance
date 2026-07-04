@@ -8,6 +8,20 @@ import {
 } from '@/lib/telegram/sendDailyFinanceReport';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  const headers = new Headers(init?.headers);
+  headers.set('cache-control', 'no-store, no-cache, max-age=0, must-revalidate');
+  headers.set('pragma', 'no-cache');
+  headers.set('expires', '0');
+
+  return Response.json(body, {
+    ...init,
+    headers,
+  });
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -75,7 +89,12 @@ function isAuthorized(request: NextRequest): boolean {
 
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', {
+      status: 401,
+      headers: {
+        'cache-control': 'no-store, no-cache, max-age=0, must-revalidate',
+      },
+    });
   }
 
   try {
@@ -85,7 +104,7 @@ export async function GET(request: NextRequest) {
     const businessDate = requestedDate ?? previousTashkentDateIso();
 
     if (!isIsoDate(businessDate)) {
-      return Response.json({ ok: false, error: 'date must be YYYY-MM-DD' }, { status: 400 });
+      return jsonNoStore({ ok: false, error: 'date must be YYYY-MM-DD' }, { status: 400 });
     }
 
     const botToken = requireEnv('TELEGRAM_BOT_TOKEN');
@@ -103,7 +122,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (dryRun) {
-      return Response.json({
+      return jsonNoStore({
         ok: true,
         dryRun: true,
         businessDate,
@@ -153,13 +172,13 @@ export async function GET(request: NextRequest) {
     });
     const hasFailure = results.some((result) => !result.ok);
 
-    return Response.json({
+    return jsonNoStore({
       ok: !hasFailure,
       businessDate,
       sent: results,
     }, { status: hasFailure ? 207 : 200 });
   } catch (error) {
-    return Response.json(
+    return jsonNoStore(
       {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
