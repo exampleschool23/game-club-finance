@@ -127,6 +127,10 @@ export async function GET(request: NextRequest) {
           target: report.target,
           businessDate: report.businessDate,
           messageId: telegram.result.message_id,
+          telegramChatId: telegram.result.chat.id,
+          telegramChatTitle: telegram.result.chat.title ?? null,
+          telegramChatType: telegram.result.chat.type,
+          telegramDate: telegram.result.date,
         };
       }),
     );

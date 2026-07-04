@@ -198,6 +198,7 @@ export async function sendTelegramMessage({
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      disable_notification: false,
     }),
   });
 
@@ -207,5 +208,16 @@ export async function sendTelegramMessage({
     throw new Error(`Telegram send failed: ${JSON.stringify(payload)}`);
   }
 
-  return payload as { ok: true; result: { message_id: number } };
+  return payload as {
+    ok: true;
+    result: {
+      message_id: number;
+      chat: {
+        id: number;
+        title?: string;
+        type: string;
+      };
+      date: number;
+    };
+  };
 }
