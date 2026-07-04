@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
+import { calculateBarMoney } from '@/lib/calculations/barMoney';
 import { calculateRemainingDebt } from '@/lib/calculations/debt';
 import { todayIso } from '@/lib/utils';
 import { formatNumber } from '@/lib/formatters';
@@ -42,15 +43,17 @@ export default async function TestChecklistPage() {
 
   const today = todayIso(new Date(), club?.business_day_start_hour ?? 0);
 
-  const [cashRes, stockRes, expenseRes, debtRes] = await Promise.all([
+  const [cashRes, stockRes, purchaseRes, expenseRes, debtRes] = await Promise.all([
     supabase.from('daily_cash_entries').select('*').eq('club_id', clubId).eq('date', today).maybeSingle(),
     supabase.from('daily_stock_counts').select('*').eq('club_id', clubId).eq('date', today),
+    supabase.from('stock_purchases').select('date,quantity,cost_price').eq('club_id', clubId).eq('date', today),
     supabase.from('expenses').select('*').eq('club_id', clubId).eq('date', today),
     supabase.from('new_debts').select('*').eq('club_id', clubId).neq('status', 'paid'),
   ]);
 
   const cashEntry = cashRes.data;
   const stockRows = stockRes.data ?? [];
+  const purchaseRows = purchaseRes.data ?? [];
   const expenseRows = expenseRes.data ?? [];
   const activeDebts = debtRes.data ?? [];
 
@@ -134,14 +137,14 @@ export default async function TestChecklistPage() {
       cardIncome: cashEntry.card_income ?? 0,
       playstationIncome: cashEntry.playstation_income ?? 0,
     });
-    const barIncome = stockRows.reduce((s, r) => s + (r.bar_income ?? 0), 0);
+    const { barMoney: barIncome, stockPurchaseCost } = calculateBarMoney(stockRows, purchaseRows);
     const totalIncome = gameClub + barIncome;
     const totalExpenses = expenseRows.reduce((s, r) => s + (r.amount ?? 0), 0);
     const netProfit = totalIncome - totalExpenses;
     checks.push({
       name: 'Net profit = total income − total expenses',
       pass: true,
-      explanation: `Game Club: ${formatNumber(gameClub)} + Bar: ${formatNumber(barIncome)} − Expenses: ${formatNumber(totalExpenses)} = Net Profit: ${formatNumber(netProfit)} UZS`,
+      explanation: `Game Club: ${formatNumber(gameClub)} + Bar after stock purchases: ${formatNumber(barIncome)} (stock purchases: ${formatNumber(stockPurchaseCost)}) − Expenses: ${formatNumber(totalExpenses)} = Net Profit: ${formatNumber(netProfit)} UZS`,
       link: '/daily-report',
     });
   }

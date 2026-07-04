@@ -16,7 +16,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatDateShort, formatDateTime } from '@/lib/formatters';
+import { formatDateOnly, formatDateShort, formatTime } from '@/lib/formatters';
 import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
@@ -66,6 +66,7 @@ interface DebtRow {
 interface DebtPaymentRow {
   id: string;
   debt_id: string;
+  date: string;
   amount: number;
   created_at: string;
 }
@@ -80,11 +81,12 @@ type DashboardDescriptionKey =
   | 'debtPaymentSuffix'
   | 'debtPayment';
 
-interface DashboardTransactionRow extends Omit<RecentTransactionRow, 'description' | 'time'> {
+interface DashboardTransactionRow extends Omit<RecentTransactionRow, 'date' | 'description' | 'time'> {
   description?: string;
   descriptionKey?: DashboardDescriptionKey;
   productName?: string | null;
   debtName?: string;
+  dateValue?: string | null;
   timeValue?: string | null;
 }
 
@@ -222,7 +224,7 @@ export default function DashboardPage() {
       inRangeQuery(
         supabase
           .from('expenses')
-          .select('id,date,amount,category,comment,created_at')
+          .select('id,date,amount,category,payment_source,comment,created_at')
           .eq('club_id', selectedClubId)
           .order('created_at', { ascending: false }),
         range,
@@ -243,10 +245,10 @@ export default function DashboardPage() {
       ),
       supabase
         .from('debt_payments')
-        .select('id,debt_id,amount,created_at')
+        .select('id,debt_id,date,amount,created_at')
         .eq('club_id', selectedClubId)
-        .gte('created_at', `${range.from}T00:00:00`)
-        .lte('created_at', `${range.to}T23:59:59`)
+        .gte('date', range.from)
+        .lte('date', range.to)
         .order('created_at', { ascending: false }),
       inRangeQuery(
         supabase
@@ -272,7 +274,7 @@ export default function DashboardPage() {
       inRangeQuery(
         supabase
           .from('expenses')
-          .select('id,date,amount,category,comment,created_at')
+          .select('id,date,amount,category,payment_source,comment,created_at')
           .eq('club_id', selectedClubId),
         previousRange,
       ),
@@ -296,7 +298,7 @@ export default function DashboardPage() {
         .lte('date', range.to),
       supabase
         .from('expenses')
-        .select('id,date,amount,category,comment,created_at')
+        .select('id,date,amount,category,payment_source,comment,created_at')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to),
@@ -374,6 +376,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 descriptionKey: 'cashIncomeDesc' as const,
                 amount: row.cash_income,
+                dateValue: row.date,
                 timeValue: createdAt,
               }
             : null,
@@ -383,6 +386,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 descriptionKey: 'terminalIncomeDesc' as const,
                 amount: row.terminal_income,
+                dateValue: row.date,
                 timeValue: createdAt,
               }
             : null,
@@ -392,6 +396,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 descriptionKey: 'cardIncomeDesc' as const,
                 amount: row.card_income,
+                dateValue: row.date,
                 timeValue: createdAt,
               }
             : null,
@@ -401,6 +406,7 @@ export default function DashboardPage() {
                 type: 'Income' as const,
                 descriptionKey: 'playstationIncomeDesc' as const,
                 amount: row.playstation_income ?? 0,
+                dateValue: row.date,
                 timeValue: createdAt,
               }
             : null,
@@ -413,6 +419,7 @@ export default function DashboardPage() {
               type: 'Income' as const,
               descriptionKey: 'barSalesDesc' as const,
               amount: stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0),
+              dateValue: stockRows[0]?.date ?? range.from,
               timeValue: stockRows[0]?.updated_at ?? null,
             },
           ]
@@ -422,6 +429,7 @@ export default function DashboardPage() {
         type: 'Expense' as const,
         description: expenseLabel(row),
         amount: row.amount,
+        dateValue: row.date,
         timeValue: row.created_at,
       })),
       ...purchases.map((row) => ({
@@ -430,6 +438,7 @@ export default function DashboardPage() {
         descriptionKey: 'productPurchaseDesc' as const,
         productName: productName(row.products),
         amount: (row.quantity ?? 0) * (row.cost_price ?? 0),
+        dateValue: row.date,
         timeValue: row.created_at,
       })),
       ...debtPayments.map((row) => ({
@@ -438,6 +447,7 @@ export default function DashboardPage() {
         descriptionKey: debtNameById.get(row.debt_id) ? 'debtPaymentSuffix' as const : 'debtPayment' as const,
         debtName: debtNameById.get(row.debt_id),
         amount: row.amount,
+        dateValue: row.date,
         timeValue: row.created_at,
       })),
     ] as Array<DashboardTransactionRow | null>)
@@ -499,7 +509,7 @@ export default function DashboardPage() {
   );
 
   const recentTransactions = data.recentTransactions.map((row): RecentTransactionRow => {
-    const { descriptionKey, productName: rowProductName, debtName, timeValue, ...base } = row;
+    const { descriptionKey, productName: rowProductName, debtName, dateValue, timeValue, ...base } = row;
     let description = row.description ?? (descriptionKey ? t(descriptionKey) : '');
 
     if (descriptionKey === 'productPurchaseDesc' && rowProductName) {
@@ -513,7 +523,8 @@ export default function DashboardPage() {
     return {
       ...base,
       description,
-      time: timeValue ? formatDateTime(timeValue, locale) : '23:59',
+      date: dateValue ? formatDateOnly(dateValue, locale) : timeValue ? formatDateOnly(timeValue, locale) : '-',
+      time: timeValue ? formatTime(timeValue, locale) : '-',
     };
   });
 

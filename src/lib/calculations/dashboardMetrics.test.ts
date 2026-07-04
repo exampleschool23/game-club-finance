@@ -121,6 +121,52 @@ describe('dashboard metrics', () => {
     expect(totals.profitMargin).toBe(96.4);
   });
 
+  it('subtracts expenses from the selected money source only', () => {
+    const totals = calculateDashboardTotals(
+      [
+        {
+          date: '2026-07-04',
+          cash_income: 500_000,
+          terminal_income: 0,
+          card_income: 0,
+          playstation_income: 0,
+        },
+      ],
+      [{ date: '2026-07-04', bar_income: 300_000, bar_profit: 100_000, bar_cost: 200_000, sold_quantity: 10 }],
+      [{ date: '2026-07-04', quantity: 2, cost_price: 50_000 }],
+      [
+        {
+          id: 'game-club-expense',
+          date: '2026-07-04',
+          amount: 120_000,
+          category: 'salary',
+          payment_source: 'game_club',
+          comment: null,
+          created_at: '2026-07-04T10:00:00Z',
+        },
+        {
+          id: 'bar-expense',
+          date: '2026-07-04',
+          amount: 40_000,
+          category: 'repair',
+          payment_source: 'bar',
+          comment: null,
+          created_at: '2026-07-04T11:00:00Z',
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(totals.stockPurchaseCost).toBe(100_000);
+    expect(totals.gameClubExpenses).toBe(120_000);
+    expect(totals.barExpenses).toBe(40_000);
+    expect(totals.gameClubMoneyLeft).toBe(380_000);
+    expect(totals.barIncome).toBe(160_000);
+    expect(totals.totalIncome).toBe(700_000);
+    expect(totals.netProfit).toBe(540_000);
+  });
+
   it('builds 7-day trend using cash, closing stock income, and purchases', () => {
     const trend = buildIncomeTrend(
       '2026-07-02',

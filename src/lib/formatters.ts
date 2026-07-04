@@ -83,6 +83,23 @@ export function formatDateTime(value: string | Date | null | undefined, locale?:
 }
 
 /**
+ * Format a time-only value.
+ * Output: "11:05" or "11:05 AM"
+ * Use for: compact transaction rows where the date is shown separately.
+ */
+export function formatTime(value: string | Date | null | undefined, locale?: string): string {
+  const date = parseDateValue(value);
+  if (!date) return '-';
+  const appLocale = resolveFormatterLocale(locale);
+
+  return new Intl.DateTimeFormat(TIME_LOCALES[appLocale], {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: appLocale === 'en',
+  }).format(date);
+}
+
+/**
  * Format a date-only value (no time).
  * Output: "3 June 2026"
  * Use for: date columns in tables, date labels on cards, report rows.

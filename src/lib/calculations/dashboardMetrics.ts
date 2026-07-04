@@ -1,6 +1,9 @@
 import { calculateGameClubIncome } from './dailyCash';
+import { calculateBarMoney, sumStockPurchaseCost } from './barMoney';
+import type { StockPurchaseCostRow } from './barMoney';
 
-export const STOCK_PURCHASE_DEDUCTION_START_DATE = '2026-07-02';
+export { STOCK_PURCHASE_DEDUCTION_START_DATE, sumStockPurchaseCost } from './barMoney';
+export type { StockPurchaseCostRow } from './barMoney';
 
 export type DashboardPeriod =
   | 'today'
@@ -30,18 +33,12 @@ export interface StockCountRow {
   updated_at?: string;
 }
 
-export interface StockPurchaseCostRow {
-  date: string;
-  quantity: number;
-  cost_price: number;
-  created_at?: string;
-}
-
 export interface ExpenseRow {
   id: string;
   date: string;
   amount: number;
   category: string;
+  payment_source?: 'game_club' | 'bar' | null;
   comment: string | null;
   created_at: string;
 }
@@ -68,6 +65,8 @@ export interface DashboardTotals {
   barIncome: number;
   totalIncome: number;
   totalExpenses: number;
+  gameClubExpenses: number;
+  barExpenses: number;
   gameClubMoneyLeft: number;
   netProfit: number;
   inventoryValue: number;
@@ -94,6 +93,8 @@ export const emptyDashboardTotals: DashboardTotals = {
   barIncome: 0,
   totalIncome: 0,
   totalExpenses: 0,
+  gameClubExpenses: 0,
+  barExpenses: 0,
   gameClubMoneyLeft: 0,
   netProfit: 0,
   inventoryValue: 0,
@@ -207,16 +208,6 @@ export function sumGameClubRows(rows: DailyCashRow[]): Pick<
   };
 }
 
-export function sumStockPurchaseCost(rows: StockPurchaseCostRow[]): number {
-  return rows.reduce(
-    (sum, row) =>
-      row.date >= STOCK_PURCHASE_DEDUCTION_START_DATE
-        ? sum + Number(row.quantity ?? 0) * Number(row.cost_price ?? 0)
-        : sum,
-    0,
-  );
-}
-
 export function calculateDashboardTotals(
   cashRows: DailyCashRow[],
   stockRows: StockCountRow[],
@@ -226,13 +217,17 @@ export function calculateDashboardTotals(
   debts: DebtValueRow[],
 ): DashboardTotals {
   const gameClub = sumGameClubRows(cashRows);
-  const barSales = stockRows.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
-  const stockPurchaseCost = sumStockPurchaseCost(purchaseRows);
-  const barIncome = barSales - stockPurchaseCost;
+  const barMoney = calculateBarMoney(stockRows, purchaseRows);
   const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-  const gameClubMoneyLeft = gameClub.gameClubIncome - totalExpenses;
-  const totalIncome = gameClub.gameClubIncome + barIncome;
-  const netProfit = totalIncome - totalExpenses;
+  const barExpenses = expenseRows.reduce(
+    (sum, row) => (row.payment_source === 'bar' ? sum + Number(row.amount ?? 0) : sum),
+    0,
+  );
+  const gameClubExpenses = totalExpenses - barExpenses;
+  const barIncome = barMoney.barMoney - barExpenses;
+  const gameClubMoneyLeft = gameClub.gameClubIncome - gameClubExpenses;
+  const totalIncome = gameClub.gameClubIncome + barMoney.barMoney;
+  const netProfit = gameClubMoneyLeft + barIncome;
   const inventoryValue = products.reduce(
     (sum, product) => sum + Number(product.current_stock ?? 0) * Number(product.cost_price ?? 0),
     0,
@@ -245,11 +240,13 @@ export function calculateDashboardTotals(
 
   return {
     ...gameClub,
-    barSales,
-    stockPurchaseCost,
+    barSales: barMoney.barSales,
+    stockPurchaseCost: barMoney.stockPurchaseCost,
     barIncome,
     totalIncome,
     totalExpenses,
+    gameClubExpenses,
+    barExpenses,
     gameClubMoneyLeft,
     netProfit,
     inventoryValue,

@@ -16,8 +16,9 @@ import {
   calculateNetProfit,
 } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
+import { calculateBarMoney } from '@/lib/calculations/barMoney';
 import { FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import type { DailyCashEntry, DailyStockCount, Expense } from '@/types';
+import type { DailyCashEntry, DailyStockCount, Expense, StockPurchase } from '@/types';
 
 interface ProductRow extends DailyStockCount {
   products: { name: string; sort_order?: number | null } | null;
@@ -37,6 +38,7 @@ export default function DailyReportPage() {
   const [date, setDate] = useState(() => businessToday);
   const [cashEntry, setCashEntry] = useState<DailyCashEntry | null>(null);
   const [stockCounts, setStockCounts] = useState<ProductRow[]>([]);
+  const [stockPurchases, setStockPurchases] = useState<StockPurchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,6 +46,7 @@ export default function DailyReportPage() {
     if (!selectedClubId) {
       setCashEntry(null);
       setStockCounts([]);
+      setStockPurchases([]);
       setExpenses([]);
       setLoading(false);
       return;
@@ -52,7 +55,7 @@ export default function DailyReportPage() {
     setLoading(true);
     const supabase = createClient();
 
-    let [cashRes, stockRes, expRes] = await Promise.all([
+    let [cashRes, stockRes, purchaseRes, expRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
         .select('*')
@@ -62,6 +65,11 @@ export default function DailyReportPage() {
       supabase
         .from('daily_stock_counts')
         .select('*, products(name, sort_order)')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate),
+      supabase
+        .from('stock_purchases')
+        .select('*')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate),
       supabase
@@ -89,6 +97,7 @@ export default function DailyReportPage() {
         return (a.products?.name ?? a.product_id).localeCompare(b.products?.name ?? b.product_id);
       }),
     );
+    setStockPurchases((purchaseRes.data as StockPurchase[]) ?? []);
     setExpenses((expRes.data as Expense[]) ?? []);
     setLoading(false);
   }, [selectedClubId]);
@@ -110,12 +119,12 @@ export default function DailyReportPage() {
       })
     : 0;
 
-  const barIncome = stockCounts.reduce((s, r) => s + r.bar_income, 0);
+  const barIncome = calculateBarMoney(stockCounts, stockPurchases).barMoney;
   const totalIncome = calculateTotalIncome(manualIncome, barIncome);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netProfit = calculateNetProfit(totalIncome, totalExpenses);
 
-  const hasData = cashEntry !== null || stockCounts.length > 0 || expenses.length > 0;
+  const hasData = cashEntry !== null || stockCounts.length > 0 || stockPurchases.length > 0 || expenses.length > 0;
   const currency = tc('currency');
 
   return (
@@ -187,13 +196,13 @@ export default function DailyReportPage() {
                 )}
                 {cashEntry.card_income > 0 && (
                   <div>
-                    <p className="text-gray-500">Card</p>
+                    <p className="text-gray-500">{t('card')}</p>
                     <p className="font-semibold">{formatCurrency(cashEntry.card_income)}</p>
                   </div>
                 )}
                 {(cashEntry.playstation_income ?? 0) > 0 && (
                   <div>
-                    <p className="text-gray-500">PlayStation</p>
+                    <p className="text-gray-500">{t('playstation')}</p>
                     <p className="font-semibold">{formatCurrency(cashEntry.playstation_income ?? 0)}</p>
                   </div>
                 )}
@@ -214,10 +223,10 @@ export default function DailyReportPage() {
                 <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 text-gray-500 font-medium">Product</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Sold</th>
+                      <th className="text-left py-2 text-gray-500 font-medium">{t('product')}</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">{t('sold')}</th>
                       <th className="text-right py-2 text-gray-500 font-medium">{t('barIncome')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Profit</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">{t('profit')}</th>
                     </tr>
                   </thead>
                   <tbody>

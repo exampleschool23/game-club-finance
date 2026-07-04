@@ -12,7 +12,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, parseCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, formatTime, parseCurrencyInput } from '@/lib/formatters';
 import { Calendar, ChevronDown, MinusCircle, Trash2 } from 'lucide-react';
 import type { Expense } from '@/types';
 
@@ -21,6 +21,7 @@ const CATEGORIES = [
   'cleaning', 'food_drinks', 'marketing', 'equipment', 'tax', 'other',
 ];
 const CUSTOM_CATEGORY_VALUE = '__custom__';
+const PAYMENT_SOURCES = ['game_club', 'bar'] as const;
 
 function normalizeCustomCategory(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
@@ -43,6 +44,7 @@ export default function ExpensesPage() {
     category: 'other',
     custom_category: '',
     payment_method: 'cash',
+    payment_source: 'game_club',
     comment: '',
   });
   const isOwner = currentRole === 'owner';
@@ -112,6 +114,10 @@ export default function ExpensesPage() {
       setError(tc('required'));
       return;
     }
+    if (!PAYMENT_SOURCES.includes(form.payment_source as (typeof PAYMENT_SOURCES)[number])) {
+      setError(tc('required'));
+      return;
+    }
     setSaving(true);
     setError('');
     setSuccess('');
@@ -125,6 +131,7 @@ export default function ExpensesPage() {
       amount,
       category,
       payment_method: form.payment_method,
+      payment_source: form.payment_source,
       comment: form.comment || null,
       created_by: session?.user?.id ?? null,
     });
@@ -134,7 +141,7 @@ export default function ExpensesPage() {
       setError(err.message);
     } else {
       setSuccess(t('success'));
-      setForm({ date: businessToday, amount: '', category: 'other', custom_category: '', payment_method: 'cash', comment: '' });
+      setForm({ date: businessToday, amount: '', category: 'other', custom_category: '', payment_method: 'cash', payment_source: 'game_club', comment: '' });
       await loadExpenses();
     }
   }
@@ -246,6 +253,22 @@ export default function ExpensesPage() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="label">{t('paymentSource')}</label>
+                <select
+                  className="input-field"
+                  value={form.payment_source}
+                  onChange={(e) => set('payment_source', e.target.value)}
+                  required
+                >
+                  {PAYMENT_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {t(`paymentSources.${source}` as Parameters<typeof t>[0])}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs leading-5 text-gray-500">{t('paymentSourceHelp')}</p>
+              </div>
               <div className="sm:col-span-2">
                 <label className="label">{t('comment')}</label>
                 <input
@@ -273,27 +296,46 @@ export default function ExpensesPage() {
               keyExtractor={(r) => r.id}
               data={expenses}
               columns={[
-                { key: 'date', header: t('date'), render: (r) => formatDate(r.date, locale) },
+                {
+                  key: 'date',
+                  header: t('date'),
+                  render: (r) => (
+                    <div>
+                      <div className="font-medium text-gray-800">{formatDate(r.date, locale)}</div>
+                      <div className="mt-1 text-xs font-semibold text-gray-500">{formatTime(r.created_at, locale)}</div>
+                    </div>
+                  ),
+                  className: 'w-32 align-top',
+                },
                 {
                   key: 'amount',
                   header: t('amount'),
                   render: (r) => (
-                    <span className="font-semibold text-danger-500">
+                    <span className="whitespace-nowrap font-semibold text-danger-500">
                       {formatCurrency(r.amount)}
                     </span>
                   ),
+                  className: 'w-32 whitespace-nowrap align-top',
                 },
                 {
                   key: 'category',
                   header: t('category'),
                   render: (r) => categoryLabel(r.category),
+                  className: 'align-top',
                 },
                 {
                   key: 'payment_method',
                   header: t('paymentMethod'),
                   render: (r) => tc(`paymentMethods.${r.payment_method}` as Parameters<typeof tc>[0]),
+                  className: 'align-top',
                 },
-                { key: 'comment', header: tc('noData'), render: (r) => r.comment ?? '-' },
+                {
+                  key: 'payment_source',
+                  header: t('paymentSource'),
+                  render: (r) => t(`paymentSources.${r.payment_source ?? 'game_club'}` as Parameters<typeof t>[0]),
+                  className: 'align-top',
+                },
+                { key: 'comment', header: tc('noData'), render: (r) => r.comment ?? '-', className: 'align-top' },
                 ...(isOwner
                   ? [
                       {

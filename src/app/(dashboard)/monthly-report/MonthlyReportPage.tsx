@@ -16,6 +16,7 @@ import {
   calculateNetProfit,
 } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
+import { calculateBarMoney } from '@/lib/calculations/barMoney';
 import { BarChart2 } from 'lucide-react';
 
 interface DayRow {
@@ -48,7 +49,7 @@ export default function MonthlyReportPage() {
     const supabase = createClient();
     const { from, to } = monthRange(selectedMonth);
 
-    const [cashRes, stockRes, expRes] = await Promise.all([
+    const [cashRes, stockRes, purchaseRes, expRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income,playstation_income')
@@ -62,6 +63,12 @@ export default function MonthlyReportPage() {
         .gte('date', from)
         .lte('date', to),
       supabase
+        .from('stock_purchases')
+        .select('date,quantity,cost_price')
+        .eq('club_id', selectedClubId)
+        .gte('date', from)
+        .lte('date', to),
+      supabase
         .from('expenses')
         .select('date,amount')
         .eq('club_id', selectedClubId)
@@ -71,12 +78,14 @@ export default function MonthlyReportPage() {
 
     const cashEntries = cashRes.data ?? [];
     const stockCounts = stockRes.data ?? [];
+    const stockPurchases = purchaseRes.data ?? [];
     const expenses = expRes.data ?? [];
 
     // Collect all unique dates
     const datesSet = new Set<string>([
       ...cashEntries.map((r) => r.date),
       ...stockCounts.map((r) => r.date),
+      ...stockPurchases.map((r) => r.date),
       ...expenses.map((r) => r.date),
     ]);
     const dates = Array.from(datesSet).sort().reverse();
@@ -91,9 +100,10 @@ export default function MonthlyReportPage() {
             playstationIncome: cashEntry.playstation_income ?? 0,
           })
         : 0;
-      const barIncome = stockCounts
-        .filter((r) => r.date === date)
-        .reduce((s, r) => s + (r.bar_income ?? 0), 0);
+      const barIncome = calculateBarMoney(
+        stockCounts.filter((r) => r.date === date),
+        stockPurchases.filter((r) => r.date === date),
+      ).barMoney;
       const totalIncome = calculateTotalIncome(manualIncome, barIncome);
       const dayExpenses = expenses
         .filter((r) => r.date === date)

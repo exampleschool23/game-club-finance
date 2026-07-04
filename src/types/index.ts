@@ -7,6 +7,7 @@ export type IncomeCategory = 'game_time' | 'food' | 'drinks' | 'other';
 export type ExpenseCategory =
   | 'rent' | 'salary' | 'electricity' | 'internet' | 'repair'
   | 'cleaning' | 'food_drinks' | 'marketing' | 'equipment' | 'tax' | 'other';
+export type ExpensePaymentSource = 'game_club' | 'bar';
 export type MovementType = 'deposit' | 'withdraw' | 'correction';
 export type DebtStatus = 'unpaid' | 'partial' | 'paid';
 
@@ -166,6 +167,7 @@ export interface Expense {
   date: string;
   amount: number;
   payment_method: string;
+  payment_source: ExpensePaymentSource;
   category: string;
   comment: string | null;
   created_by: string | null;
