@@ -19,6 +19,8 @@ describe('formatRussianDailyFinanceReport', () => {
         totalExpenses: 0,
         gameClubExpenses: 0,
         barExpenses: 0,
+        gameClubExpenseCategories: [],
+        barExpenseCategories: [],
         gameClubMoneyLeft: 3_024_000,
         barMoneyLeft: 2_311_000,
         netProfit: 263_000,
@@ -73,11 +75,20 @@ Pixel Game Zone
         {
           id: 'game-club-expense',
           date: '2026-07-04',
-          amount: 120_000,
+          amount: 80_000,
           category: 'salary',
           payment_source: 'game_club',
           comment: null,
           created_at: '2026-07-04T10:00:00Z',
+        },
+        {
+          id: 'custom-game-club-expense',
+          date: '2026-07-04',
+          amount: 40_000,
+          category: 'Пополнение Номера',
+          payment_source: 'game_club',
+          comment: null,
+          created_at: '2026-07-04T10:30:00Z',
         },
         {
           id: 'bar-expense',
@@ -160,11 +171,47 @@ Pixel Game Zone
       totalExpenses: 160_000,
       gameClubExpenses: 120_000,
       barExpenses: 40_000,
+      gameClubExpenseCategories: [
+        { name: 'Зарплата', amount: 80_000 },
+        { name: 'Пополнение Номера', amount: 40_000 },
+      ],
+      barExpenseCategories: [{ name: 'Ремонт', amount: 40_000 }],
       gameClubMoneyLeft: 1_750_000,
       barMoneyLeft: 560_000,
       netProfit: 790_000,
       activeDebts: 90_000,
     });
+  });
+
+  it('formats expense category breakdowns under each money source', () => {
+    expect(
+      formatRussianDailyFinanceReport({
+        clubName: 'Main Game Club',
+        businessDateLabel: '3 июля 2026',
+        gameClubIncome: 1_904_000,
+        computerIncome: 1_904_000,
+        playstationIncome: 0,
+        barSales: 592_000,
+        stockPurchases: 0,
+        totalExpenses: 624_000,
+        gameClubExpenses: 564_000,
+        barExpenses: 60_000,
+        gameClubExpenseCategories: [
+          { name: 'Зарплата', amount: 340_000 },
+          { name: 'Пополнение Номера', amount: 224_000 },
+        ],
+        barExpenseCategories: [{ name: 'Еда / Напитки', amount: 60_000 }],
+        gameClubMoneyLeft: 2_941_000,
+        barMoneyLeft: 1_084_000,
+        netProfit: 1_872_000,
+        activeDebts: 0,
+      }),
+    ).toContain(`💸 Расходы: 624 000 UZS
+  • Из денег клуба: 564 000 UZS
+    - Зарплата: 340 000 UZS
+    - Пополнение Номера: 224 000 UZS
+  • Из денег бара: 60 000 UZS
+    - Еда / Напитки: 60 000 UZS`);
   });
 });
 

@@ -18,10 +18,17 @@ export interface DailyFinanceReportInput {
   totalExpenses: number;
   gameClubExpenses: number;
   barExpenses: number;
+  gameClubExpenseCategories: DailyFinanceExpenseCategory[];
+  barExpenseCategories: DailyFinanceExpenseCategory[];
   gameClubMoneyLeft: number;
   barMoneyLeft: number;
   netProfit: number;
   activeDebts: number;
+}
+
+export interface DailyFinanceExpenseCategory {
+  name: string;
+  amount: number;
 }
 
 export interface DailyFinanceReportDebtRow {
@@ -45,6 +52,44 @@ export interface DailyFinanceReportRows {
 
 function money(value: number): string {
   return `${formatCurrency(value)} UZS`;
+}
+
+const RUSSIAN_EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+  rent: 'Аренда',
+  salary: 'Зарплата',
+  electricity: 'Электричество',
+  internet: 'Интернет',
+  repair: 'Ремонт',
+  cleaning: 'Уборка',
+  food_drinks: 'Еда / Напитки',
+  marketing: 'Маркетинг',
+  equipment: 'Оборудование',
+  tax: 'Налог',
+  other: 'Другое',
+};
+
+function categoryName(category: string): string {
+  return RUSSIAN_EXPENSE_CATEGORY_LABELS[category] ?? category;
+}
+
+export function summarizeExpenseCategories(
+  rows: ExpenseRow[],
+  paymentSource: 'game_club' | 'bar',
+): DailyFinanceExpenseCategory[] {
+  const totals = rows.reduce((categoryMap, row) => {
+    if ((row.payment_source ?? 'game_club') !== paymentSource) return categoryMap;
+
+    const name = categoryName(row.category);
+    categoryMap.set(name, (categoryMap.get(name) ?? 0) + Number(row.amount ?? 0));
+    return categoryMap;
+  }, new Map<string, number>());
+
+  return Array.from(totals, ([name, amount]) => ({ name, amount }))
+    .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, 'ru'));
+}
+
+function categoryLines(categories: DailyFinanceExpenseCategory[]): string[] {
+  return categories.map((category) => `    - ${category.name}: ${money(category.amount)}`);
 }
 
 export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): DailyFinanceReportInput {
@@ -76,6 +121,8 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     totalExpenses: dailyTotals.totalExpenses,
     gameClubExpenses: dailyTotals.gameClubExpenses,
     barExpenses: dailyTotals.barExpenses,
+    gameClubExpenseCategories: summarizeExpenseCategories(rows.expenseRows, 'game_club'),
+    barExpenseCategories: summarizeExpenseCategories(rows.expenseRows, 'bar'),
     gameClubMoneyLeft: monthTotals.gameClubMoneyLeft,
     barMoneyLeft: monthTotals.barIncome,
     netProfit: dailyTotals.netProfit,
@@ -98,7 +145,9 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     '',
     `💸 Расходы: ${money(input.totalExpenses)}`,
     `  • Из денег клуба: ${money(input.gameClubExpenses)}`,
+    ...categoryLines(input.gameClubExpenseCategories),
     `  • Из денег бара: ${money(input.barExpenses)}`,
+    ...categoryLines(input.barExpenseCategories),
     '',
     `💰 Остаток денег клуба за месяц: ${money(input.gameClubMoneyLeft)}`,
     `🧾 Остаток денег бара за месяц: ${money(input.barMoneyLeft)}`,
