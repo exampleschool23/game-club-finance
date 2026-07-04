@@ -50,6 +50,24 @@ function getTelegramReportTargets(): TelegramReportTarget[] {
   return targets;
 }
 
+function filterTargets(
+  targets: TelegramReportTarget[],
+  targetKey: string | null,
+): TelegramReportTarget[] {
+  if (!targetKey) return targets;
+
+  if (targetKey !== 'pixel' && targetKey !== 'main') {
+    throw new Error('target must be pixel or main');
+  }
+
+  const selectedTarget = targets.find((target) => target.key === targetKey);
+  if (!selectedTarget) {
+    throw new Error(`Target ${targetKey} is not configured`);
+  }
+
+  return [selectedTarget];
+}
+
 function isAuthorized(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   return Boolean(cronSecret && request.headers.get('authorization') === `Bearer ${cronSecret}`);
@@ -63,6 +81,7 @@ export async function GET(request: NextRequest) {
   try {
     const requestedDate = request.nextUrl.searchParams.get('date');
     const dryRun = request.nextUrl.searchParams.get('dryRun') === '1';
+    const targetKey = request.nextUrl.searchParams.get('target');
     const businessDate = requestedDate ?? previousTashkentDateIso();
 
     if (!isIsoDate(businessDate)) {
@@ -70,7 +89,7 @@ export async function GET(request: NextRequest) {
     }
 
     const botToken = requireEnv('TELEGRAM_BOT_TOKEN');
-    const targets = getTelegramReportTargets();
+    const targets = filterTargets(getTelegramReportTargets(), targetKey);
     const supabase = createServiceClient();
     const reports = await Promise.all(
       targets.map(async (target) => ({
@@ -96,7 +115,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const sent = await Promise.all(
+    const sent = await Promise.allSettled(
       reports.map(async (report) => {
         const telegram = await sendTelegramMessage({
           botToken,
@@ -111,12 +130,30 @@ export async function GET(request: NextRequest) {
         };
       }),
     );
+    const results = sent.map((result, index) => {
+      const report = reports[index];
+
+      if (result.status === 'fulfilled') {
+        return {
+          ok: true,
+          ...result.value,
+        };
+      }
+
+      return {
+        ok: false,
+        target: report.target,
+        businessDate: report.businessDate,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      };
+    });
+    const hasFailure = results.some((result) => !result.ok);
 
     return Response.json({
-      ok: true,
+      ok: !hasFailure,
       businessDate,
-      sent,
-    });
+      sent: results,
+    }, { status: hasFailure ? 207 : 200 });
   } catch (error) {
     return Response.json(
       {
