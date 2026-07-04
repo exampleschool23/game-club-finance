@@ -310,6 +310,8 @@
     "date": "Date",
     "submit": "Save Expense",
     "success": "Expense saved",
+    "deleteSuccess": "Expense deleted",
+    "deleteConfirm": "Delete this expense? This cannot be undone.",
     "recentExpenses": "Recent Expenses",
     "addCategory": "Add new category",
     "customCategoryPlaceholder": "New category name",

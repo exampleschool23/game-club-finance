@@ -310,6 +310,8 @@
     "date": "Sana",
     "submit": "Xarajatni saqlash",
     "success": "Xarajat saqlandi",
+    "deleteSuccess": "Xarajat o'chirildi",
+    "deleteConfirm": "Bu xarajat o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.",
     "recentExpenses": "So'nggi xarajatlar",
     "addCategory": "Yangi kategoriya qo'shish",
     "customCategoryPlaceholder": "Yangi kategoriya nomi",

@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, parseCurrencyInput } from '@/lib/formatters';
-import { Calendar, ChevronDown, MinusCircle } from 'lucide-react';
+import { Calendar, ChevronDown, MinusCircle, Trash2 } from 'lucide-react';
 import type { Expense } from '@/types';
 
 const CATEGORIES = [
@@ -29,11 +29,12 @@ function normalizeCustomCategory(value: string): string {
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour } = useClub();
+  const { selectedClubId, role: currentRole, businessDayStartHour } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [form, setForm] = useState({
@@ -44,6 +45,7 @@ export default function ExpensesPage() {
     payment_method: 'cash',
     comment: '',
   });
+  const isOwner = currentRole === 'owner';
 
   useEffect(() => {
     setForm((prev) => ({ ...prev, date: businessToday }));
@@ -135,6 +137,31 @@ export default function ExpensesPage() {
       setForm({ date: businessToday, amount: '', category: 'other', custom_category: '', payment_method: 'cash', comment: '' });
       await loadExpenses();
     }
+  }
+
+  async function handleDelete(expense: Expense) {
+    if (!selectedClubId || !isOwner) return;
+    if (!window.confirm(t('deleteConfirm'))) return;
+
+    setDeletingId(expense.id);
+    setError('');
+    setSuccess('');
+
+    const supabase = createClient();
+    const { error: err } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('club_id', selectedClubId)
+      .eq('id', expense.id);
+
+    setDeletingId(null);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+
+    setSuccess(t('deleteSuccess'));
+    await loadExpenses();
   }
 
   const paymentMethods = ['cash', 'terminal', 'qr', 'transfer'];
@@ -261,8 +288,33 @@ export default function ExpensesPage() {
                   header: t('category'),
                   render: (r) => categoryLabel(r.category),
                 },
-                { key: 'payment_method', header: t('paymentMethod') },
+                {
+                  key: 'payment_method',
+                  header: t('paymentMethod'),
+                  render: (r) => tc(`paymentMethods.${r.payment_method}` as Parameters<typeof tc>[0]),
+                },
                 { key: 'comment', header: tc('noData'), render: (r) => r.comment ?? '-' },
+                ...(isOwner
+                  ? [
+                      {
+                        key: 'actions',
+                        header: tc('actions'),
+                        render: (r: Expense) => (
+                          <button
+                            type="button"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-danger-500 transition hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label={tc('delete')}
+                            title={tc('delete')}
+                            disabled={deletingId === r.id}
+                            onClick={() => handleDelete(r)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        ),
+                        className: 'w-16',
+                      },
+                    ]
+                  : []),
               ]}
             />
           )}

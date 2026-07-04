@@ -1,8 +1,10 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, CircleDollarSign } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/formatters';
+import { cn } from '@/lib/utils';
 
 export interface RecentTransactionRow {
   id: string;
@@ -16,10 +18,43 @@ interface RecentTransactionsTableProps {
   rows: RecentTransactionRow[];
 }
 
-function iconFor(type: RecentTransactionRow['type']) {
-  if (type === 'Expense' || type === 'Purchase') return <ArrowDown size={14} className="text-red-500" />;
-  if (type === 'Debt Payment') return <CircleDollarSign size={14} className="text-purple-600" />;
-  return <ArrowUp size={14} className="text-green-600" />;
+const TRANSACTION_STYLES: Record<
+  RecentTransactionRow['type'],
+  {
+    icon: ReactNode;
+    badge: string;
+    iconWrap: string;
+    amount: string;
+  }
+> = {
+  Income: {
+    icon: <ArrowUp size={14} />,
+    badge: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100',
+    iconWrap: 'bg-emerald-100 text-emerald-700',
+    amount: 'text-emerald-700',
+  },
+  Expense: {
+    icon: <ArrowDown size={14} />,
+    badge: 'bg-rose-50 text-rose-700 ring-1 ring-rose-100',
+    iconWrap: 'bg-rose-100 text-rose-700',
+    amount: 'text-rose-700',
+  },
+  Purchase: {
+    icon: <ArrowDown size={14} />,
+    badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-100',
+    iconWrap: 'bg-amber-100 text-amber-700',
+    amount: 'text-amber-700',
+  },
+  'Debt Payment': {
+    icon: <CircleDollarSign size={14} />,
+    badge: 'bg-violet-50 text-violet-700 ring-1 ring-violet-100',
+    iconWrap: 'bg-violet-100 text-violet-700',
+    amount: 'text-violet-700',
+  },
+};
+
+function styleFor(type: RecentTransactionRow['type']) {
+  return TRANSACTION_STYLES[type];
 }
 
 export function RecentTransactionsTable({ rows }: RecentTransactionsTableProps) {
@@ -55,23 +90,27 @@ export function RecentTransactionsTable({ rows }: RecentTransactionsTableProps) 
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.id}>
-                  <td className="py-3">
-                    <span className="inline-flex items-center gap-2 font-semibold text-gray-800">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100">
-                        {iconFor(row.type)}
+              rows.map((row) => {
+                const style = styleFor(row.type);
+
+                return (
+                  <tr key={row.id}>
+                    <td className="py-3">
+                      <span className={cn('inline-flex h-8 items-center gap-2 rounded-full px-2.5 text-xs font-bold', style.badge)}>
+                        <span className={cn('flex h-5 w-5 items-center justify-center rounded-full', style.iconWrap)}>
+                          {style.icon}
+                        </span>
+                        {typeLabel(row.type)}
                       </span>
-                      {typeLabel(row.type)}
-                    </span>
-                  </td>
-                  <td className="py-3 font-medium text-gray-900">{row.description}</td>
-                  <td className="py-3 text-right font-semibold text-gray-900">
-                    {formatCurrency(row.amount)} UZS
-                  </td>
-                  <td className="py-3 text-right text-gray-600">{row.time}</td>
-                </tr>
-              ))
+                    </td>
+                    <td className="py-3 font-medium text-gray-900">{row.description}</td>
+                    <td className={cn('py-3 text-right font-bold', style.amount)}>
+                      {formatCurrency(row.amount)} UZS
+                    </td>
+                    <td className="py-3 text-right text-gray-600">{row.time}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

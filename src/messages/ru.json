@@ -310,6 +310,8 @@
     "date": "Дата",
     "submit": "Сохранить расход",
     "success": "Расход сохранён",
+    "deleteSuccess": "Расход удалён",
+    "deleteConfirm": "Удалить этот расход? Это действие нельзя отменить.",
     "recentExpenses": "Последние расходы",
     "addCategory": "Добавить категорию",
     "customCategoryPlaceholder": "Название новой категории",
