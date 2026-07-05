@@ -21,6 +21,7 @@ import {
   Archive,
   Settings,
   Shield,
+  History,
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -142,6 +143,12 @@ export function Sidebar({
       href: '/debts',
       icon: Users,
       label: t('debts'),
+      roles: ['owner', 'admin', 'viewer'],
+    },
+    {
+      href: '/recent-transactions',
+      icon: History,
+      label: t('recentTransactions'),
       roles: ['owner', 'admin', 'viewer'],
     },
     {

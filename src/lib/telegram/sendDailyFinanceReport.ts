@@ -7,6 +7,7 @@ import {
 import type {
   DailyCashRow,
   ExpenseRow,
+  ProductValueRow,
   StockCountRow,
   StockPurchaseCostRow,
 } from '../calculations/dashboardMetrics';
@@ -93,7 +94,7 @@ export async function buildDailyFinanceTelegramReport(
   },
 ): Promise<DailyFinanceReportBuildResult> {
   const monthStart = monthStartIso(businessDate);
-  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, debtRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes] = await Promise.all([
+  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes] = await Promise.all([
     getClub(supabase, clubId),
     supabase
       .from('daily_cash_entries')
@@ -115,6 +116,11 @@ export async function buildDailyFinanceTelegramReport(
       .select('id,date,amount,category,payment_source,comment,created_at')
       .eq('club_id', clubId)
       .eq('date', businessDate),
+    supabase
+      .from('products')
+      .select('current_stock,cost_price')
+      .eq('club_id', clubId)
+      .eq('is_active', true),
     supabase
       .from('new_debts')
       .select('remaining_amount,status')
@@ -150,6 +156,7 @@ export async function buildDailyFinanceTelegramReport(
     stockRes.error,
     purchaseRes.error,
     expenseRes.error,
+    productRes.error,
     debtRes.error,
     monthCashRes.error,
     monthStockRes.error,
@@ -170,6 +177,7 @@ export async function buildDailyFinanceTelegramReport(
     monthStockRows: (monthStockRes.data ?? []) as StockCountRow[],
     monthStockPurchaseRows: (monthPurchaseRes.data ?? []) as StockPurchaseCostRow[],
     monthExpenseRows: (monthExpenseRes.data ?? []) as ExpenseRow[],
+    productRows: (productRes.data ?? []) as ProductValueRow[],
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
   });
 

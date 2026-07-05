@@ -5,6 +5,7 @@ import type {
   ExpenseRow,
   StockCountRow,
   StockPurchaseCostRow,
+  ProductValueRow,
 } from '../calculations/dashboardMetrics';
 
 export interface DailyFinanceReportInput {
@@ -23,6 +24,7 @@ export interface DailyFinanceReportInput {
   gameClubMoneyLeft: number;
   barMoneyLeft: number;
   netProfit: number;
+  inventoryValue: number;
   activeDebts: number;
 }
 
@@ -47,6 +49,7 @@ export interface DailyFinanceReportRows {
   monthStockRows?: StockCountRow[];
   monthStockPurchaseRows?: StockPurchaseCostRow[];
   monthExpenseRows?: ExpenseRow[];
+  productRows?: ProductValueRow[];
   debtRows: DailyFinanceReportDebtRow[];
 }
 
@@ -98,7 +101,7 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     rows.stockRows,
     rows.stockPurchaseRows,
     rows.expenseRows,
-    [],
+    rows.productRows ?? [],
     rows.debtRows,
   );
   const monthTotals = calculateDashboardTotals(
@@ -126,6 +129,7 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     gameClubMoneyLeft: monthTotals.gameClubMoneyLeft,
     barMoneyLeft: monthTotals.barIncome,
     netProfit: dailyTotals.netProfit,
+    inventoryValue: dailyTotals.inventoryValue,
     activeDebts: dailyTotals.activeDebts,
   };
 }
@@ -153,6 +157,7 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     `🧾 Остаток денег бара за месяц: ${money(input.barMoneyLeft)}`,
     `✅ Чистая прибыль сегодня: ${money(input.netProfit)}`,
     '',
+    `📦 Стоимость склада: ${money(input.inventoryValue)}`,
     `🤝 Активные долги: ${money(input.activeDebts)}`,
   ].join('\n');
 }

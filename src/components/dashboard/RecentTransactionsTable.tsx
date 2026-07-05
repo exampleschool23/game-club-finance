@@ -11,6 +11,7 @@ export interface RecentTransactionRow {
   type: 'Income' | 'Expense' | 'Purchase' | 'Debt Payment';
   description: string;
   amount: number;
+  dateKey: string;
   date: string;
   time: string;
 }
@@ -65,12 +66,12 @@ function styleFor(type: RecentTransactionRow['type']) {
 
 export function RecentTransactionsTable({ rows }: RecentTransactionsTableProps) {
   const t = useTranslations('dashboard');
-  const groupedRows = rows.reduce<Array<{ date: string; rows: RecentTransactionRow[] }>>((groups, row) => {
+  const groupedRows = rows.reduce<Array<{ dateKey: string; date: string; rows: RecentTransactionRow[] }>>((groups, row) => {
     const lastGroup = groups.at(-1);
-    if (lastGroup?.date === row.date) {
+    if (lastGroup?.dateKey === row.dateKey) {
       lastGroup.rows.push(row);
     } else {
-      groups.push({ date: row.date, rows: [row] });
+      groups.push({ dateKey: row.dateKey, date: row.date, rows: [row] });
     }
     return groups;
   }, []);

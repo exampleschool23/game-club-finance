@@ -26,10 +26,6 @@ import { IncomeTrendChart } from '@/components/dashboard/IncomeTrendChart';
 import { IncomeCategoryChart } from '@/components/dashboard/IncomeCategoryChart';
 import { ExpensesByCategoryChart } from '@/components/dashboard/ExpensesByCategoryChart';
 import {
-  RecentTransactionsTable,
-  type RecentTransactionRow,
-} from '@/components/dashboard/RecentTransactionsTable';
-import {
   buildPeriodTrend,
   calculateDashboardTotals,
   emptyDashboardTotals,
@@ -63,40 +59,12 @@ interface DebtRow {
   status: string;
 }
 
-interface DebtPaymentRow {
-  id: string;
-  debt_id: string;
-  date: string;
-  amount: number;
-  created_at: string;
-}
-
-type DashboardDescriptionKey =
-  | 'cashIncomeDesc'
-  | 'terminalIncomeDesc'
-  | 'cardIncomeDesc'
-  | 'playstationIncomeDesc'
-  | 'barSalesDesc'
-  | 'productPurchaseDesc'
-  | 'debtPaymentSuffix'
-  | 'debtPayment';
-
-interface DashboardTransactionRow extends Omit<RecentTransactionRow, 'date' | 'description' | 'time'> {
-  description?: string;
-  descriptionKey?: DashboardDescriptionKey;
-  productName?: string | null;
-  debtName?: string;
-  dateValue?: string | null;
-  timeValue?: string | null;
-}
-
 interface DashboardData {
   totals: DashboardTotals;
   previousTotals: DashboardTotals;
   trend: TrendRow[];
   lowStockCount: number;
   expenseCategories: Array<{ category: string; value: number }>;
-  recentTransactions: DashboardTransactionRow[];
 }
 
 const emptyData: DashboardData = {
@@ -105,7 +73,6 @@ const emptyData: DashboardData = {
   trend: [],
   lowStockCount: 0,
   expenseCategories: [],
-  recentTransactions: [],
 };
 
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
@@ -138,27 +105,11 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
   return query.gte('date', range.from).lte('date', range.to);
 }
 
-function expenseLabel(row: ExpenseRow): string {
-  const category = row.category.replace(/_/g, ' ');
-  return row.comment ? `${category} - ${row.comment}` : category;
-}
-
-function productName(relation: StockPurchaseRow['products']): string | null {
-  if (!relation) return null;
-  return Array.isArray(relation) ? relation[0]?.name ?? null : relation.name;
-}
-
-function transactionTimeMs(row: DashboardTransactionRow): number {
-  if (!row.timeValue) return 0;
-  const parsed = Date.parse(row.timeValue);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 export default function DashboardPage() {
   const { selectedDate } = useDashboardDate();
   const { selectedClubId, businessDayStartHour } = useClub();
   const { locale } = useAppLocale();
-  const [period, setPeriod] = useState<DashboardPeriod>('today');
+  const [period, setPeriod] = useState<DashboardPeriod>('month');
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [customFrom, setCustomFrom] = useState(() => businessToday);
   const [customTo, setCustomTo] = useState(() => businessToday);
@@ -197,7 +148,6 @@ export default function DashboardPage() {
       productRes,
       debtRes,
       purchaseRes,
-      debtPaymentsRes,
       prevCashRes,
       prevStockRes,
       prevPurchaseRes,
@@ -238,18 +188,11 @@ export default function DashboardPage() {
       inRangeQuery(
         supabase
           .from('stock_purchases')
-          .select('id,date,quantity,cost_price,comment,created_at,products(name)')
+          .select('id,date,quantity,cost_price,comment,created_at')
           .eq('club_id', selectedClubId)
           .order('created_at', { ascending: false }),
         range,
       ),
-      supabase
-        .from('debt_payments')
-        .select('id,debt_id,date,amount,created_at')
-        .eq('club_id', selectedClubId)
-        .gte('date', range.from)
-        .lte('date', range.to)
-        .order('created_at', { ascending: false }),
       inRangeQuery(
         supabase
           .from('daily_cash_entries')
@@ -311,7 +254,6 @@ export default function DashboardPage() {
       productRes.error,
       debtRes.error,
       purchaseRes.error,
-      debtPaymentsRes.error,
       prevCashRes.error,
       prevStockRes.error,
       prevPurchaseRes.error,
@@ -334,9 +276,7 @@ export default function DashboardPage() {
     const products = (productRes.data ?? []) as Product[];
     const debts = (debtRes.data ?? []) as DebtRow[];
     const purchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
-    const debtPayments = (debtPaymentsRes.data ?? []) as unknown as DebtPaymentRow[];
     const activeDebts = debts.filter((debt) => debt.status !== 'paid');
-    const debtNameById = new Map(debts.map((debt) => [debt.id, debt.person_name]));
 
     const totals = calculateDashboardTotals(cashRows, stockRows, purchases, expenseRows, products, activeDebts);
     const previousTotals = calculateDashboardTotals(
@@ -366,102 +306,12 @@ export default function DashboardPage() {
       ([category, value]) => ({ category, value }),
     ).sort((a, b) => b.value - a.value);
 
-    const transactions = ([
-      ...cashRows.flatMap((row) => {
-        const createdAt = row.created_at ?? `${row.date}T00:00:00`;
-        return [
-          row.cash_income > 0
-            ? {
-                id: `cash-${row.date}`,
-                type: 'Income' as const,
-                descriptionKey: 'cashIncomeDesc' as const,
-                amount: row.cash_income,
-                dateValue: row.date,
-                timeValue: createdAt,
-              }
-            : null,
-          row.terminal_income > 0
-            ? {
-                id: `terminal-${row.date}`,
-                type: 'Income' as const,
-                descriptionKey: 'terminalIncomeDesc' as const,
-                amount: row.terminal_income,
-                dateValue: row.date,
-                timeValue: createdAt,
-              }
-            : null,
-          row.card_income > 0
-            ? {
-                id: `card-${row.date}`,
-                type: 'Income' as const,
-                descriptionKey: 'cardIncomeDesc' as const,
-                amount: row.card_income,
-                dateValue: row.date,
-                timeValue: createdAt,
-              }
-            : null,
-          (row.playstation_income ?? 0) > 0
-            ? {
-                id: `playstation-${row.date}`,
-                type: 'Income' as const,
-                descriptionKey: 'playstationIncomeDesc' as const,
-                amount: row.playstation_income ?? 0,
-                dateValue: row.date,
-                timeValue: createdAt,
-              }
-            : null,
-        ];
-      }),
-      ...(stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0) > 0
-        ? [
-            {
-              id: `bar-${range.from}-${range.to}`,
-              type: 'Income' as const,
-              descriptionKey: 'barSalesDesc' as const,
-              amount: stockRows.reduce((sum, row) => sum + (row.bar_income ?? 0), 0),
-              dateValue: stockRows[0]?.date ?? range.from,
-              timeValue: stockRows[0]?.updated_at ?? null,
-            },
-          ]
-        : []),
-      ...expenseRows.map((row) => ({
-        id: `expense-${row.id}`,
-        type: 'Expense' as const,
-        description: expenseLabel(row),
-        amount: row.amount,
-        dateValue: row.date,
-        timeValue: row.created_at,
-      })),
-      ...purchases.map((row) => ({
-        id: `purchase-${row.id}`,
-        type: 'Purchase' as const,
-        descriptionKey: 'productPurchaseDesc' as const,
-        productName: productName(row.products),
-        amount: (row.quantity ?? 0) * (row.cost_price ?? 0),
-        dateValue: row.date,
-        timeValue: row.created_at,
-      })),
-      ...debtPayments.map((row) => ({
-        id: `debt-payment-${row.id}`,
-        type: 'Debt Payment' as const,
-        descriptionKey: debtNameById.get(row.debt_id) ? 'debtPaymentSuffix' as const : 'debtPayment' as const,
-        debtName: debtNameById.get(row.debt_id),
-        amount: row.amount,
-        dateValue: row.date,
-        timeValue: row.created_at,
-      })),
-    ] as Array<DashboardTransactionRow | null>)
-      .filter((row): row is DashboardTransactionRow => Boolean(row))
-      .sort((a, b) => transactionTimeMs(b) - transactionTimeMs(a))
-      .slice(0, 8);
-
     setData({
       totals,
       previousTotals,
       trend,
       lowStockCount,
       expenseCategories,
-      recentTransactions: transactions,
     });
     setLoading(false);
   }, [range, selectedClubId]);
@@ -507,26 +357,6 @@ export default function DashboardPage() {
     })),
     [data.trend, locale],
   );
-
-  const recentTransactions = data.recentTransactions.map((row): RecentTransactionRow => {
-    const { descriptionKey, productName: rowProductName, debtName, dateValue, timeValue, ...base } = row;
-    let description = row.description ?? (descriptionKey ? t(descriptionKey) : '');
-
-    if (descriptionKey === 'productPurchaseDesc' && rowProductName) {
-      description = `${t('productPurchaseDesc')} - ${rowProductName}`;
-    }
-
-    if (descriptionKey === 'debtPaymentSuffix' && debtName) {
-      description = `${debtName} ${t('debtPaymentSuffix')}`;
-    }
-
-    return {
-      ...base,
-      description,
-      date: dateValue ? formatDateOnly(dateValue, locale) : timeValue ? formatDateOnly(timeValue, locale) : '-',
-      time: timeValue ? formatTime(timeValue, locale) : '-',
-    };
-  });
 
   const incomeExpenseData = [
     { name: t('gameClubIncome'), value: totals.computerIncome, fill: '#2563eb' },
@@ -656,9 +486,8 @@ export default function DashboardPage() {
             <IncomeTrendChart data={trend} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ExpensesByCategoryChart data={data.expenseCategories} total={totals.totalExpenses} />
-            <RecentTransactionsTable rows={recentTransactions} />
             <IncomeCategoryChart data={categoryData} total={incomeCategoryTotal} />
           </div>
         </>

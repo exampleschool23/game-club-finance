@@ -24,6 +24,7 @@ describe('formatRussianDailyFinanceReport', () => {
         gameClubMoneyLeft: 3_024_000,
         barMoneyLeft: 2_311_000,
         netProfit: 263_000,
+        inventoryValue: 8_473_309,
         activeDebts: 0,
       }),
     ).toBe(`📊 Ежедневный финансовый отчёт
@@ -45,6 +46,7 @@ Pixel Game Zone
 🧾 Остаток денег бара за месяц: 2 311 000 UZS
 ✅ Чистая прибыль сегодня: 263 000 UZS
 
+📦 Стоимость склада: 8 473 309 UZS
 🤝 Активные долги: 0 UZS`);
   });
 
@@ -160,6 +162,10 @@ Pixel Game Zone
         { remaining_amount: 90_000, status: 'unpaid' },
         { remaining_amount: 20_000, status: 'paid' },
       ],
+      productRows: [
+        { current_stock: 3, cost_price: 12_000 },
+        { current_stock: 2, cost_price: 7_000 },
+      ],
     });
 
     expect(input).toMatchObject({
@@ -179,6 +185,7 @@ Pixel Game Zone
       gameClubMoneyLeft: 1_750_000,
       barMoneyLeft: 560_000,
       netProfit: 790_000,
+      inventoryValue: 50_000,
       activeDebts: 90_000,
     });
   });
@@ -204,6 +211,7 @@ Pixel Game Zone
         gameClubMoneyLeft: 2_941_000,
         barMoneyLeft: 1_084_000,
         netProfit: 1_872_000,
+        inventoryValue: 8_473_309,
         activeDebts: 0,
       }),
     ).toContain(`💸 Расходы: 624 000 UZS
