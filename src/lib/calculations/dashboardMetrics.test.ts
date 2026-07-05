@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildIncomeTrend,
   buildPeriodTrend,
+  calculateAverageDailyIncome,
   calculateDashboardTotals,
+  calculateGameClubMoneyLeftByPaymentMethod,
+  countDashboardRangeDays,
+  countDashboardRangeDaysThroughDate,
+  getDashboardAverageDayCount,
   getDashboardRange,
+  getLatestRowDateInRange,
   getPreviousDashboardRange,
   localIsoDate,
 } from './dashboardMetrics';
@@ -167,6 +173,70 @@ describe('dashboard metrics', () => {
     expect(totals.netProfit).toBe(540_000);
   });
 
+  it('breaks game club money left down by payment method', () => {
+    const breakdown = calculateGameClubMoneyLeftByPaymentMethod(
+      [
+        {
+          date: '2026-07-04',
+          cash_income: 500_000,
+          terminal_income: 300_000,
+          card_income: 100_000,
+          playstation_income: 50_000,
+        },
+      ],
+      [
+        {
+          id: 'cash-expense',
+          date: '2026-07-04',
+          amount: 120_000,
+          category: 'salary',
+          payment_method: 'cash',
+          payment_source: 'game_club',
+          comment: null,
+          created_at: '2026-07-04T10:00:00Z',
+        },
+        {
+          id: 'terminal-expense',
+          date: '2026-07-04',
+          amount: 50_000,
+          category: 'repair',
+          payment_method: 'terminal',
+          payment_source: 'game_club',
+          comment: null,
+          created_at: '2026-07-04T11:00:00Z',
+        },
+        {
+          id: 'transfer-expense',
+          date: '2026-07-04',
+          amount: 40_000,
+          category: 'internet',
+          payment_method: 'transfer',
+          payment_source: 'game_club',
+          comment: null,
+          created_at: '2026-07-04T12:00:00Z',
+        },
+        {
+          id: 'bar-expense',
+          date: '2026-07-04',
+          amount: 10_000,
+          category: 'cleaning',
+          payment_method: 'cash',
+          payment_source: 'bar',
+          comment: null,
+          created_at: '2026-07-04T13:00:00Z',
+        },
+      ],
+    );
+
+    expect(breakdown).toEqual({
+      cash: 380_000,
+      terminal: 250_000,
+      card: 60_000,
+      playstation: 50_000,
+    });
+    expect(Object.values(breakdown).reduce((sum, value) => sum + value, 0)).toBe(740_000);
+  });
+
   it('builds 7-day trend using cash, closing stock income, and purchases', () => {
     const trend = buildIncomeTrend(
       '2026-07-02',
@@ -267,5 +337,46 @@ describe('dashboard metrics', () => {
       from: '2026-05-25',
       to: '2026-05-31',
     });
+  });
+
+  it('counts average days for current periods through the selected date', () => {
+    expect(countDashboardRangeDays({ from: '2026-07-01', to: '2026-07-31' })).toBe(31);
+    expect(
+      getDashboardAverageDayCount(
+        'month',
+        { from: '2026-07-01', to: '2026-07-31' },
+        '2026-07-06',
+      ),
+    ).toBe(6);
+    expect(
+      getDashboardAverageDayCount(
+        'week',
+        { from: '2026-07-06', to: '2026-07-12' },
+        '2026-07-08',
+      ),
+    ).toBe(3);
+    expect(
+      getDashboardAverageDayCount(
+        'lastMonth',
+        { from: '2026-06-01', to: '2026-06-30' },
+        '2026-07-06',
+      ),
+    ).toBe(30);
+    expect(calculateAverageDailyIncome(10_000, 3)).toBe(3_333);
+  });
+
+  it('averages game club income through the latest daily cashier entry date', () => {
+    const range = { from: '2026-07-01', to: '2026-07-05' };
+    const latestCashierEntryDate = getLatestRowDateInRange(
+      [
+        { date: '2026-07-01', cash_income: 1_000, terminal_income: 0, card_income: 0 },
+        { date: '2026-07-04', cash_income: 1_000, terminal_income: 0, card_income: 0 },
+      ],
+      range,
+    );
+
+    expect(latestCashierEntryDate).toBe('2026-07-04');
+    expect(countDashboardRangeDaysThroughDate(range, latestCashierEntryDate)).toBe(4);
+    expect(calculateAverageDailyIncome(10_254_000, 4)).toBe(2_563_500);
   });
 });

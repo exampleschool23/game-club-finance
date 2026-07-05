@@ -2,10 +2,11 @@
 
 // Route: /
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Banknote,
   Boxes,
+  CalendarDays,
   ChartNoAxesCombined,
   Gamepad2,
   MonitorSmartphone,
@@ -16,7 +17,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatDateOnly, formatDateShort, formatTime } from '@/lib/formatters';
+import { formatDateShort } from '@/lib/formatters';
 import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
@@ -25,17 +26,25 @@ import { PaymentMethodChart } from '@/components/dashboard/PaymentMethodChart';
 import { IncomeTrendChart } from '@/components/dashboard/IncomeTrendChart';
 import { IncomeCategoryChart } from '@/components/dashboard/IncomeCategoryChart';
 import { ExpensesByCategoryChart } from '@/components/dashboard/ExpensesByCategoryChart';
+import { MoneyLeftBreakdownChart } from '@/components/dashboard/MoneyLeftBreakdownChart';
 import {
   buildPeriodTrend,
+  calculateAverageDailyIncome,
   calculateDashboardTotals,
+  calculateGameClubMoneyLeftByPaymentMethod,
+  countDashboardRangeDaysThroughDate,
   emptyDashboardTotals,
+  emptyMoneyLeftByPaymentMethod,
+  getDashboardAverageDayCount,
   getDashboardRange,
+  getLatestRowDateInRange,
   getPreviousDashboardRange,
   percentChange,
   type DailyCashRow,
   type DashboardPeriod,
   type DashboardTotals,
   type ExpenseRow,
+  type MoneyLeftByPaymentMethod,
   type StockCountRow,
   type StockPurchaseCostRow,
   type TrendRow,
@@ -65,6 +74,8 @@ interface DashboardData {
   trend: TrendRow[];
   lowStockCount: number;
   expenseCategories: Array<{ category: string; value: number }>;
+  moneyLeftByPaymentMethod: MoneyLeftByPaymentMethod;
+  latestDailyCashEntryDate: string | null;
 }
 
 const emptyData: DashboardData = {
@@ -73,6 +84,8 @@ const emptyData: DashboardData = {
   trend: [],
   lowStockCount: 0,
   expenseCategories: [],
+  moneyLeftByPaymentMethod: emptyMoneyLeftByPaymentMethod,
+  latestDailyCashEntryDate: null,
 };
 
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
@@ -103,6 +116,34 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
   range: { from: string; to: string },
 ): T {
   return query.gte('date', range.from).lte('date', range.to);
+}
+
+interface MetricSectionProps {
+  title: string;
+  description: string;
+  children: ReactNode;
+  gridClassName: string;
+  className: string;
+  titleClassName: string;
+}
+
+function MetricSection({
+  title,
+  description,
+  children,
+  gridClassName,
+  className,
+  titleClassName,
+}: MetricSectionProps) {
+  return (
+    <section className={`space-y-4 rounded-xl p-4 ring-1 sm:p-5 ${className}`}>
+      <div>
+        <h2 className={`text-lg font-bold tracking-normal sm:text-xl ${titleClassName}`}>{title}</h2>
+        <p className="mt-1 max-w-4xl text-sm font-semibold leading-5 text-gray-700">{description}</p>
+      </div>
+      <div className={gridClassName}>{children}</div>
+    </section>
+  );
 }
 
 export default function DashboardPage() {
@@ -174,7 +215,7 @@ export default function DashboardPage() {
       inRangeQuery(
         supabase
           .from('expenses')
-          .select('id,date,amount,category,payment_source,comment,created_at')
+          .select('id,date,amount,category,payment_method,payment_source,comment,created_at')
           .eq('club_id', selectedClubId)
           .order('created_at', { ascending: false }),
         range,
@@ -279,6 +320,8 @@ export default function DashboardPage() {
     const activeDebts = debts.filter((debt) => debt.status !== 'paid');
 
     const totals = calculateDashboardTotals(cashRows, stockRows, purchases, expenseRows, products, activeDebts);
+    const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(cashRows, expenseRows);
+    const latestDailyCashEntryDate = getLatestRowDateInRange(cashRows, range);
     const previousTotals = calculateDashboardTotals(
       (prevCashRes.data ?? []) as DailyCashRow[],
       (prevStockRes.data ?? []) as StockCountRow[],
@@ -312,6 +355,8 @@ export default function DashboardPage() {
       trend,
       lowStockCount,
       expenseCategories,
+      moneyLeftByPaymentMethod,
+      latestDailyCashEntryDate,
     });
     setLoading(false);
   }, [range, selectedClubId]);
@@ -357,6 +402,10 @@ export default function DashboardPage() {
     })),
     [data.trend, locale],
   );
+  const averageBarDayCount = getDashboardAverageDayCount(period, range, selectedDate || businessToday);
+  const averageGameClubDayCount = countDashboardRangeDaysThroughDate(range, data.latestDailyCashEntryDate);
+  const averageGameClubIncome = calculateAverageDailyIncome(totals.gameClubIncome, averageGameClubDayCount);
+  const averageBarIncome = calculateAverageDailyIncome(totals.barSales, averageBarDayCount);
 
   const incomeExpenseData = [
     { name: t('gameClubIncome'), value: totals.computerIncome, fill: '#2563eb' },
@@ -371,6 +420,13 @@ export default function DashboardPage() {
     { name: t('cash'), value: totals.cashIncome, color: '#22c55e' },
     { name: t('terminal'), value: totals.terminalIncome, color: '#2563eb' },
     { name: t('card'), value: totals.cardIncome, color: '#7c3aed' },
+  ];
+
+  const moneyLeftData = [
+    { name: t('cash'), value: data.moneyLeftByPaymentMethod.cash, color: '#22c55e' },
+    { name: t('terminal'), value: data.moneyLeftByPaymentMethod.terminal, color: '#2563eb' },
+    { name: t('card'), value: data.moneyLeftByPaymentMethod.card, color: '#7c3aed' },
+    { name: t('playstation'), value: data.moneyLeftByPaymentMethod.playstation, color: '#f59e0b' },
   ];
 
   const categoryData = [
@@ -395,7 +451,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+      <MetricSection
+        title={t('gameClubPlaystationSection')}
+        description={t('gameClubPlaystationSectionDesc')}
+        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        className="bg-cyan-200 ring-cyan-300"
+        titleClassName="text-cyan-950"
+      >
         <MetricCard
           label={t('gameClubIncome')}
           amount={totals.computerIncome}
@@ -405,6 +467,41 @@ export default function DashboardPage() {
           helper={t('gameClubIncomeMetricDesc')}
           comparison={{ value: percentChange(totals.computerIncome, previousTotals.computerIncome), label: incomeComparisonLabel }}
         />
+        <MetricCard
+          label={t('playstationIncome')}
+          amount={totals.playstationIncome}
+          icon={Gamepad2}
+          iconBgClassName="bg-amber-100"
+          iconClassName="text-amber-600"
+          helper={t('playstationIncomeMetricDesc')}
+          comparison={{ value: percentChange(totals.playstationIncome, previousTotals.playstationIncome), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label={t('totalMoneyLeft')}
+          amount={totals.gameClubMoneyLeft}
+          icon={Wallet}
+          iconBgClassName="bg-emerald-100"
+          iconClassName="text-emerald-600"
+          helper={t('totalMoneyLeftDesc')}
+          comparison={{ value: percentChange(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label={t('averageDailyIncome')}
+          amount={averageGameClubIncome}
+          icon={CalendarDays}
+          iconBgClassName="bg-cyan-100"
+          iconClassName="text-cyan-600"
+          helper={t('averageDailyClubIncomeDesc')}
+        />
+      </MetricSection>
+
+      <MetricSection
+        title={t('barStatisticsSection')}
+        description={t('barStatisticsSectionDesc')}
+        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5"
+        className="bg-orange-200 ring-orange-300"
+        titleClassName="text-orange-950"
+      >
         <MetricCard
           label={t('totalBarMoney')}
           amount={totals.barSales}
@@ -423,15 +520,6 @@ export default function DashboardPage() {
           helper={t('stockPurchaseMetricDesc')}
         />
         <MetricCard
-          label={t('playstationIncome')}
-          amount={totals.playstationIncome}
-          icon={Gamepad2}
-          iconBgClassName="bg-amber-100"
-          iconClassName="text-amber-600"
-          helper={t('playstationIncomeMetricDesc')}
-          comparison={{ value: percentChange(totals.playstationIncome, previousTotals.playstationIncome), label: incomeComparisonLabel }}
-        />
-        <MetricCard
           label={t('barMoneyNetProfit')}
           amount={totals.barIncome}
           icon={ChartNoAxesCombined}
@@ -441,13 +529,12 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
-          label={t('totalMoneyLeft')}
-          amount={totals.gameClubMoneyLeft}
-          icon={Wallet}
-          iconBgClassName="bg-emerald-100"
-          iconClassName="text-emerald-600"
-          helper={t('totalMoneyLeftDesc')}
-          comparison={{ value: percentChange(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft), label: incomeComparisonLabel }}
+          label={t('averageDailyIncome')}
+          amount={averageBarIncome}
+          icon={CalendarDays}
+          iconBgClassName="bg-sky-100"
+          iconClassName="text-sky-600"
+          helper={t('averageDailyBarIncomeDesc')}
         />
         <MetricCard
           label={t('inventoryValue')}
@@ -457,7 +544,7 @@ export default function DashboardPage() {
           iconClassName="text-blue-600"
           helper={`${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
         />
-      </div>
+      </MetricSection>
 
       <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <PeriodTabs
@@ -486,8 +573,13 @@ export default function DashboardPage() {
             <IncomeTrendChart data={trend} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             <ExpensesByCategoryChart data={data.expenseCategories} total={totals.totalExpenses} />
+            <MoneyLeftBreakdownChart
+              title={`${t('totalMoneyLeftByCategory')} (${periodLabel})`}
+              data={moneyLeftData}
+              total={totals.gameClubMoneyLeft}
+            />
             <IncomeCategoryChart data={categoryData} total={incomeCategoryTotal} />
           </div>
         </>

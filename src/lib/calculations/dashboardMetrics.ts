@@ -38,6 +38,7 @@ export interface ExpenseRow {
   date: string;
   amount: number;
   category: string;
+  payment_method?: string | null;
   payment_source?: 'game_club' | 'bar' | null;
   comment: string | null;
   created_at: string;
@@ -80,6 +81,20 @@ export interface TrendRow {
   income: number;
   expenses: number;
 }
+
+export interface MoneyLeftByPaymentMethod {
+  cash: number;
+  terminal: number;
+  card: number;
+  playstation: number;
+}
+
+export const emptyMoneyLeftByPaymentMethod: MoneyLeftByPaymentMethod = {
+  cash: 0,
+  terminal: 0,
+  card: 0,
+  playstation: 0,
+};
 
 export const emptyDashboardTotals: DashboardTotals = {
   cashIncome: 0,
@@ -184,6 +199,51 @@ export function getPreviousDashboardRange(range: {
   return { from: localIsoDate(previousFrom), to: localIsoDate(previousTo) };
 }
 
+export function countDashboardRangeDays(range: { from: string; to: string }): number {
+  const from = parseLocalIsoDate(range.from);
+  const to = parseLocalIsoDate(range.to);
+  return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+}
+
+export function getDashboardAverageDayCount(
+  period: DashboardPeriod,
+  range: { from: string; to: string },
+  selectedDate: string,
+): number {
+  if (period !== 'week' && period !== 'month') return countDashboardRangeDays(range);
+
+  const from = parseLocalIsoDate(range.from);
+  const to = parseLocalIsoDate(range.to);
+  const selected = parseLocalIsoDate(selectedDate);
+
+  if (selected < from || selected > to) return countDashboardRangeDays(range);
+
+  return countDashboardRangeDays({ from: range.from, to: localIsoDate(selected) });
+}
+
+export function getLatestRowDateInRange<T extends { date: string }>(
+  rows: T[],
+  range: { from: string; to: string },
+): string | null {
+  return rows.reduce<string | null>((latest, row) => {
+    if (row.date < range.from || row.date > range.to) return latest;
+    return latest === null || row.date > latest ? row.date : latest;
+  }, null);
+}
+
+export function countDashboardRangeDaysThroughDate(
+  range: { from: string; to: string },
+  throughDate: string | null | undefined,
+): number {
+  if (!throughDate || throughDate < range.from) return countDashboardRangeDays(range);
+  const cappedTo = throughDate > range.to ? range.to : throughDate;
+  return countDashboardRangeDays({ from: range.from, to: cappedTo });
+}
+
+export function calculateAverageDailyIncome(total: number, days: number): number {
+  return Math.round(total / Math.max(1, days));
+}
+
 export function sumGameClubRows(rows: DailyCashRow[]): Pick<
   DashboardTotals,
   | 'cashIncome'
@@ -205,6 +265,36 @@ export function sumGameClubRows(rows: DailyCashRow[]): Pick<
     playstationIncome,
     computerIncome,
     gameClubIncome: calculateGameClubIncome({ cashIncome, terminalIncome, cardIncome, playstationIncome }),
+  };
+}
+
+function gameClubExpensePaymentBucket(method: string | null | undefined): 'cash' | 'terminal' | 'card' {
+  if (method === 'cash') return 'cash';
+  if (method === 'terminal') return 'terminal';
+  return 'card';
+}
+
+export function calculateGameClubMoneyLeftByPaymentMethod(
+  cashRows: DailyCashRow[],
+  expenseRows: ExpenseRow[],
+): MoneyLeftByPaymentMethod {
+  const gameClub = sumGameClubRows(cashRows);
+  const expensesByPayment = expenseRows.reduce(
+    (acc, row) => {
+      if (row.payment_source === 'bar') return acc;
+
+      const bucket = gameClubExpensePaymentBucket(row.payment_method);
+      acc[bucket] += Number(row.amount ?? 0);
+      return acc;
+    },
+    { cash: 0, terminal: 0, card: 0 },
+  );
+
+  return {
+    cash: gameClub.cashIncome - expensesByPayment.cash,
+    terminal: gameClub.terminalIncome - expensesByPayment.terminal,
+    card: gameClub.cardIncome - expensesByPayment.card,
+    playstation: gameClub.playstationIncome,
   };
 }
 
