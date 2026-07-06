@@ -348,7 +348,7 @@ export function calculateDashboardTotals(
 
 export function percentChange(current: number, previous: number): number {
   if (!previous) return current > 0 ? 100 : 0;
-  return Math.round(((current - previous) / previous) * 100);
+  return Math.round(((current - previous) / Math.abs(previous)) * 100);
 }
 
 export function buildIncomeTrend(

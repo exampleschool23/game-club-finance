@@ -12,6 +12,7 @@ import {
   getLatestRowDateInRange,
   getPreviousDashboardRange,
   localIsoDate,
+  percentChange,
 } from './dashboardMetrics';
 
 describe('dashboard metrics', () => {
@@ -125,6 +126,12 @@ describe('dashboard metrics', () => {
     expect(totals.activeDebts).toBe(100_000);
     expect(totals.activeDebtCount).toBe(1);
     expect(totals.profitMargin).toBe(96.4);
+  });
+
+  it('calculates percentage changes against negative previous values', () => {
+    expect(percentChange(8_902_000, -700_000)).toBe(1372);
+    expect(percentChange(-1_000, -500)).toBe(-100);
+    expect(percentChange(-500, -1_000)).toBe(50);
   });
 
   it('subtracts expenses from the selected money source only', () => {
