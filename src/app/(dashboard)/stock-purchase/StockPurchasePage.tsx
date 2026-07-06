@@ -147,6 +147,7 @@ async function syncSavedStockCountForPurchaseDelta(
     .from('daily_stock_counts')
     .update({
       added_today: next.addedToday,
+      closing_stock: next.closingStock,
       sold_quantity: next.soldQuantity,
       bar_income: next.barIncome,
       bar_cost: next.barCost,

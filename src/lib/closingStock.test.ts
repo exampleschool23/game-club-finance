@@ -200,8 +200,8 @@ describe('closing stock row defaults', () => {
     expect(rows[0]).toMatchObject({
       previousStock: '7',
       addedToday: '21',
-      closingStock: '6',
-      soldQuantity: '22',
+      closingStock: '25',
+      soldQuantity: '3',
     });
   });
 });
@@ -489,8 +489,8 @@ describe('closing stock drafts', () => {
     expect(appliedRows[0]).toMatchObject({
       previousStock: '2',
       addedToday: '5',
-      closingStock: '1',
-      soldQuantity: '6',
+      closingStock: '6',
+      soldQuantity: '1',
     });
   });
 

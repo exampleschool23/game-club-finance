@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -9,6 +9,13 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
+import { todayIso } from '@/lib/utils';
+import {
+  buildEditableClosingStockRows,
+  normalizeStockCount,
+  type ClosingStockExistingCount,
+  type ClosingStockPurchaseQuantity,
+} from '@/lib/closingStock';
 import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
 import type { Product } from '@/types';
 
@@ -43,7 +50,8 @@ function isForeignKeyDeleteError(error: { message?: string; code?: string } | nu
 export default function ProductsPage() {
   const t = useTranslations('products');
   const tc = useTranslations('common');
-  const { selectedClubId, role: currentRole } = useClub();
+  const { selectedClubId, role: currentRole, businessDayStartHour } = useClub();
+  const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [products, setProducts] = useState<Product[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,6 +61,42 @@ export default function ProductsPage() {
   const [error, setError] = useState('');
 
   const isOwner = currentRole === 'owner';
+
+  const applyCurrentBusinessStock = useCallback(async (sourceProducts: Product[]): Promise<Product[]> => {
+    if (!selectedClubId || sourceProducts.length === 0) return sourceProducts;
+
+    const supabase = createClient();
+    const [countsRes, purchasesRes] = await Promise.all([
+      supabase
+        .from('daily_stock_counts')
+        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity')
+        .eq('club_id', selectedClubId)
+        .eq('date', businessToday),
+      supabase
+        .from('stock_purchases')
+        .select('product_id, quantity')
+        .eq('club_id', selectedClubId)
+        .eq('date', businessToday),
+    ]);
+
+    if (countsRes.error || purchasesRes.error) return sourceProducts;
+
+    const rows = buildEditableClosingStockRows({
+      products: sourceProducts,
+      counts: (countsRes.data ?? []) as ClosingStockExistingCount[],
+      purchases: (purchasesRes.data ?? []) as ClosingStockPurchaseQuantity[],
+      previousClosings: {},
+      isCurrentDate: true,
+    });
+    const currentStockByProduct = new Map(
+      rows.map((row) => [row.product.id, normalizeStockCount(row.closingStock)]),
+    );
+
+    return sourceProducts.map((product) => ({
+      ...product,
+      current_stock: currentStockByProduct.get(product.id) ?? product.current_stock,
+    }));
+  }, [businessToday, selectedClubId]);
 
   const loadProducts = useCallback(async () => {
     if (!selectedClubId) {
@@ -70,7 +114,7 @@ export default function ProductsPage() {
       .order('name', { ascending: true });
 
     if (!ordered.error) {
-      setProducts(ordered.data ?? []);
+      setProducts(await applyCurrentBusinessStock((ordered.data ?? []) as Product[]));
       return;
     }
 
@@ -83,7 +127,7 @@ export default function ProductsPage() {
         .order('name', { ascending: true });
 
       if (!named.error) {
-        setProducts(named.data ?? []);
+        setProducts(await applyCurrentBusinessStock((named.data ?? []) as Product[]));
         return;
       }
     }
@@ -96,7 +140,7 @@ export default function ProductsPage() {
       .order('name', { ascending: true });
 
     if (!orderedWithoutDeletedFilter.error) {
-      setProducts(orderedWithoutDeletedFilter.data ?? []);
+      setProducts(await applyCurrentBusinessStock((orderedWithoutDeletedFilter.data ?? []) as Product[]));
       return;
     }
 
@@ -106,8 +150,8 @@ export default function ProductsPage() {
       .eq('club_id', selectedClubId)
       .order('name', { ascending: true });
 
-    setProducts(fallback.data ?? []);
-  }, [selectedClubId]);
+    setProducts(await applyCurrentBusinessStock((fallback.data ?? []) as Product[]));
+  }, [applyCurrentBusinessStock, selectedClubId]);
 
   useEffect(() => {
     loadProducts().catch(() => {});

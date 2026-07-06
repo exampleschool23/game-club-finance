@@ -102,7 +102,7 @@ export function calculateStockCountSummary(input: StockCountInput): StockCountRe
 
 export function applyPurchaseDeltaToStockCount(input: StockCountPurchaseDeltaInput): StockCountPurchaseDeltaResult {
   const addedToday = Math.max(0, input.addedToday + input.quantityDelta);
-  const closingStock = Math.max(0, input.closingStock);
+  const closingStock = Math.max(0, input.closingStock + input.quantityDelta);
   const summary = calculateStockCountSummary({
     previousStock: input.previousStock,
     addedToday,

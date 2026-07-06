@@ -276,10 +276,12 @@ function refreshRowPurchasedToday(row: ClosingStockRowData, purchasedToday: numb
   if (purchasedToday === undefined) return row;
 
   const addedToday = normalizeStockCount(purchasedToday);
+  const addedDelta = addedToday - normalizeStockCount(row.addedToday);
+  const closingStock = Math.max(0, normalizeStockCount(row.closingStock) + addedDelta);
   const summary = calculateStockCountSummary({
     previousStock: normalizeStockCount(row.previousStock),
     addedToday,
-    closingStock: normalizeStockCount(row.closingStock),
+    closingStock,
     salePrice: row.product.sale_price,
     costPrice: row.product.cost_price,
   });
@@ -287,6 +289,7 @@ function refreshRowPurchasedToday(row: ClosingStockRowData, purchasedToday: numb
   return {
     ...row,
     addedToday: formatStockValue(addedToday),
+    closingStock: formatStockValue(closingStock),
     soldQuantity: formatStockValue(summary.soldQuantity),
   };
 }
