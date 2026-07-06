@@ -272,6 +272,25 @@ function formatEditableStockValue(value: unknown): string {
   return String(value ?? '').trim() === '' ? '' : formatStockValue(value);
 }
 
+function refreshRowPurchasedToday(row: ClosingStockRowData, purchasedToday: number | undefined): ClosingStockRowData {
+  if (purchasedToday === undefined) return row;
+
+  const addedToday = normalizeStockCount(purchasedToday);
+  const summary = calculateStockCountSummary({
+    previousStock: normalizeStockCount(row.previousStock),
+    addedToday,
+    closingStock: normalizeStockCount(row.closingStock),
+    salePrice: row.product.sale_price,
+    costPrice: row.product.cost_price,
+  });
+
+  return {
+    ...row,
+    addedToday: formatStockValue(addedToday),
+    soldQuantity: formatStockValue(summary.soldQuantity),
+  };
+}
+
 export function closingStockDraftKey(date: string, clubId?: string): string {
   return clubId ? `closing-stock-draft:${clubId}:${date}` : `closing-stock-draft:${date}`;
 }
@@ -349,14 +368,18 @@ export function applyClosingStockDraft(
   return rows.map((row) => {
     const draftRow = draftByProduct.get(row.product.id);
     if (!draftRow) return row;
-
-    return {
+    const draftedRow = {
       ...row,
       previousStock: formatEditableStockValue(draftRow.previousStock),
       addedToday: formatEditableStockValue(draftRow.addedToday),
       closingStock: formatEditableStockValue(draftRow.closingStock),
       soldQuantity: formatEditableStockValue(draftRow.soldQuantity),
     };
+
+    const freshPurchasedToday = normalizeStockCount(row.addedToday);
+    return freshPurchasedToday > 0
+      ? refreshRowPurchasedToday(draftedRow, freshPurchasedToday)
+      : draftedRow;
   });
 }
 
@@ -572,7 +595,8 @@ export function buildEditableClosingStockRows({
 
   return products.map((product) => {
     const existing = counts.find((count) => count.product_id === product.id);
-    const addedToday = purchasesByProduct[product.id] ?? 0;
+    const purchasedToday = purchasesByProduct[product.id];
+    const addedToday = purchasedToday ?? 0;
     const defaults = calculateClosingStockDefaults({
       currentStock: product.current_stock,
       purchasedToday: addedToday,
@@ -583,12 +607,22 @@ export function buildEditableClosingStockRows({
       ? defaults.closingStock
       : previousStock + addedToday;
 
+    if (existing) {
+      return refreshRowPurchasedToday({
+        product,
+        previousStock: formatStockValue(existing.previous_stock),
+        addedToday: formatStockValue(existing.added_today),
+        closingStock: formatStockValue(existing.closing_stock),
+        soldQuantity: formatStockValue(existing.sold_quantity),
+      }, purchasedToday);
+    }
+
     return {
       product,
-      previousStock: existing ? formatStockValue(existing.previous_stock) : formatStockValue(previousStock),
-      addedToday: existing ? formatStockValue(existing.added_today) : formatStockValue(defaults.addedToday),
-      closingStock: existing ? formatStockValue(existing.closing_stock) : formatStockValue(closingStock),
-      soldQuantity: existing ? formatStockValue(existing.sold_quantity) : '0',
+      previousStock: formatStockValue(previousStock),
+      addedToday: formatStockValue(defaults.addedToday),
+      closingStock: formatStockValue(closingStock),
+      soldQuantity: '0',
     };
   });
 }

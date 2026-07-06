@@ -15,7 +15,7 @@ import {
   formatDatePickerValue,
   parseCurrencyInput,
 } from '@/lib/formatters';
-import { calculateStockCountSummary, calculateWeightedAverageCost } from '@/lib/calculations/stock';
+import { applyPurchaseDeltaToStockCount, calculateWeightedAverageCost } from '@/lib/calculations/stock';
 import {
   Calendar,
   Check,
@@ -41,6 +41,15 @@ const PURCHASES_PAGE_SIZE = 10;
 
 interface PurchaseWithProduct extends StockPurchase {
   products: { name: string; sale_price?: number | null; cost_price?: number | null; current_stock?: number | null } | null;
+}
+
+interface SavedStockCountForPurchaseSync {
+  id: string;
+  previous_stock: number | string | null;
+  added_today: number | string | null;
+  closing_stock: number | string | null;
+  sale_price: number | string | null;
+  cost_price: number | string | null;
 }
 
 function parseQuantity(value: string) {
@@ -93,6 +102,61 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
     .eq('club_id', clubId)
     .eq('is_active', true)
     .order('name', { ascending: true });
+}
+
+async function syncSavedStockCountForPurchaseDelta(
+  supabase: ReturnType<typeof createClient>,
+  {
+    clubId,
+    date,
+    productId,
+    quantityDelta,
+    salePrice,
+    costPrice,
+  }: {
+    clubId: string;
+    date: string;
+    productId: string;
+    quantityDelta: number;
+    salePrice: number;
+    costPrice: number;
+  },
+) {
+  const { data: savedCount, error: savedCountError } = await supabase
+    .from('daily_stock_counts')
+    .select('id,previous_stock,added_today,closing_stock,sale_price,cost_price')
+    .eq('club_id', clubId)
+    .eq('date', date)
+    .eq('product_id', productId)
+    .maybeSingle();
+
+  if (savedCountError) return savedCountError;
+  if (!savedCount) return null;
+
+  const count = savedCount as SavedStockCountForPurchaseSync;
+  const next = applyPurchaseDeltaToStockCount({
+    previousStock: Number(count.previous_stock ?? 0),
+    addedToday: Number(count.added_today ?? 0),
+    closingStock: Number(count.closing_stock ?? 0),
+    quantityDelta,
+    salePrice: Number(count.sale_price ?? salePrice ?? 0),
+    costPrice: Number(count.cost_price ?? costPrice ?? 0),
+  });
+
+  const { error: countUpdateError } = await supabase
+    .from('daily_stock_counts')
+    .update({
+      added_today: next.addedToday,
+      sold_quantity: next.soldQuantity,
+      bar_income: next.barIncome,
+      bar_cost: next.barCost,
+      bar_profit: next.barProfit,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('club_id', clubId)
+    .eq('id', count.id);
+
+  return countUpdateError;
 }
 
 export default function StockPurchasePage() {
@@ -273,10 +337,14 @@ export default function StockPurchasePage() {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
 
+    const purchaseDate = form.date;
+    const productId = form.product_id;
+    const purchaseSalePrice = form.sale_price ? salePrice : selectedProduct?.sale_price ?? salePrice;
+
     const { error: err } = await supabase.from('stock_purchases').insert({
       club_id: selectedClubId,
-      date: form.date,
-      product_id: form.product_id,
+      date: purchaseDate,
+      product_id: productId,
       quantity,
       cost_price: costPrice,
       sale_price: form.sale_price ? salePrice : null,
@@ -285,14 +353,36 @@ export default function StockPurchasePage() {
       created_by: session?.user?.id ?? null,
     });
 
-    setSaving(false);
     if (err) {
+      setSaving(false);
       setError(err.message);
       return;
     }
 
-    setSuccess(t('success'));
+    const countSyncError = await syncSavedStockCountForPurchaseDelta(supabase, {
+      clubId: selectedClubId,
+      date: purchaseDate,
+      productId,
+      quantityDelta: quantity,
+      salePrice: purchaseSalePrice,
+      costPrice,
+    });
+
+    setSaving(false);
+
+    if (countSyncError) {
+      setError(countSyncError.message);
+      await loadProducts();
+      if (purchasePage === 1) {
+        await loadPurchases(1);
+      } else {
+        setPurchasePage(1);
+      }
+      return;
+    }
+
     resetForm();
+    setSuccess(t('success'));
     await loadProducts();
     if (purchasePage === 1) {
       await loadPurchases(1);
@@ -345,51 +435,21 @@ export default function StockPurchasePage() {
       return;
     }
 
-    const { data: savedCount, error: savedCountError } = await supabase
-      .from('daily_stock_counts')
-      .select('id,previous_stock,added_today,closing_stock,sale_price,cost_price')
-      .eq('club_id', selectedClubId)
-      .eq('date', purchase.date)
-      .eq('product_id', purchase.product_id)
-      .maybeSingle();
+    const countUpdateError = await syncSavedStockCountForPurchaseDelta(supabase, {
+      clubId: selectedClubId,
+      date: purchase.date,
+      productId: purchase.product_id,
+      quantityDelta: -Number(purchase.quantity ?? 0),
+      salePrice: Number(purchase.sale_price ?? purchase.products?.sale_price ?? 0),
+      costPrice: Number(purchase.cost_price ?? purchase.products?.cost_price ?? 0),
+    });
 
-    if (savedCountError) {
+    if (countUpdateError) {
       setDeletingId(null);
-      setError(savedCountError.message);
+      setError(countUpdateError.message);
       await loadProducts();
       await loadPurchases(purchasePage);
       return;
-    }
-
-    if (savedCount) {
-      const addedToday = Math.max(0, Number(savedCount.added_today ?? 0) - Number(purchase.quantity ?? 0));
-      const summary = calculateStockCountSummary({
-        previousStock: Number(savedCount.previous_stock ?? 0),
-        addedToday,
-        closingStock: Number(savedCount.closing_stock ?? 0),
-        salePrice: Number(savedCount.sale_price ?? purchase.sale_price ?? purchase.products?.sale_price ?? 0),
-        costPrice: Number(savedCount.cost_price ?? purchase.cost_price ?? purchase.products?.cost_price ?? 0),
-      });
-      const { error: countUpdateError } = await supabase
-        .from('daily_stock_counts')
-        .update({
-          added_today: addedToday,
-          sold_quantity: summary.soldQuantity,
-          bar_income: summary.barIncome,
-          bar_cost: summary.barCost,
-          bar_profit: summary.barProfit,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('club_id', selectedClubId)
-        .eq('id', savedCount.id);
-
-      if (countUpdateError) {
-        setDeletingId(null);
-        setError(countUpdateError.message);
-        await loadProducts();
-        await loadPurchases(purchasePage);
-        return;
-      }
     }
 
     setDeletingId(null);

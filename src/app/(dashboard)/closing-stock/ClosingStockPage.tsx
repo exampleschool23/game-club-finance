@@ -381,7 +381,20 @@ export default function ClosingStockPage() {
         return;
       }
 
-      const savedRows = sortRowsByProductOrder(stockCountRows.flatMap((count) => {
+      const purchasesRes = await supabase
+        .from('stock_purchases')
+        .select('product_id, quantity')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate);
+
+      if (purchasesRes.error) {
+        setError(purchasesRes.error.message);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      const productsFromCounts = stockCountRows.flatMap((count) => {
           const relation = Array.isArray(count.products) ? count.products[0] : count.products;
           if (relation?.is_deleted) return [];
           const product: Product = {
@@ -400,14 +413,15 @@ export default function ClosingStockPage() {
             updated_at: relation?.updated_at ?? '',
           };
 
-          return [{
-            product,
-            previousStock: String(count.previous_stock ?? 0),
-            addedToday: String(count.added_today ?? 0),
-            closingStock: String(count.closing_stock ?? 0),
-            soldQuantity: String(count.sold_quantity ?? 0),
-          }];
-        }));
+          return [product];
+        });
+      const savedRows = buildEditableRows(
+        productsFromCounts,
+        stockCountRows,
+        ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+        {},
+        false,
+      );
       setRows(savedRows);
       setLoading(false);
       return;

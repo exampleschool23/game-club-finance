@@ -180,9 +180,9 @@ describe('closing stock row defaults', () => {
     });
   });
 
-  it('keeps saved stock count rows unchanged', () => {
+  it('refreshes saved added-today values from purchases while preserving counted closing stock', () => {
     const rows = buildEditableClosingStockRows({
-      products: [product({ id: 'cola-05', current_stock: 21 })],
+      products: [product({ id: 'cola-05', current_stock: 21, sale_price: 10000, cost_price: 6000 })],
       counts: [
         {
           product_id: 'cola-05',
@@ -199,9 +199,9 @@ describe('closing stock row defaults', () => {
 
     expect(rows[0]).toMatchObject({
       previousStock: '7',
-      addedToday: '2',
+      addedToday: '21',
       closingStock: '6',
-      soldQuantity: '3',
+      soldQuantity: '22',
     });
   });
 });
@@ -459,6 +459,39 @@ describe('closing stock drafts', () => {
 
     clearClosingStockDraft(storage, date);
     expect(storage.getItem(closingStockDraftKey(date))).toBeNull();
+  });
+
+  it('keeps fresh purchase totals when applying a stale same-day draft', () => {
+    const storage = new MemoryStorage();
+    const date = '2026-07-06';
+    const productRow = product({ id: 'burger', name: 'Cheeseburger', sale_price: 20000, cost_price: 16000 });
+
+    saveClosingStockDraft(storage, date, [
+      row({
+        product: productRow,
+        previousStock: '2',
+        addedToday: '0',
+        closingStock: '1',
+        soldQuantity: '1',
+      }),
+    ]);
+
+    const appliedRows = applyClosingStockDraft([
+      row({
+        product: productRow,
+        previousStock: '2',
+        addedToday: '5',
+        closingStock: '7',
+        soldQuantity: '0',
+      }),
+    ], readClosingStockDraft(storage, date));
+
+    expect(appliedRows[0]).toMatchObject({
+      previousStock: '2',
+      addedToday: '5',
+      closingStock: '1',
+      soldQuantity: '6',
+    });
   });
 
   it('ignores corrupted drafts or drafts for another date', () => {

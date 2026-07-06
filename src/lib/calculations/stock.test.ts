@@ -6,6 +6,7 @@ import {
   calculateBarCost,
   calculateBarProfit,
   calculateStockCountSummary,
+  applyPurchaseDeltaToStockCount,
   calculateWeightedAverageCost,
   calculateClosingStockDefaults,
   recalculateFutureStockCounts,
@@ -103,6 +104,44 @@ describe('calculateStockCountSummary', () => {
     expect(result.barIncome).toBe(0);
     expect(result.barCost).toBe(0);
     expect(result.barProfit).toBe(0);
+  });
+});
+
+describe('applyPurchaseDeltaToStockCount', () => {
+  it('adds a same-day purchase to a saved stock count while preserving the counted closing stock', () => {
+    expect(applyPurchaseDeltaToStockCount({
+      previousStock: 10,
+      addedToday: 5,
+      closingStock: 12,
+      quantityDelta: 3,
+      salePrice: 15000,
+      costPrice: 9000,
+    })).toEqual({
+      addedToday: 8,
+      closingStock: 12,
+      soldQuantity: 6,
+      barIncome: 90000,
+      barCost: 54000,
+      barProfit: 36000,
+    });
+  });
+
+  it('removes a deleted purchase from added today without changing the counted closing stock', () => {
+    expect(applyPurchaseDeltaToStockCount({
+      previousStock: 10,
+      addedToday: 2,
+      closingStock: 1,
+      quantityDelta: -5,
+      salePrice: 10000,
+      costPrice: 6000,
+    })).toEqual({
+      addedToday: 0,
+      closingStock: 1,
+      soldQuantity: 9,
+      barIncome: 90000,
+      barCost: 54000,
+      barProfit: 36000,
+    });
   });
 });
 

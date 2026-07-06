@@ -13,6 +13,15 @@ export interface StockCountResult {
   barProfit: number;
 }
 
+export interface StockCountPurchaseDeltaInput extends StockCountInput {
+  quantityDelta: number;
+}
+
+export interface StockCountPurchaseDeltaResult extends StockCountResult {
+  addedToday: number;
+  closingStock: number;
+}
+
 export interface AverageCostInput {
   currentStock: number;
   currentCostPrice: number;
@@ -88,6 +97,24 @@ export function calculateStockCountSummary(input: StockCountInput): StockCountRe
     barIncome,
     barCost,
     barProfit: calculateBarProfit(barIncome, barCost),
+  };
+}
+
+export function applyPurchaseDeltaToStockCount(input: StockCountPurchaseDeltaInput): StockCountPurchaseDeltaResult {
+  const addedToday = Math.max(0, input.addedToday + input.quantityDelta);
+  const closingStock = Math.max(0, input.closingStock);
+  const summary = calculateStockCountSummary({
+    previousStock: input.previousStock,
+    addedToday,
+    closingStock,
+    salePrice: input.salePrice,
+    costPrice: input.costPrice,
+  });
+
+  return {
+    addedToday,
+    closingStock,
+    ...summary,
   };
 }
 
