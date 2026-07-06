@@ -168,6 +168,7 @@ export async function buildDailyFinanceTelegramReport(
 
   const input = buildDailyFinanceReportInput({
     clubName: clubRes.name,
+    businessDate,
     businessDateLabel: formatDateOnly(businessDate, 'ru'),
     cashRows: (cashRes.data ?? []) as DailyCashRow[],
     stockRows: (stockRes.data ?? []) as StockCountRow[],

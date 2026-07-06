@@ -132,6 +132,10 @@ function sortRowsByProductOrder(rows: RowData[]): RowData[] {
   });
 }
 
+function productCategory(value: string | null | undefined): string {
+  return String(value ?? '').trim();
+}
+
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
@@ -271,6 +275,7 @@ export default function ClosingStockPage() {
   const [date, setDate] = useState(() => today);
   const [rows, setRows] = useState<RowData[]>([]);
   const [query, setQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
@@ -472,6 +477,12 @@ export default function ClosingStockPage() {
     });
   }, [date, loadData]);
 
+  useEffect(() => {
+    if (!selectedCategory) return;
+    const categoryExists = rows.some((row) => productCategory(row.product.category) === selectedCategory);
+    if (!categoryExists) setSelectedCategory('');
+  }, [rows, selectedCategory]);
+
   function updateRow(index: number, field: 'previousStock' | 'addedToday' | 'closingStock', value: string) {
     setRows((prev) => {
       if (!isWholeNumberInput(value)) return prev;
@@ -520,14 +531,22 @@ export default function ClosingStockPage() {
     });
   }
 
+  const categoryOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => productCategory(row.product.category)).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((row) => row.product.name.toLowerCase().includes(needle));
-  }, [query, rows]);
+    return rows.filter((row) => {
+      const matchesCategory = !selectedCategory || productCategory(row.product.category) === selectedCategory;
+      const matchesQuery = !needle || row.product.name.toLowerCase().includes(needle);
+      return matchesCategory && matchesQuery;
+    });
+  }, [query, rows, selectedCategory]);
 
   const totals = useMemo(() => {
-    return rows.reduce(
+    return filteredRows.reduce(
       (acc, row) => {
         const summary = rowSummary(row);
         acc.sold += summary.soldQuantity;
@@ -540,7 +559,7 @@ export default function ClosingStockPage() {
       },
       { sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0 },
     );
-  }, [rows]);
+  }, [filteredRows]);
 
   function handleSaveDraft() {
     if (isReadOnly) {
@@ -681,7 +700,7 @@ export default function ClosingStockPage() {
   }
 
   const kpis = [
-    { label: t('totalProducts'), value: rows.length, unit: t('items'), icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
+    { label: t('totalProducts'), value: filteredRows.length, unit: t('items'), icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
     { label: t('stockPurchased'), value: totals.added, unit: t('pcs'), icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
     { label: t('totalSold'), value: totals.sold, unit: t('pcs'), icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { label: t('barIncomeEst'), value: formatCurrency(totals.income), unit: tc('currency'), icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
@@ -810,9 +829,43 @@ export default function ClosingStockPage() {
             </button>
           </div>
 
+          {categoryOptions.length > 0 && (
+            <div className="border-b border-gray-100 px-4 py-3 sm:px-5">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('')}
+                  className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                    selectedCategory === ''
+                      ? 'border-primary-600 bg-primary-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {tc('all')}
+                </button>
+                {categoryOptions.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setSelectedCategory(category)}
+                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                      selectedCategory === category
+                        ? 'border-primary-600 bg-primary-600 text-white'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="p-8 text-gray-500">{tc('loading')}</div>
           ) : rows.length === 0 ? (
+            <div className="p-8 text-gray-500">{tc('noData')}</div>
+          ) : filteredRows.length === 0 ? (
             <div className="p-8 text-gray-500">{tc('noData')}</div>
           ) : (
             <div className="max-h-[calc(100vh-14rem)] overflow-auto">
@@ -917,7 +970,7 @@ export default function ClosingStockPage() {
                   })}
                   <tr className="bg-white font-bold text-gray-900">
                     <td className="px-5 py-4" />
-                    <td className="px-4 py-4">{t('totalRow', { count: rows.length })}</td>
+                    <td className="px-4 py-4">{t('totalRow', { count: filteredRows.length })}</td>
                     <td className="px-4 py-4" />
                     <td className="px-4 py-4 text-right">{formatCurrency(totals.stockValue)}</td>
                     <td className="px-4 py-4 text-center">{totals.previous}</td>

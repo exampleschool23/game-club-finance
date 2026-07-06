@@ -47,6 +47,10 @@ function isForeignKeyDeleteError(error: { message?: string; code?: string } | nu
   return error?.code === '23503' || error?.message?.includes('violates foreign key constraint') || false;
 }
 
+function productCategory(value: string | null | undefined): string {
+  return String(value ?? '').trim();
+}
+
 export default function ProductsPage() {
   const t = useTranslations('products');
   const tc = useTranslations('common');
@@ -59,6 +63,7 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   const isOwner = currentRole === 'owner';
 
@@ -156,6 +161,22 @@ export default function ProductsPage() {
   useEffect(() => {
     loadProducts().catch(() => {});
   }, [loadProducts]);
+
+  const categoryOptions = useMemo(() => {
+    return Array.from(new Set(products.map((product) => productCategory(product.category)).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    if (!selectedCategory) return products;
+    return products.filter((product) => productCategory(product.category) === selectedCategory);
+  }, [products, selectedCategory]);
+
+  useEffect(() => {
+    if (!selectedCategory) return;
+    const categoryExists = products.some((product) => productCategory(product.category) === selectedCategory);
+    if (!categoryExists) setSelectedCategory('');
+  }, [products, selectedCategory]);
 
   function openAdd() {
     setEditingId(null);
@@ -343,91 +364,125 @@ export default function ProductsPage() {
           }
         />
       ) : (
-        <DataTable
-          keyExtractor={(r) => r.id}
-          data={products}
-          stickyHeader
-          columns={[
-            { key: 'name', header: t('name') },
-            {
-              key: 'sort_order',
-              header: t('order'),
-              render: (r) => {
-                const index = products.findIndex((product) => product.id === r.id);
-                return (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={index <= 0}
-                      aria-label={t('moveUp')}
-                      title={t('moveUp')}
-                      onClick={() => moveProduct(r.id, -1)}
-                    >
-                      <ArrowUp size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={index === -1 || index >= products.length - 1}
-                      aria-label={t('moveDown')}
-                      title={t('moveDown')}
-                      onClick={() => moveProduct(r.id, 1)}
-                    >
-                      <ArrowDown size={15} />
-                    </button>
-                  </div>
-                );
-              },
-            },
-            { key: 'category', header: t('category'), render: (r) => r.category ?? '-' },
-            {
-              key: 'sale_price',
-              header: t('salePrice'),
-              render: (r) => formatCurrency(r.sale_price),
-            },
-            {
-              key: 'cost_price',
-              header: t('costPrice'),
-              render: (r) => formatCurrency(r.cost_price),
-            },
-            {
-              key: 'current_stock',
-              header: t('currentStock'),
-              render: (r) => {
-                const low = r.current_stock <= (r.low_stock_threshold ?? 5);
-                return (
-                  <span className={low ? 'text-danger-500 font-semibold' : ''}>
-                    {r.current_stock}
-                  </span>
-                );
-              },
-            },
-            {
-              key: 'is_active',
-              header: tc('active'),
-              render: (r) => (
-                <Badge variant={r.is_active ? 'success' : 'default'}>
-                  {r.is_active ? tc('active') : tc('inactive')}
-                </Badge>
-              ),
-            },
-            {
-              key: 'actions',
-              header: tc('actions'),
-              render: (r) => (
+        <div className="space-y-3">
+          {categoryOptions.length > 0 && (
+            <div className="rounded-lg border border-gray-100 bg-white px-4 py-3 shadow-sm">
+              <div className="flex gap-2 overflow-x-auto pb-1">
                 <button
-                  className="text-sm text-primary-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
-                  disabled={!r.is_active}
-                  title={!r.is_active ? t('inactiveEditBlocked') : tc('edit')}
-                  onClick={() => openEdit(r)}
+                  type="button"
+                  onClick={() => setSelectedCategory('')}
+                  className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                    selectedCategory === ''
+                      ? 'border-primary-600 bg-primary-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
                 >
-                  {tc('edit')}
+                  {tc('all')}
                 </button>
-              ),
-            },
-          ]}
-        />
+                {categoryOptions.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setSelectedCategory(category)}
+                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                      selectedCategory === category
+                        ? 'border-primary-600 bg-primary-600 text-white'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DataTable
+            keyExtractor={(r) => r.id}
+            data={filteredProducts}
+            stickyHeader
+            columns={[
+              { key: 'name', header: t('name') },
+              {
+                key: 'sort_order',
+                header: t('order'),
+                render: (r) => {
+                  const index = products.findIndex((product) => product.id === r.id);
+                  return (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={index <= 0}
+                        aria-label={t('moveUp')}
+                        title={t('moveUp')}
+                        onClick={() => moveProduct(r.id, -1)}
+                      >
+                        <ArrowUp size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={index === -1 || index >= products.length - 1}
+                        aria-label={t('moveDown')}
+                        title={t('moveDown')}
+                        onClick={() => moveProduct(r.id, 1)}
+                      >
+                        <ArrowDown size={15} />
+                      </button>
+                    </div>
+                  );
+                },
+              },
+              { key: 'category', header: t('category'), render: (r) => r.category ?? '-' },
+              {
+                key: 'sale_price',
+                header: t('salePrice'),
+                render: (r) => formatCurrency(r.sale_price),
+              },
+              {
+                key: 'cost_price',
+                header: t('costPrice'),
+                render: (r) => formatCurrency(r.cost_price),
+              },
+              {
+                key: 'current_stock',
+                header: t('currentStock'),
+                render: (r) => {
+                  const low = r.current_stock <= (r.low_stock_threshold ?? 5);
+                  return (
+                    <span className={low ? 'text-danger-500 font-semibold' : ''}>
+                      {r.current_stock}
+                    </span>
+                  );
+                },
+              },
+              {
+                key: 'is_active',
+                header: tc('active'),
+                render: (r) => (
+                  <Badge variant={r.is_active ? 'success' : 'default'}>
+                    {r.is_active ? tc('active') : tc('inactive')}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'actions',
+                header: tc('actions'),
+                render: (r) => (
+                  <button
+                    className="text-sm text-primary-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
+                    disabled={!r.is_active}
+                    title={!r.is_active ? t('inactiveEditBlocked') : tc('edit')}
+                    onClick={() => openEdit(r)}
+                  >
+                    {tc('edit')}
+                  </button>
+                ),
+              },
+            ]}
+          />
+        </div>
       )}
 
       {/* Modal */}

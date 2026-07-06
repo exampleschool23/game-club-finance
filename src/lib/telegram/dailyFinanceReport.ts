@@ -1,5 +1,10 @@
 import { formatCurrency } from '../formatters';
-import { calculateDashboardTotals } from '../calculations/dashboardMetrics';
+import {
+  calculateAverageDailyIncome,
+  calculateDashboardTotals,
+  countDashboardRangeDaysThroughDate,
+  getLatestRowDateInRange,
+} from '../calculations/dashboardMetrics';
 import type {
   DailyCashRow,
   ExpenseRow,
@@ -22,6 +27,7 @@ export interface DailyFinanceReportInput {
   gameClubExpenseCategories: DailyFinanceExpenseCategory[];
   barExpenseCategories: DailyFinanceExpenseCategory[];
   gameClubMoneyLeft: number;
+  averageDailyGameClubIncome: number;
   barMoneyLeft: number;
   netProfit: number;
   inventoryValue: number;
@@ -40,6 +46,7 @@ export interface DailyFinanceReportDebtRow {
 
 export interface DailyFinanceReportRows {
   clubName: string;
+  businessDate: string;
   businessDateLabel: string;
   cashRows: DailyCashRow[];
   stockRows: StockCountRow[];
@@ -96,6 +103,8 @@ function categoryLines(categories: DailyFinanceExpenseCategory[]): string[] {
 }
 
 export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): DailyFinanceReportInput {
+  const monthStart = `${rows.businessDate.slice(0, 7)}-01`;
+  const monthRange = { from: monthStart, to: rows.businessDate };
   const dailyTotals = calculateDashboardTotals(
     rows.cashRows,
     rows.stockRows,
@@ -112,6 +121,8 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     [],
     rows.debtRows,
   );
+  const latestDailyCashEntryDate = getLatestRowDateInRange(rows.monthCashRows ?? rows.cashRows, monthRange);
+  const averageGameClubDayCount = countDashboardRangeDaysThroughDate(monthRange, latestDailyCashEntryDate);
 
   return {
     clubName: rows.clubName,
@@ -127,6 +138,7 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     gameClubExpenseCategories: summarizeExpenseCategories(rows.expenseRows, 'game_club'),
     barExpenseCategories: summarizeExpenseCategories(rows.expenseRows, 'bar'),
     gameClubMoneyLeft: monthTotals.gameClubMoneyLeft,
+    averageDailyGameClubIncome: calculateAverageDailyIncome(monthTotals.gameClubIncome, averageGameClubDayCount),
     barMoneyLeft: monthTotals.barIncome,
     netProfit: dailyTotals.netProfit,
     inventoryValue: dailyTotals.inventoryValue,
@@ -154,6 +166,7 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     ...categoryLines(input.barExpenseCategories),
     '',
     `💰 Остаток денег клуба за месяц: ${money(input.gameClubMoneyLeft)}`,
+    `📈 Средний дневной доход клуба за месяц: ${money(input.averageDailyGameClubIncome)}`,
     `🧾 Остаток денег бара за месяц: ${money(input.barMoneyLeft)}`,
     `✅ Чистая прибыль сегодня: ${money(input.netProfit)}`,
     '',
