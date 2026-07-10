@@ -32,6 +32,7 @@ import {
   calculateAverageDailyIncome,
   calculateDashboardTotals,
   calculateGameClubMoneyLeftByPaymentMethod,
+  calculateInventoryValueFromLatestStockCounts,
   countDashboardRangeDaysThroughDate,
   emptyDashboardTotals,
   emptyMoneyLeftByPaymentMethod,
@@ -44,6 +45,7 @@ import {
   type DashboardPeriod,
   type DashboardTotals,
   type ExpenseRow,
+  type InventorySnapshotRow,
   type MoneyLeftByPaymentMethod,
   type StockCountRow,
   type StockPurchaseCostRow,
@@ -71,6 +73,7 @@ interface DebtRow {
 interface DashboardData {
   totals: DashboardTotals;
   previousTotals: DashboardTotals;
+  lastMonthInventoryValue: number;
   trend: TrendRow[];
   lowStockCount: number;
   expenseCategories: Array<{ category: string; value: number }>;
@@ -81,6 +84,7 @@ interface DashboardData {
 const emptyData: DashboardData = {
   totals: emptyDashboardTotals,
   previousTotals: emptyDashboardTotals,
+  lastMonthInventoryValue: 0,
   trend: [],
   lowStockCount: 0,
   expenseCategories: [],
@@ -181,6 +185,7 @@ export default function DashboardPage() {
 
     const supabase = createClient();
     const previousRange = getPreviousDashboardRange(range);
+    const lastMonthRange = getDashboardRange('lastMonth', selectedDate || businessToday);
 
     const [
       cashRes,
@@ -193,6 +198,7 @@ export default function DashboardPage() {
       prevStockRes,
       prevPurchaseRes,
       prevExpenseRes,
+      lastMonthInventoryRes,
       trendCashRes,
       trendStockRes,
       trendPurchaseRes,
@@ -263,6 +269,13 @@ export default function DashboardPage() {
         previousRange,
       ),
       supabase
+        .from('daily_stock_counts')
+        .select('product_id,date,closing_stock,cost_price')
+        .eq('club_id', selectedClubId)
+        .gte('date', lastMonthRange.from)
+        .lte('date', lastMonthRange.to)
+        .range(0, 9_999),
+      supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income,playstation_income')
         .eq('club_id', selectedClubId)
@@ -299,6 +312,7 @@ export default function DashboardPage() {
       prevStockRes.error,
       prevPurchaseRes.error,
       prevExpenseRes.error,
+      lastMonthInventoryRes.error,
       trendCashRes.error,
       trendStockRes.error,
       trendPurchaseRes.error,
@@ -322,6 +336,9 @@ export default function DashboardPage() {
     const totals = calculateDashboardTotals(cashRows, stockRows, purchases, expenseRows, products, activeDebts);
     const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(cashRows, expenseRows);
     const latestDailyCashEntryDate = getLatestRowDateInRange(cashRows, range);
+    const lastMonthInventoryValue = calculateInventoryValueFromLatestStockCounts(
+      (lastMonthInventoryRes.data ?? []) as InventorySnapshotRow[],
+    );
     const previousTotals = calculateDashboardTotals(
       (prevCashRes.data ?? []) as DailyCashRow[],
       (prevStockRes.data ?? []) as StockCountRow[],
@@ -352,6 +369,7 @@ export default function DashboardPage() {
     setData({
       totals,
       previousTotals,
+      lastMonthInventoryValue,
       trend,
       lowStockCount,
       expenseCategories,
@@ -359,7 +377,7 @@ export default function DashboardPage() {
       latestDailyCashEntryDate,
     });
     setLoading(false);
-  }, [range, selectedClubId]);
+  }, [businessToday, range, selectedClubId, selectedDate]);
 
   useEffect(() => {
     fetchDashboard().catch((fetchError) => {
@@ -477,6 +495,14 @@ export default function DashboardPage() {
           comparison={{ value: percentChange(totals.playstationIncome, previousTotals.playstationIncome), label: incomeComparisonLabel }}
         />
         <MetricCard
+          label={t('averageDailyIncome')}
+          amount={averageGameClubIncome}
+          icon={CalendarDays}
+          iconBgClassName="bg-cyan-100"
+          iconClassName="text-cyan-600"
+          helper={t('averageDailyClubIncomeDesc')}
+        />
+        <MetricCard
           label={t('totalMoneyLeft')}
           amount={totals.gameClubMoneyLeft}
           icon={Wallet}
@@ -484,14 +510,6 @@ export default function DashboardPage() {
           iconClassName="text-emerald-600"
           helper={t('totalMoneyLeftDesc')}
           comparison={{ value: percentChange(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft), label: incomeComparisonLabel }}
-        />
-        <MetricCard
-          label={t('averageDailyIncome')}
-          amount={averageGameClubIncome}
-          icon={CalendarDays}
-          iconBgClassName="bg-cyan-100"
-          iconClassName="text-cyan-600"
-          helper={t('averageDailyClubIncomeDesc')}
         />
       </MetricSection>
 
@@ -543,6 +561,11 @@ export default function DashboardPage() {
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
           helper={`${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
+          subMetric={{ label: t('lastMonthInventoryValue'), amount: data.lastMonthInventoryValue }}
+          comparison={{
+            value: percentChange(totals.inventoryValue, data.lastMonthInventoryValue),
+            label: t('vsLastMonth'),
+          }}
         />
       </MetricSection>
 

@@ -49,6 +49,13 @@ export interface ProductValueRow {
   cost_price: number;
 }
 
+export interface InventorySnapshotRow {
+  product_id: string;
+  date: string;
+  closing_stock: number;
+  cost_price: number;
+}
+
 export interface DebtValueRow {
   remaining_amount: number;
   status: string;
@@ -318,10 +325,7 @@ export function calculateDashboardTotals(
   const gameClubMoneyLeft = gameClub.gameClubIncome - gameClubExpenses;
   const totalIncome = gameClub.gameClubIncome + barMoney.barMoney;
   const netProfit = gameClubMoneyLeft + barIncome;
-  const inventoryValue = products.reduce(
-    (sum, product) => sum + Number(product.current_stock ?? 0) * Number(product.cost_price ?? 0),
-    0,
-  );
+  const inventoryValue = calculateInventoryValue(products);
   const activeDebtRows = debts.filter((debt) => debt.status !== 'paid');
   const activeDebts = activeDebtRows.reduce(
     (sum, debt) => sum + Number(debt.remaining_amount ?? 0),
@@ -344,6 +348,30 @@ export function calculateDashboardTotals(
     activeDebtCount: activeDebtRows.length,
     profitMargin: totalIncome > 0 ? Math.round((netProfit / totalIncome) * 1000) / 10 : 0,
   };
+}
+
+export function calculateInventoryValue(products: ProductValueRow[]): number {
+  return products.reduce(
+    (sum, product) => sum + Number(product.current_stock ?? 0) * Number(product.cost_price ?? 0),
+    0,
+  );
+}
+
+export function calculateInventoryValueFromLatestStockCounts(rows: InventorySnapshotRow[]): number {
+  const latestByProduct = rows.reduce((map, row) => {
+    const existing = map.get(row.product_id);
+
+    if (!existing || row.date > existing.date) {
+      map.set(row.product_id, row);
+    }
+
+    return map;
+  }, new Map<string, InventorySnapshotRow>());
+
+  return Array.from(latestByProduct.values()).reduce(
+    (sum, row) => sum + Number(row.closing_stock ?? 0) * Number(row.cost_price ?? 0),
+    0,
+  );
 }
 
 export function percentChange(current: number, previous: number): number {

@@ -52,6 +52,7 @@
     "netProfit": "Чистая прибыль",
     "inventoryValue": "Стоимость склада",
     "inventoryValueDesc": "Текущая стоимость склада по себестоимости",
+    "lastMonthInventoryValue": "Значение за прошлый месяц",
     "lowStockAlertsCount": "{count} товаров мало",
     "vsYesterday": "vs вчера",
     "vsLastWeek": "vs прошлая неделя",

@@ -14,6 +14,10 @@ interface MetricCardProps {
     value: number;
     label: string;
   };
+  subMetric?: {
+    label: string;
+    amount: number;
+  };
   helper?: string;
 }
 
@@ -24,6 +28,7 @@ export function MetricCard({
   iconBgClassName,
   iconClassName,
   comparison,
+  subMetric,
   helper,
 }: MetricCardProps) {
   const isPositive = (comparison?.value ?? 0) >= 0;
@@ -43,6 +48,14 @@ export function MetricCard({
         </div>
       </div>
       {helper && <p className="mt-3 text-xs font-medium leading-snug text-gray-500">{helper}</p>}
+      {subMetric ? (
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <p className="text-xs font-semibold text-gray-500">{subMetric.label}</p>
+          <p className="mt-1 break-words text-sm font-bold leading-tight text-gray-800">
+            {formatCurrency(subMetric.amount)} <span className="font-semibold text-gray-500">UZS</span>
+          </p>
+        </div>
+      ) : null}
       {comparison ? (
         <p
           className={`mt-3 flex flex-wrap items-center gap-1 text-xs font-semibold ${

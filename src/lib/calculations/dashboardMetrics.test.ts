@@ -5,6 +5,7 @@ import {
   calculateAverageDailyIncome,
   calculateDashboardTotals,
   calculateGameClubMoneyLeftByPaymentMethod,
+  calculateInventoryValueFromLatestStockCounts,
   countDashboardRangeDays,
   countDashboardRangeDaysThroughDate,
   getDashboardAverageDayCount,
@@ -132,6 +133,16 @@ describe('dashboard metrics', () => {
     expect(percentChange(8_902_000, -700_000)).toBe(1372);
     expect(percentChange(-1_000, -500)).toBe(-100);
     expect(percentChange(-500, -1_000)).toBe(50);
+  });
+
+  it('calculates inventory value from latest closing stock per product', () => {
+    expect(
+      calculateInventoryValueFromLatestStockCounts([
+        { product_id: 'cola', date: '2026-06-01', closing_stock: 10, cost_price: 4_000 },
+        { product_id: 'cola', date: '2026-06-30', closing_stock: 7, cost_price: 4_500 },
+        { product_id: 'water', date: '2026-06-12', closing_stock: 12, cost_price: 2_000 },
+      ]),
+    ).toBe(55_500);
   });
 
   it('subtracts expenses from the selected money source only', () => {

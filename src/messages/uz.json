@@ -52,6 +52,7 @@
     "netProfit": "Sof foyda",
     "inventoryValue": "Ombor qiymati",
     "inventoryValueDesc": "Omborning tannarx bo'yicha joriy qiymati",
+    "lastMonthInventoryValue": "O'tgan oy qiymati",
     "lowStockAlertsCount": "{count} ta kam qolgan",
     "vsYesterday": "kechagiga nisbatan",
     "vsLastWeek": "o'tgan haftaga nisbatan",

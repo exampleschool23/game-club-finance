@@ -52,6 +52,7 @@
     "netProfit": "Net Profit",
     "inventoryValue": "Inventory Value",
     "inventoryValueDesc": "Current stock value at cost price",
+    "lastMonthInventoryValue": "Last month value",
     "lowStockAlertsCount": "{count} low stock alerts",
     "vsYesterday": "vs yesterday",
     "vsLastWeek": "vs last week",
