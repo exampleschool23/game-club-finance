@@ -2,7 +2,7 @@
 
 // Route: /closing-stock
 
-import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent, type WheelEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -91,6 +91,10 @@ function preventNonIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
   if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) {
     event.preventDefault();
   }
+}
+
+function preventNumberInputWheel(event: WheelEvent<HTMLInputElement>) {
+  event.preventDefault();
 }
 
 function getBrowserStorage(): StorageLike | null {
@@ -942,6 +946,7 @@ export default function ClosingStockPage() {
                               className="input-field mx-auto h-10 w-32 text-center font-semibold"
                               value={row.closingStock}
                               onKeyDown={preventNonIntegerNumberInput}
+                              onWheel={preventNumberInputWheel}
                               onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
                             />
                           )}
@@ -957,6 +962,7 @@ export default function ClosingStockPage() {
                               className="input-field mx-auto h-10 w-28 text-center font-semibold"
                               value={row.soldQuantity}
                               onKeyDown={preventNonIntegerNumberInput}
+                              onWheel={preventNumberInputWheel}
                               onChange={(event) => updateSoldQuantity(originalIndex, event.target.value)}
                             />
                           ) : (
