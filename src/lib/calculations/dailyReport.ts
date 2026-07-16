@@ -16,8 +16,8 @@ export function calculateManualIncome(entry: DailyCashEntry): number {
   });
 }
 
-export function calculateTotalIncome(manualIncome: number, barIncome: number): number {
-  return manualIncome + barIncome;
+export function calculateTotalIncome(manualIncome: number, barIncome: number, debtIncome = 0): number {
+  return manualIncome + barIncome + debtIncome;
 }
 
 export function calculateNetProfit(totalIncome: number, totalExpenses: number): number {

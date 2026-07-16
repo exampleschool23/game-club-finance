@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateRemainingDebt, getDebtStatus } from './debt';
+import { calculateRemainingDebt, canManageDebts, getDebtStatus } from './debt';
 
 describe('calculateRemainingDebt', () => {
   it('returns difference between amount and paid', () => {
@@ -42,5 +42,17 @@ describe('getDebtStatus', () => {
 
   it('returns paid when overpaid', () => {
     expect(getDebtStatus(100000, 120000)).toBe('paid');
+  });
+});
+
+describe('canManageDebts', () => {
+  it('allows owners and admins to change the debt ledger', () => {
+    expect(canManageDebts('owner')).toBe(true);
+    expect(canManageDebts('admin')).toBe(true);
+  });
+
+  it('keeps viewers and unknown roles read-only', () => {
+    expect(canManageDebts('viewer')).toBe(false);
+    expect(canManageDebts(null)).toBe(false);
   });
 });

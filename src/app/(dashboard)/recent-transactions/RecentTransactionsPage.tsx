@@ -37,6 +37,9 @@ interface StockPurchaseRow {
 interface DebtRow {
   id: string;
   person_name: string;
+  date: string;
+  amount: number;
+  created_at: string;
 }
 
 interface DebtPaymentRow {
@@ -54,6 +57,7 @@ type TransactionDescriptionKey =
   | 'playstationIncomeDesc'
   | 'barSalesDesc'
   | 'productPurchaseDesc'
+  | 'debtCreatedSuffix'
   | 'debtPaymentSuffix'
   | 'debtPayment'
   | `expenseCategory:${string}`;
@@ -194,7 +198,7 @@ export default function RecentTransactionsPage() {
       ),
       supabase
         .from('new_debts')
-        .select('id,person_name')
+        .select('id,person_name,date,amount,created_at')
         .eq('club_id', selectedClubId),
       inRangeQuery(
         supabase
@@ -293,6 +297,17 @@ export default function RecentTransactionsPage() {
         dateValue: row.date,
         timeValue: row.created_at,
       })),
+      ...debts
+        .filter((row) => row.date >= range.from && row.date <= range.to)
+        .map((row) => ({
+          id: `debt-${row.id}`,
+          type: 'Income' as const,
+          descriptionKey: 'debtCreatedSuffix' as const,
+          debtName: row.person_name,
+          amount: row.amount,
+          dateValue: row.date,
+          timeValue: row.created_at,
+        })),
       ...debtPayments.map((row) => ({
         id: `debt-payment-${row.id}`,
         type: 'Debt Payment' as const,
@@ -336,6 +351,10 @@ export default function RecentTransactionsPage() {
 
     if (descriptionKey === 'debtPaymentSuffix' && debtName) {
       description = `${debtName} ${t('debtPaymentSuffix')}`;
+    }
+
+    if (descriptionKey === 'debtCreatedSuffix' && debtName) {
+      description = `${debtName} ${t('debtCreatedSuffix')}`;
     }
 
     return {

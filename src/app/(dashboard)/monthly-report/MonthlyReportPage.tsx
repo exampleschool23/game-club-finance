@@ -23,6 +23,7 @@ interface DayRow {
   date: string;
   manualIncome: number;
   barIncome: number;
+  debtIncome: number;
   totalIncome: number;
   expenses: number;
   profit: number;
@@ -49,7 +50,7 @@ export default function MonthlyReportPage() {
     const supabase = createClient();
     const { from, to } = monthRange(selectedMonth);
 
-    const [cashRes, stockRes, purchaseRes, expRes] = await Promise.all([
+    const [cashRes, stockRes, purchaseRes, expRes, debtRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income,playstation_income')
@@ -74,12 +75,19 @@ export default function MonthlyReportPage() {
         .eq('club_id', selectedClubId)
         .gte('date', from)
         .lte('date', to),
+      supabase
+        .from('new_debts')
+        .select('date,amount')
+        .eq('club_id', selectedClubId)
+        .gte('date', from)
+        .lte('date', to),
     ]);
 
     const cashEntries = cashRes.data ?? [];
     const stockCounts = stockRes.data ?? [];
     const stockPurchases = purchaseRes.data ?? [];
     const expenses = expRes.data ?? [];
+    const debts = debtRes.data ?? [];
 
     // Collect all unique dates
     const datesSet = new Set<string>([
@@ -87,6 +95,7 @@ export default function MonthlyReportPage() {
       ...stockCounts.map((r) => r.date),
       ...stockPurchases.map((r) => r.date),
       ...expenses.map((r) => r.date),
+      ...debts.map((r) => r.date),
     ]);
     const dates = Array.from(datesSet).sort().reverse();
 
@@ -104,12 +113,15 @@ export default function MonthlyReportPage() {
         stockCounts.filter((r) => r.date === date),
         stockPurchases.filter((r) => r.date === date),
       ).barMoney;
-      const totalIncome = calculateTotalIncome(manualIncome, barIncome);
+      const debtIncome = debts
+        .filter((r) => r.date === date)
+        .reduce((sum, debt) => sum + Number(debt.amount ?? 0), 0);
+      const totalIncome = calculateTotalIncome(manualIncome, barIncome, debtIncome);
       const dayExpenses = expenses
         .filter((r) => r.date === date)
         .reduce((s, r) => s + (r.amount ?? 0), 0);
       const profit = calculateNetProfit(totalIncome, dayExpenses);
-      return { date, manualIncome, barIncome, totalIncome, expenses: dayExpenses, profit };
+      return { date, manualIncome, barIncome, debtIncome, totalIncome, expenses: dayExpenses, profit };
     });
 
     setRows(dayRows);
@@ -177,7 +189,7 @@ export default function MonthlyReportPage() {
 
           {/* Day-by-day table */}
           <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
@@ -188,6 +200,9 @@ export default function MonthlyReportPage() {
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
                     {t('barIncome')}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
+                    {t('debtIncome')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
                     {t('totalIncome')}
@@ -210,6 +225,9 @@ export default function MonthlyReportPage() {
                     <td className="px-4 py-3 text-right text-gray-600">
                       {formatCurrency(row.barIncome)}
                     </td>
+                    <td className="px-4 py-3 text-right text-danger-600">
+                      {formatCurrency(row.debtIncome)}
+                    </td>
                     <td className="px-4 py-3 text-right font-medium text-success-600">
                       {formatCurrency(row.totalIncome)}
                     </td>
@@ -231,6 +249,9 @@ export default function MonthlyReportPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {formatCurrency(rows.reduce((s, r) => s + r.barIncome, 0))}
+                  </td>
+                  <td className="px-4 py-3 text-right text-danger-600">
+                    {formatCurrency(rows.reduce((s, r) => s + r.debtIncome, 0))}
                   </td>
                   <td className="px-4 py-3 text-right text-success-600">
                     {formatCurrency(totalIncome)}

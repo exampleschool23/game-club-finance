@@ -13,6 +13,7 @@ describe('formatRussianDailyFinanceReport', () => {
         businessDateLabel: '4 июля 2026',
         gameClubIncome: 0,
         computerIncome: 0,
+        debtIncome: 0,
         playstationIncome: 0,
         barSales: 931_000,
         stockPurchases: 668_000,
@@ -34,6 +35,7 @@ Pixel Game Zone
 
 🎮 Доход клуба: 0 UZS
   • Компьютеры: 0 UZS
+  • Долги: 0 UZS
   • PlayStation: 0 UZS
 
 🍫 Продажи бара: 931 000 UZS
@@ -162,7 +164,7 @@ Pixel Game Zone
         },
       ],
       debtRows: [
-        { remaining_amount: 90_000, status: 'unpaid' },
+        { date: '2026-07-04', amount: 90_000, remaining_amount: 90_000, status: 'unpaid' },
         { remaining_amount: 20_000, status: 'paid' },
       ],
       productRows: [
@@ -172,8 +174,9 @@ Pixel Game Zone
     });
 
     expect(input).toMatchObject({
-      gameClubIncome: 750_000,
-      computerIncome: 700_000,
+      gameClubIncome: 840_000,
+      computerIncome: 790_000,
+      debtIncome: 90_000,
       playstationIncome: 50_000,
       barSales: 300_000,
       stockPurchases: 100_000,
@@ -186,9 +189,9 @@ Pixel Game Zone
       ],
       barExpenseCategories: [{ name: 'Ремонт', amount: 40_000 }],
       gameClubMoneyLeft: 1_750_000,
-      averageDailyGameClubIncome: 462_500,
+      averageDailyGameClubIncome: 485_000,
       barMoneyLeft: 560_000,
-      netProfit: 790_000,
+      netProfit: 880_000,
       inventoryValue: 50_000,
       activeDebts: 90_000,
     });
@@ -201,6 +204,7 @@ Pixel Game Zone
         businessDateLabel: '3 июля 2026',
         gameClubIncome: 1_904_000,
         computerIncome: 1_904_000,
+        debtIncome: 0,
         playstationIncome: 0,
         barSales: 592_000,
         stockPurchases: 0,

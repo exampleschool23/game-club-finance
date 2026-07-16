@@ -11,6 +11,7 @@ import {
   Gamepad2,
   MonitorSmartphone,
   ShoppingBag,
+  Users,
   Wallet,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -44,6 +45,7 @@ import {
   type DailyCashRow,
   type DashboardPeriod,
   type DashboardTotals,
+  type DebtPaymentValueRow,
   type ExpenseRow,
   type InventorySnapshotRow,
   type MoneyLeftByPaymentMethod,
@@ -66,6 +68,8 @@ interface StockPurchaseRow {
 interface DebtRow {
   id: string;
   person_name: string;
+  date: string;
+  amount: number;
   remaining_amount: number;
   status: string;
 }
@@ -193,11 +197,13 @@ export default function DashboardPage() {
       expenseRes,
       productRes,
       debtRes,
+      debtPaymentRes,
       purchaseRes,
       prevCashRes,
       prevStockRes,
       prevPurchaseRes,
       prevExpenseRes,
+      prevDebtPaymentRes,
       lastMonthInventoryRes,
       trendCashRes,
       trendStockRes,
@@ -229,9 +235,16 @@ export default function DashboardPage() {
       fetchActiveProductsOrdered(supabase, selectedClubId),
       supabase
         .from('new_debts')
-        .select('id,person_name,remaining_amount,status')
+        .select('id,person_name,date,amount,remaining_amount,status')
         .eq('club_id', selectedClubId)
         .order('created_at', { ascending: false }),
+      inRangeQuery(
+        supabase
+          .from('debt_payments')
+          .select('date,amount,payment_method')
+          .eq('club_id', selectedClubId),
+        range,
+      ),
       inRangeQuery(
         supabase
           .from('stock_purchases')
@@ -265,6 +278,13 @@ export default function DashboardPage() {
         supabase
           .from('expenses')
           .select('id,date,amount,category,payment_source,comment,created_at')
+          .eq('club_id', selectedClubId),
+        previousRange,
+      ),
+      inRangeQuery(
+        supabase
+          .from('debt_payments')
+          .select('date,amount,payment_method')
           .eq('club_id', selectedClubId),
         previousRange,
       ),
@@ -307,11 +327,13 @@ export default function DashboardPage() {
       expenseRes.error,
       productRes.error,
       debtRes.error,
+      debtPaymentRes.error,
       purchaseRes.error,
       prevCashRes.error,
       prevStockRes.error,
       prevPurchaseRes.error,
       prevExpenseRes.error,
+      prevDebtPaymentRes.error,
       lastMonthInventoryRes.error,
       trendCashRes.error,
       trendStockRes.error,
@@ -332,10 +354,32 @@ export default function DashboardPage() {
     const debts = (debtRes.data ?? []) as DebtRow[];
     const purchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
     const activeDebts = debts.filter((debt) => debt.status !== 'paid');
+    const rangeDebts = debts.filter((debt) => debt.date >= range.from && debt.date <= range.to);
+    const previousDebts = debts.filter(
+      (debt) => debt.date >= previousRange.from && debt.date <= previousRange.to,
+    );
+    const debtPayments = (debtPaymentRes.data ?? []) as DebtPaymentValueRow[];
+    const previousDebtPayments = (prevDebtPaymentRes.data ?? []) as DebtPaymentValueRow[];
 
-    const totals = calculateDashboardTotals(cashRows, stockRows, purchases, expenseRows, products, activeDebts);
-    const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(cashRows, expenseRows);
-    const latestDailyCashEntryDate = getLatestRowDateInRange(cashRows, range);
+    const totals = calculateDashboardTotals(
+      cashRows,
+      stockRows,
+      purchases,
+      expenseRows,
+      products,
+      rangeDebts,
+      debtPayments,
+      activeDebts,
+    );
+    const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(
+      cashRows,
+      expenseRows,
+      debtPayments,
+    );
+    const latestDailyCashEntryDate = getLatestRowDateInRange(
+      [...cashRows, ...rangeDebts],
+      range,
+    );
     const lastMonthInventoryValue = calculateInventoryValueFromLatestStockCounts(
       (lastMonthInventoryRes.data ?? []) as InventorySnapshotRow[],
     );
@@ -345,6 +389,8 @@ export default function DashboardPage() {
       (prevPurchaseRes.data ?? []) as StockPurchaseCostRow[],
       (prevExpenseRes.data ?? []) as ExpenseRow[],
       products,
+      previousDebts,
+      previousDebtPayments,
       activeDebts,
     );
 
@@ -352,7 +398,14 @@ export default function DashboardPage() {
     const trendStockRows = (trendStockRes.data ?? []) as StockCountRow[];
     const trendPurchaseRows = (trendPurchaseRes.data ?? []) as StockPurchaseCostRow[];
     const trendExpenseRows = (trendExpenseRes.data ?? []) as ExpenseRow[];
-    const trend = buildPeriodTrend(range, trendCashRows, trendStockRows, trendPurchaseRows, trendExpenseRows);
+    const trend = buildPeriodTrend(
+      range,
+      trendCashRows,
+      trendStockRows,
+      trendPurchaseRows,
+      trendExpenseRows,
+      rangeDebts,
+    );
 
     const lowStockCount = products.filter(
       (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
@@ -438,6 +491,7 @@ export default function DashboardPage() {
     { name: t('cash'), value: totals.cashIncome, color: '#22c55e' },
     { name: t('terminal'), value: totals.terminalIncome, color: '#2563eb' },
     { name: t('card'), value: totals.cardIncome, color: '#7c3aed' },
+    { name: t('debtIncome'), value: totals.debtIncome, color: '#ef4444' },
   ];
 
   const moneyLeftData = [
@@ -472,7 +526,7 @@ export default function DashboardPage() {
       <MetricSection
         title={t('gameClubPlaystationSection')}
         description={t('gameClubPlaystationSectionDesc')}
-        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
         className="bg-cyan-200 ring-cyan-300"
         titleClassName="text-cyan-950"
       >
@@ -493,6 +547,14 @@ export default function DashboardPage() {
           iconClassName="text-amber-600"
           helper={t('playstationIncomeMetricDesc')}
           comparison={{ value: percentChange(totals.playstationIncome, previousTotals.playstationIncome), label: incomeComparisonLabel }}
+        />
+        <MetricCard
+          label={t('activeDebts')}
+          amount={totals.activeDebts}
+          icon={Users}
+          iconBgClassName="bg-rose-100"
+          iconClassName="text-rose-600"
+          helper={t('activeDebtsDesc', { count: totals.activeDebtCount })}
         />
         <MetricCard
           label={t('averageDailyIncome')}

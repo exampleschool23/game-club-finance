@@ -12,7 +12,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, parseCurrencyInput } from '@/lib/formatters';
-import { calculateRemainingDebt, getDebtStatus } from '@/lib/calculations/debt';
+import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
+import { validateDebtPayment } from '@/lib/validation';
 import { Calendar, ChevronDown, Plus, X, Users } from 'lucide-react';
 import type { NewDebt, DebtPayment } from '@/types';
 
@@ -29,7 +30,7 @@ function statusVariant(status: string): DebtStatusVariant {
 export default function DebtsPage() {
   const t = useTranslations('debts');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour } = useClub();
+  const { selectedClubId, businessDayStartHour, role } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
 
@@ -39,6 +40,8 @@ export default function DebtsPage() {
   const [paymentsMap, setPaymentsMap] = useState<Record<string, DebtPayment[]>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const canManage = canManageDebts(role);
 
   const [addForm, setAddForm] = useState({
     person_name: '',
@@ -67,28 +70,39 @@ export default function DebtsPage() {
     }
 
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('new_debts')
       .select('*')
       .eq('club_id', selectedClubId)
       .order('date', { ascending: false });
+    if (fetchError) {
+      setLoadError(fetchError.message);
+      return;
+    }
+    setLoadError('');
     setDebts((data as NewDebt[]) ?? []);
   }, [selectedClubId]);
 
   useEffect(() => {
-    fetchDebts().catch(() => {});
-  }, [fetchDebts]);
+    fetchDebts().catch((fetchError) => {
+      setLoadError(fetchError instanceof Error ? fetchError.message : tc('error'));
+    });
+  }, [fetchDebts, tc]);
 
   async function loadPayments(debtId: string) {
     if (!selectedClubId) return;
 
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('debt_payments')
       .select('*')
       .eq('club_id', selectedClubId)
       .eq('debt_id', debtId)
       .order('date', { ascending: false });
+    if (fetchError) {
+      setError(fetchError.message);
+      return;
+    }
     setPaymentsMap((prev) => ({ ...prev, [debtId]: (data as DebtPayment[]) ?? [] }));
   }
 
@@ -151,6 +165,13 @@ export default function DebtsPage() {
     const amount = parseCurrencyInput(payForm.amount);
     if (!selectedClubId) { setError(tc('error')); return; }
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
+    const debt = debts.find((row) => row.id === payDebtId);
+    if (!debt) { setError(tc('error')); return; }
+    const paymentValidation = validateDebtPayment({
+      paymentAmount: amount,
+      remainingDebt: debt.remaining_amount,
+    });
+    if (!paymentValidation.valid) { setError(t('paymentExceedsRemaining')); return; }
     setSaving(true);
     setError('');
 
@@ -182,13 +203,19 @@ export default function DebtsPage() {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
+        action={canManage ? (
           <button className="btn-primary flex items-center gap-2" onClick={() => openAddDebtModal()}>
             <Plus size={16} />
             {t('addDebt')}
           </button>
-        }
+        ) : undefined}
       />
+
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {loadError}
+        </div>
+      )}
 
       {debts.length === 0 ? (
         <EmptyState icon={Users} title={tc('noData')} />
@@ -226,7 +253,7 @@ export default function DebtsPage() {
                         <span className="break-words font-bold text-danger-700 sm:text-right">
                           {formatCurrency(debt.amount)}
                         </span>
-                        <div className="flex flex-wrap gap-2">
+                        {canManage && <div className="flex flex-wrap gap-2">
                           <button
                             className="btn-secondary flex-1 whitespace-nowrap px-3 py-1.5 text-xs sm:flex-none"
                             onClick={() => openAddDebtModal(debt.person_name)}
@@ -240,7 +267,7 @@ export default function DebtsPage() {
                           >
                             {t('addPayment')}
                           </button>
-                        </div>
+                        </div>}
                       </div>
                     </div>
                   );

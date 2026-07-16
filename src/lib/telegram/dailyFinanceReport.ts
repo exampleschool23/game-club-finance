@@ -18,6 +18,7 @@ export interface DailyFinanceReportInput {
   businessDateLabel: string;
   gameClubIncome: number;
   computerIncome: number;
+  debtIncome: number;
   playstationIncome: number;
   barSales: number;
   stockPurchases: number;
@@ -40,8 +41,16 @@ export interface DailyFinanceExpenseCategory {
 }
 
 export interface DailyFinanceReportDebtRow {
+  date?: string;
+  amount?: number;
   remaining_amount: number;
   status: string;
+}
+
+export interface DailyFinanceReportDebtPaymentRow {
+  date: string;
+  amount: number;
+  payment_method: string;
 }
 
 export interface DailyFinanceReportRows {
@@ -58,6 +67,7 @@ export interface DailyFinanceReportRows {
   monthExpenseRows?: ExpenseRow[];
   productRows?: ProductValueRow[];
   debtRows: DailyFinanceReportDebtRow[];
+  debtPaymentRows?: DailyFinanceReportDebtPaymentRow[];
 }
 
 function money(value: number): string {
@@ -105,12 +115,24 @@ function categoryLines(categories: DailyFinanceExpenseCategory[]): string[] {
 export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): DailyFinanceReportInput {
   const monthStart = `${rows.businessDate.slice(0, 7)}-01`;
   const monthRange = { from: monthStart, to: rows.businessDate };
+  const dailyDebtRows = rows.debtRows.filter((row) => row.date === rows.businessDate);
+  const monthDebtRows = rows.debtRows.filter(
+    (row) => Boolean(row.date && row.date >= monthRange.from && row.date <= monthRange.to),
+  );
+  const dailyDebtPaymentRows = (rows.debtPaymentRows ?? []).filter(
+    (row) => row.date === rows.businessDate,
+  );
+  const monthDebtPaymentRows = (rows.debtPaymentRows ?? []).filter(
+    (row) => row.date >= monthRange.from && row.date <= monthRange.to,
+  );
   const dailyTotals = calculateDashboardTotals(
     rows.cashRows,
     rows.stockRows,
     rows.stockPurchaseRows,
     rows.expenseRows,
     rows.productRows ?? [],
+    dailyDebtRows,
+    dailyDebtPaymentRows,
     rows.debtRows,
   );
   const monthTotals = calculateDashboardTotals(
@@ -119,6 +141,8 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     rows.monthStockPurchaseRows ?? rows.stockPurchaseRows,
     rows.monthExpenseRows ?? rows.expenseRows,
     [],
+    monthDebtRows,
+    monthDebtPaymentRows,
     rows.debtRows,
   );
   const latestDailyCashEntryDate = getLatestRowDateInRange(rows.monthCashRows ?? rows.cashRows, monthRange);
@@ -129,6 +153,7 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     businessDateLabel: rows.businessDateLabel,
     gameClubIncome: dailyTotals.gameClubIncome,
     computerIncome: dailyTotals.computerIncome,
+    debtIncome: dailyTotals.debtIncome,
     playstationIncome: dailyTotals.playstationIncome,
     barSales: dailyTotals.barSales,
     stockPurchases: dailyTotals.stockPurchaseCost,
@@ -154,6 +179,7 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     '',
     `🎮 Доход клуба: ${money(input.gameClubIncome)}`,
     `  • Компьютеры: ${money(input.computerIncome)}`,
+    `  • Долги: ${money(input.debtIncome)}`,
     `  • PlayStation: ${money(input.playstationIncome)}`,
     '',
     `🍫 Продажи бара: ${money(input.barSales)}`,

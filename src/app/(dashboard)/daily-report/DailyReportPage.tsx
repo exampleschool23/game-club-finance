@@ -17,7 +17,7 @@ import {
 } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { calculateBarMoney } from '@/lib/calculations/barMoney';
-import { FileText, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { FileText, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
 import type { DailyCashEntry, DailyStockCount, Expense, StockPurchase } from '@/types';
 
 interface ProductRow extends DailyStockCount {
@@ -40,6 +40,7 @@ export default function DailyReportPage() {
   const [stockCounts, setStockCounts] = useState<ProductRow[]>([]);
   const [stockPurchases, setStockPurchases] = useState<StockPurchase[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [debtIncome, setDebtIncome] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async (selectedDate: string) => {
@@ -48,6 +49,7 @@ export default function DailyReportPage() {
       setStockCounts([]);
       setStockPurchases([]);
       setExpenses([]);
+      setDebtIncome(0);
       setLoading(false);
       return;
     }
@@ -55,7 +57,7 @@ export default function DailyReportPage() {
     setLoading(true);
     const supabase = createClient();
 
-    let [cashRes, stockRes, purchaseRes, expRes] = await Promise.all([
+    let [cashRes, stockRes, purchaseRes, expRes, debtRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
         .select('*')
@@ -78,6 +80,11 @@ export default function DailyReportPage() {
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
         .order('created_at'),
+      supabase
+        .from('new_debts')
+        .select('amount')
+        .eq('club_id', selectedClubId)
+        .eq('date', selectedDate),
     ]);
 
     if (isMissingSortOrder(stockRes.error)) {
@@ -99,6 +106,7 @@ export default function DailyReportPage() {
     );
     setStockPurchases((purchaseRes.data as StockPurchase[]) ?? []);
     setExpenses((expRes.data as Expense[]) ?? []);
+    setDebtIncome((debtRes.data ?? []).reduce((sum, debt) => sum + Number(debt.amount ?? 0), 0));
     setLoading(false);
   }, [selectedClubId]);
 
@@ -120,11 +128,11 @@ export default function DailyReportPage() {
     : 0;
 
   const barIncome = calculateBarMoney(stockCounts, stockPurchases).barMoney;
-  const totalIncome = calculateTotalIncome(manualIncome, barIncome);
+  const totalIncome = calculateTotalIncome(manualIncome, barIncome, debtIncome);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netProfit = calculateNetProfit(totalIncome, totalExpenses);
 
-  const hasData = cashEntry !== null || stockCounts.length > 0 || stockPurchases.length > 0 || expenses.length > 0;
+  const hasData = cashEntry !== null || stockCounts.length > 0 || stockPurchases.length > 0 || expenses.length > 0 || debtIncome > 0;
   const currency = tc('currency');
 
   return (
@@ -148,7 +156,7 @@ export default function DailyReportPage() {
       ) : (
         <div className="space-y-6">
           {/* KPIs */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <MetricCard
               label={t('manualIncome')}
               value={`${formatCurrency(manualIncome)} ${currency}`}
@@ -160,6 +168,12 @@ export default function DailyReportPage() {
               value={`${formatCurrency(barIncome)} ${currency}`}
               icon={TrendingUp}
               valueClassName="text-success-600"
+            />
+            <MetricCard
+              label={t('debtIncome')}
+              value={`${formatCurrency(debtIncome)} ${currency}`}
+              icon={Users}
+              valueClassName="text-danger-600"
             />
             <MetricCard
               label={t('totalExpenses')}

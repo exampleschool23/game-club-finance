@@ -10,3 +10,7 @@ export function getDebtStatus(
   if (paidAmount >= amount) return 'paid';
   return 'partial';
 }
+
+export function canManageDebts(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}

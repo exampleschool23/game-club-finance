@@ -129,6 +129,42 @@ describe('dashboard metrics', () => {
     expect(totals.profitMargin).toBe(96.4);
   });
 
+  it('recognizes issued debt as revenue but not as collected money', () => {
+    const debt = {
+      date: '2026-07-04',
+      amount: 120_000,
+      remaining_amount: 120_000,
+      status: 'unpaid',
+    };
+    const totals = calculateDashboardTotals([], [], [], [], [], [debt]);
+
+    expect(totals.debtIncome).toBe(120_000);
+    expect(totals.computerIncome).toBe(120_000);
+    expect(totals.gameClubIncome).toBe(120_000);
+    expect(totals.totalIncome).toBe(120_000);
+    expect(totals.netProfit).toBe(120_000);
+    expect(totals.gameClubMoneyLeft).toBe(0);
+    expect(totals.activeDebts).toBe(120_000);
+  });
+
+  it('treats repayments as collections without recognizing income twice', () => {
+    const totals = calculateDashboardTotals(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [{ date: '2026-07-05', amount: 50_000, payment_method: 'cash' }],
+    );
+
+    expect(totals.debtIncome).toBe(0);
+    expect(totals.debtPaymentsCollected).toBe(50_000);
+    expect(totals.totalIncome).toBe(0);
+    expect(totals.netProfit).toBe(0);
+    expect(totals.gameClubMoneyLeft).toBe(50_000);
+  });
+
   it('calculates percentage changes against negative previous values', () => {
     expect(percentChange(8_902_000, -700_000)).toBe(1372);
     expect(percentChange(-1_000, -500)).toBe(-100);
@@ -255,6 +291,20 @@ describe('dashboard metrics', () => {
     expect(Object.values(breakdown).reduce((sum, value) => sum + value, 0)).toBe(740_000);
   });
 
+  it('adds debt collections to the selected money-left payment bucket', () => {
+    const breakdown = calculateGameClubMoneyLeftByPaymentMethod(
+      [],
+      [],
+      [
+        { date: '2026-07-04', amount: 30_000, payment_method: 'cash' },
+        { date: '2026-07-04', amount: 20_000, payment_method: 'terminal' },
+        { date: '2026-07-04', amount: 10_000, payment_method: 'transfer' },
+      ],
+    );
+
+    expect(breakdown).toEqual({ cash: 30_000, terminal: 20_000, card: 10_000, playstation: 0 });
+  });
+
   it('builds 7-day trend using cash, closing stock income, and purchases', () => {
     const trend = buildIncomeTrend(
       '2026-07-02',
@@ -313,6 +363,19 @@ describe('dashboard metrics', () => {
     );
 
     expect(trend).toEqual([{ date: '2026-06-03', income: 1_000, expenses: 0 }]);
+  });
+
+  it('includes debt revenue on its issue date in the income trend', () => {
+    const trend = buildPeriodTrend(
+      { from: '2026-06-03', to: '2026-06-03' },
+      [],
+      [],
+      [],
+      [],
+      [{ date: '2026-06-03', amount: 75_000, remaining_amount: 75_000, status: 'unpaid' }],
+    );
+
+    expect(trend).toEqual([{ date: '2026-06-03', income: 75_000, expenses: 0 }]);
   });
 
   it('uses local dates instead of UTC conversion for ranges', () => {

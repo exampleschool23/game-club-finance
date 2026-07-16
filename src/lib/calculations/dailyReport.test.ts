@@ -31,6 +31,10 @@ describe('calculateTotalIncome', () => {
   it('adds manual income and bar income', () => {
     expect(calculateTotalIncome(415000, 80000)).toBe(495000);
   });
+
+  it('recognizes a new debt as income without requiring a repayment', () => {
+    expect(calculateTotalIncome(415000, 80000, 120000)).toBe(615000);
+  });
 });
 
 describe('calculateNetProfit', () => {

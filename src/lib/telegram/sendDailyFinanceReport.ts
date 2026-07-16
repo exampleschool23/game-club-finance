@@ -11,7 +11,10 @@ import type {
   StockCountRow,
   StockPurchaseCostRow,
 } from '../calculations/dashboardMetrics';
-import type { DailyFinanceReportDebtRow } from './dailyFinanceReport';
+import type {
+  DailyFinanceReportDebtPaymentRow,
+  DailyFinanceReportDebtRow,
+} from './dailyFinanceReport';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const TASHKENT_TIME_ZONE = 'Asia/Tashkent';
@@ -94,7 +97,7 @@ export async function buildDailyFinanceTelegramReport(
   },
 ): Promise<DailyFinanceReportBuildResult> {
   const monthStart = monthStartIso(businessDate);
-  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes] = await Promise.all([
+  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes] = await Promise.all([
     getClub(supabase, clubId),
     supabase
       .from('daily_cash_entries')
@@ -123,8 +126,14 @@ export async function buildDailyFinanceTelegramReport(
       .eq('is_active', true),
     supabase
       .from('new_debts')
-      .select('remaining_amount,status')
+      .select('date,amount,remaining_amount,status')
       .eq('club_id', clubId),
+    supabase
+      .from('debt_payments')
+      .select('date,amount,payment_method')
+      .eq('club_id', clubId)
+      .gte('date', monthStart)
+      .lte('date', businessDate),
     supabase
       .from('daily_cash_entries')
       .select('date,cash_income,terminal_income,card_income,playstation_income')
@@ -158,6 +167,7 @@ export async function buildDailyFinanceTelegramReport(
     expenseRes.error,
     productRes.error,
     debtRes.error,
+    debtPaymentRes.error,
     monthCashRes.error,
     monthStockRes.error,
     monthPurchaseRes.error,
@@ -180,6 +190,7 @@ export async function buildDailyFinanceTelegramReport(
     monthExpenseRows: (monthExpenseRes.data ?? []) as ExpenseRow[],
     productRows: (productRes.data ?? []) as ProductValueRow[],
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
+    debtPaymentRows: (debtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
   });
 
   return {
