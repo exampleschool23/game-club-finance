@@ -99,6 +99,18 @@ export default function DebtsPage() {
     loadPayments(debtId).catch(() => {});
   }
 
+  function openAddDebtModal(personName = '') {
+    setAddForm({
+      person_name: personName,
+      amount: '',
+      date: businessToday,
+      category: 'other',
+      comment: '',
+    });
+    setError('');
+    setAddOpen(true);
+  }
+
   async function handleAddDebt(e: React.FormEvent) {
     e.preventDefault();
     const amount = parseCurrencyInput(addForm.amount);
@@ -171,7 +183,7 @@ export default function DebtsPage() {
         title={t('title')}
         description={t('description')}
         action={
-          <button className="btn-primary flex items-center gap-2" onClick={() => { setError(''); setAddOpen(true); }}>
+          <button className="btn-primary flex items-center gap-2" onClick={() => openAddDebtModal()}>
             <Plus size={16} />
             {t('addDebt')}
           </button>
@@ -214,12 +226,21 @@ export default function DebtsPage() {
                         <span className="break-words font-bold text-danger-700 sm:text-right">
                           {formatCurrency(debt.amount)}
                         </span>
-                        <button
-                          className="btn-secondary px-3 py-1.5 text-xs"
-                          onClick={() => openPayModal(debt.id)}
-                        >
-                          {t('addPayment')}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="btn-secondary flex-1 whitespace-nowrap px-3 py-1.5 text-xs sm:flex-none"
+                            onClick={() => openAddDebtModal(debt.person_name)}
+                          >
+                            <Plus size={14} />
+                            {t('addDebt')}
+                          </button>
+                          <button
+                            className="btn-secondary flex-1 whitespace-nowrap px-3 py-1.5 text-xs sm:flex-none"
+                            onClick={() => openPayModal(debt.id)}
+                          >
+                            {t('addPayment')}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
