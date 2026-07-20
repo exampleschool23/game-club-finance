@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { fetchAllRows } from '@/lib/supabase/pagination';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatDateShort } from '@/lib/formatters';
@@ -37,10 +38,9 @@ import {
   countDashboardRangeDaysThroughDate,
   emptyDashboardTotals,
   emptyMoneyLeftByPaymentMethod,
-  getDashboardAverageDayCount,
+  getDashboardComparisonRange,
   getDashboardRange,
   getLatestRowDateInRange,
-  getPreviousDashboardRange,
   percentChange,
   type DailyCashRow,
   type DashboardPeriod,
@@ -78,22 +78,26 @@ interface DashboardData {
   totals: DashboardTotals;
   previousTotals: DashboardTotals;
   lastMonthInventoryValue: number;
+  hasLastMonthInventoryData: boolean;
   trend: TrendRow[];
   lowStockCount: number;
   expenseCategories: Array<{ category: string; value: number }>;
   moneyLeftByPaymentMethod: MoneyLeftByPaymentMethod;
   latestDailyCashEntryDate: string | null;
+  latestBarEntryDate: string | null;
 }
 
 const emptyData: DashboardData = {
   totals: emptyDashboardTotals,
   previousTotals: emptyDashboardTotals,
   lastMonthInventoryValue: 0,
+  hasLastMonthInventoryData: false,
   trend: [],
   lowStockCount: 0,
   expenseCategories: [],
   moneyLeftByPaymentMethod: emptyMoneyLeftByPaymentMethod,
   latestDailyCashEntryDate: null,
+  latestBarEntryDate: null,
 };
 
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
@@ -101,22 +105,28 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
 }
 
 async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
-  const ordered = await supabase
-    .from('products')
-    .select('*')
-    .eq('club_id', clubId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true });
+  const ordered = await fetchAllRows<Product>(() =>
+    supabase
+      .from('products')
+      .select('*')
+      .eq('club_id', clubId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+      .order('id', { ascending: true }),
+  );
 
   if (!isMissingSortOrder(ordered.error)) return ordered;
 
-  return supabase
-    .from('products')
-    .select('*')
-    .eq('club_id', clubId)
-    .eq('is_active', true)
-    .order('name', { ascending: true });
+  return fetchAllRows<Product>(() =>
+    supabase
+      .from('products')
+      .select('*')
+      .eq('club_id', clubId)
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+      .order('id', { ascending: true }),
+  );
 }
 
 function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte: (column: string, value: string) => T }>(
@@ -188,7 +198,7 @@ export default function DashboardPage() {
     setError('');
 
     const supabase = createClient();
-    const previousRange = getPreviousDashboardRange(range);
+    const previousRange = getDashboardComparisonRange(period, range);
     const lastMonthRange = getDashboardRange('lastMonth', selectedDate || businessToday);
 
     const [
@@ -205,120 +215,135 @@ export default function DashboardPage() {
       prevExpenseRes,
       prevDebtPaymentRes,
       lastMonthInventoryRes,
-      trendCashRes,
-      trendStockRes,
-      trendPurchaseRes,
-      trendExpenseRes,
     ] = await Promise.all([
-      inRangeQuery(
-        supabase
-          .from('daily_cash_entries')
-          .select('date,cash_income,terminal_income,card_income,playstation_income,created_at')
-          .eq('club_id', selectedClubId),
-        range,
+      fetchAllRows<DailyCashRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('daily_cash_entries')
+            .select('date,cash_income,terminal_income,card_income,playstation_income,created_at')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('created_at', { ascending: true }),
+          range,
+        ),
       ),
-      inRangeQuery(
-        supabase
-          .from('daily_stock_counts')
-          .select('date,bar_income,bar_profit,bar_cost,sold_quantity,updated_at')
-          .eq('club_id', selectedClubId),
-        range,
+      fetchAllRows<StockCountRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('daily_stock_counts')
+            .select('product_id,date,bar_income,bar_profit,bar_cost,sold_quantity,updated_at')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('product_id', { ascending: true }),
+          range,
+        ),
       ),
-      inRangeQuery(
-        supabase
-          .from('expenses')
-          .select('id,date,amount,category,payment_method,payment_source,comment,created_at')
-          .eq('club_id', selectedClubId)
-          .order('created_at', { ascending: false }),
-        range,
+      fetchAllRows<ExpenseRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('expenses')
+            .select('id,date,amount,category,payment_method,payment_source,comment,created_at')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true }),
+          range,
+        ),
       ),
       fetchActiveProductsOrdered(supabase, selectedClubId),
-      supabase
-        .from('new_debts')
-        .select('id,person_name,date,amount,remaining_amount,status')
-        .eq('club_id', selectedClubId)
-        .order('created_at', { ascending: false }),
-      inRangeQuery(
+      fetchAllRows<DebtRow>(() =>
         supabase
-          .from('debt_payments')
-          .select('date,amount,payment_method')
-          .eq('club_id', selectedClubId),
-        range,
-      ),
-      inRangeQuery(
-        supabase
-          .from('stock_purchases')
-          .select('id,date,quantity,cost_price,comment,created_at')
+          .from('new_debts')
+          .select('id,person_name,date,amount,remaining_amount,status')
           .eq('club_id', selectedClubId)
-          .order('created_at', { ascending: false }),
-        range,
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true }),
       ),
-      inRangeQuery(
-        supabase
-          .from('daily_cash_entries')
-          .select('date,cash_income,terminal_income,card_income,playstation_income')
-          .eq('club_id', selectedClubId),
-        previousRange,
+      fetchAllRows<DebtPaymentValueRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('debt_payments')
+            .select('id,date,amount,payment_method')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true }),
+          range,
+        ),
       ),
-      inRangeQuery(
+      fetchAllRows<StockPurchaseRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('stock_purchases')
+            .select('id,date,quantity,cost_price,comment,created_at')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true }),
+          range,
+        ),
+      ),
+      fetchAllRows<DailyCashRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('daily_cash_entries')
+            .select('date,cash_income,terminal_income,card_income,playstation_income')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true }),
+          previousRange,
+        ),
+      ),
+      fetchAllRows<StockCountRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('daily_stock_counts')
+            .select('product_id,date,bar_income,bar_profit,bar_cost,sold_quantity')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('product_id', { ascending: true }),
+          previousRange,
+        ),
+      ),
+      fetchAllRows<StockPurchaseCostRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('stock_purchases')
+            .select('id,date,quantity,cost_price')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true }),
+          previousRange,
+        ),
+      ),
+      fetchAllRows<ExpenseRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('expenses')
+            .select('id,date,amount,category,payment_source,comment,created_at')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true }),
+          previousRange,
+        ),
+      ),
+      fetchAllRows<DebtPaymentValueRow>(() =>
+        inRangeQuery(
+          supabase
+            .from('debt_payments')
+            .select('id,date,amount,payment_method')
+            .eq('club_id', selectedClubId)
+            .order('date', { ascending: true })
+            .order('id', { ascending: true }),
+          previousRange,
+        ),
+      ),
+      fetchAllRows<InventorySnapshotRow>(() =>
         supabase
           .from('daily_stock_counts')
-          .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
-          .eq('club_id', selectedClubId),
-        previousRange,
+          .select('product_id,date,closing_stock,cost_price')
+          .eq('club_id', selectedClubId)
+          .gte('date', lastMonthRange.from)
+          .lte('date', lastMonthRange.to)
+          .order('date', { ascending: true })
+          .order('product_id', { ascending: true }),
       ),
-      inRangeQuery(
-        supabase
-          .from('stock_purchases')
-          .select('date,quantity,cost_price,created_at')
-          .eq('club_id', selectedClubId),
-        previousRange,
-      ),
-      inRangeQuery(
-        supabase
-          .from('expenses')
-          .select('id,date,amount,category,payment_source,comment,created_at')
-          .eq('club_id', selectedClubId),
-        previousRange,
-      ),
-      inRangeQuery(
-        supabase
-          .from('debt_payments')
-          .select('date,amount,payment_method')
-          .eq('club_id', selectedClubId),
-        previousRange,
-      ),
-      supabase
-        .from('daily_stock_counts')
-        .select('product_id,date,closing_stock,cost_price')
-        .eq('club_id', selectedClubId)
-        .gte('date', lastMonthRange.from)
-        .lte('date', lastMonthRange.to)
-        .range(0, 9_999),
-      supabase
-        .from('daily_cash_entries')
-        .select('date,cash_income,terminal_income,card_income,playstation_income')
-        .eq('club_id', selectedClubId)
-        .gte('date', range.from)
-        .lte('date', range.to),
-      supabase
-        .from('daily_stock_counts')
-        .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
-        .eq('club_id', selectedClubId)
-        .gte('date', range.from)
-        .lte('date', range.to),
-      supabase
-        .from('stock_purchases')
-        .select('date,quantity,cost_price,created_at')
-        .eq('club_id', selectedClubId)
-        .gte('date', range.from)
-        .lte('date', range.to),
-      supabase
-        .from('expenses')
-        .select('id,date,amount,category,payment_source,comment,created_at')
-        .eq('club_id', selectedClubId)
-        .gte('date', range.from)
-        .lte('date', range.to),
     ]);
 
     const firstError = [
@@ -335,10 +360,6 @@ export default function DashboardPage() {
       prevExpenseRes.error,
       prevDebtPaymentRes.error,
       lastMonthInventoryRes.error,
-      trendCashRes.error,
-      trendStockRes.error,
-      trendPurchaseRes.error,
-      trendExpenseRes.error,
     ].find(Boolean);
 
     if (firstError) {
@@ -380,6 +401,7 @@ export default function DashboardPage() {
       [...cashRows, ...rangeDebts],
       range,
     );
+    const latestBarEntryDate = getLatestRowDateInRange(stockRows, range);
     const lastMonthInventoryValue = calculateInventoryValueFromLatestStockCounts(
       (lastMonthInventoryRes.data ?? []) as InventorySnapshotRow[],
     );
@@ -394,16 +416,12 @@ export default function DashboardPage() {
       activeDebts,
     );
 
-    const trendCashRows = (trendCashRes.data ?? []) as DailyCashRow[];
-    const trendStockRows = (trendStockRes.data ?? []) as StockCountRow[];
-    const trendPurchaseRows = (trendPurchaseRes.data ?? []) as StockPurchaseCostRow[];
-    const trendExpenseRows = (trendExpenseRes.data ?? []) as ExpenseRow[];
     const trend = buildPeriodTrend(
       range,
-      trendCashRows,
-      trendStockRows,
-      trendPurchaseRows,
-      trendExpenseRows,
+      cashRows,
+      stockRows,
+      purchases,
+      expenseRows,
       rangeDebts,
     );
 
@@ -423,14 +441,16 @@ export default function DashboardPage() {
       totals,
       previousTotals,
       lastMonthInventoryValue,
+      hasLastMonthInventoryData: (lastMonthInventoryRes.data ?? []).length > 0,
       trend,
       lowStockCount,
       expenseCategories,
       moneyLeftByPaymentMethod,
       latestDailyCashEntryDate,
+      latestBarEntryDate,
     });
     setLoading(false);
-  }, [businessToday, range, selectedClubId, selectedDate]);
+  }, [businessToday, period, range, selectedClubId, selectedDate]);
 
   useEffect(() => {
     fetchDashboard().catch((fetchError) => {
@@ -466,6 +486,11 @@ export default function DashboardPage() {
           ? t('vsLastMonth')
           : t('vsPreviousPeriod');
 
+  const comparisonFor = (current: number, previous: number, label = incomeComparisonLabel) => {
+    const value = percentChange(current, previous);
+    return { value, label: value === null ? t('noComparisonData') : label };
+  };
+
   const trend = useMemo(
     () => data.trend.map((row) => ({
       ...row,
@@ -473,7 +498,7 @@ export default function DashboardPage() {
     })),
     [data.trend, locale],
   );
-  const averageBarDayCount = getDashboardAverageDayCount(period, range, selectedDate || businessToday);
+  const averageBarDayCount = countDashboardRangeDaysThroughDate(range, data.latestBarEntryDate);
   const averageGameClubDayCount = countDashboardRangeDaysThroughDate(range, data.latestDailyCashEntryDate);
   const averageGameClubIncome = calculateAverageDailyIncome(totals.gameClubIncome, averageGameClubDayCount);
   const averageBarIncome = calculateAverageDailyIncome(totals.barSales, averageBarDayCount);
@@ -482,9 +507,9 @@ export default function DashboardPage() {
     { name: t('gameClubIncome'), value: totals.computerIncome, fill: '#2563eb' },
     { name: t('playstationIncome'), value: totals.playstationIncome, fill: '#f59e0b' },
     { name: t('barSales'), value: totals.barSales, fill: '#f97316' },
-    { name: t('stockPurchases'), value: totals.stockPurchaseCost, fill: '#dc2626' },
+    { name: t('barCostOfGoodsSold'), value: totals.barCost, fill: '#dc2626' },
     { name: t('totalExpenses'), value: totals.totalExpenses, fill: '#ef4444' },
-    { name: t('netProfit'), value: totals.netProfit, fill: '#22c55e' },
+    { name: t('netProfit'), value: totals.accountingNetProfit, fill: '#22c55e' },
   ];
 
   const paymentData = [
@@ -504,7 +529,7 @@ export default function DashboardPage() {
   const categoryData = [
     { name: t('gameClub'), value: totals.computerIncome, color: '#2563eb' },
     { name: t('playstation'), value: totals.playstationIncome, color: '#f59e0b' },
-    { name: t('barMoneyLeft'), value: Math.max(0, totals.barIncome), color: '#f97316' },
+    { name: t('barSales'), value: totals.barSales, color: '#f97316' },
   ];
   const incomeCategoryTotal = categoryData.reduce((sum, row) => sum + row.value, 0);
 
@@ -537,7 +562,7 @@ export default function DashboardPage() {
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
           helper={t('gameClubIncomeMetricDesc')}
-          comparison={{ value: percentChange(totals.computerIncome, previousTotals.computerIncome), label: incomeComparisonLabel }}
+          comparison={comparisonFor(totals.computerIncome, previousTotals.computerIncome)}
         />
         <MetricCard
           label={t('playstationIncome')}
@@ -546,7 +571,7 @@ export default function DashboardPage() {
           iconBgClassName="bg-amber-100"
           iconClassName="text-amber-600"
           helper={t('playstationIncomeMetricDesc')}
-          comparison={{ value: percentChange(totals.playstationIncome, previousTotals.playstationIncome), label: incomeComparisonLabel }}
+          comparison={comparisonFor(totals.playstationIncome, previousTotals.playstationIncome)}
         />
         <MetricCard
           label={t('activeDebts')}
@@ -571,7 +596,7 @@ export default function DashboardPage() {
           iconBgClassName="bg-emerald-100"
           iconClassName="text-emerald-600"
           helper={t('totalMoneyLeftDesc')}
-          comparison={{ value: percentChange(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft), label: incomeComparisonLabel }}
+          comparison={comparisonFor(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft)}
         />
       </MetricSection>
 
@@ -589,7 +614,7 @@ export default function DashboardPage() {
           iconBgClassName="bg-orange-100"
           iconClassName="text-orange-600"
           helper={t('totalBarMoneyDesc')}
-          comparison={{ value: percentChange(totals.barSales, previousTotals.barSales), label: incomeComparisonLabel }}
+          comparison={comparisonFor(totals.barSales, previousTotals.barSales)}
         />
         <MetricCard
           label={t('stockPurchase')}
@@ -601,12 +626,13 @@ export default function DashboardPage() {
         />
         <MetricCard
           label={t('barMoneyNetProfit')}
-          amount={totals.barIncome}
+          amount={totals.barProfit}
           icon={ChartNoAxesCombined}
           iconBgClassName="bg-green-100"
           iconClassName="text-green-600"
           helper={t('barMoneyNetProfitDesc')}
-          comparison={{ value: percentChange(totals.barIncome, previousTotals.barIncome), label: incomeComparisonLabel }}
+          subMetric={{ label: t('barMoneyLeft'), amount: totals.barIncome }}
+          comparison={comparisonFor(totals.barProfit, previousTotals.barProfit)}
         />
         <MetricCard
           label={t('averageDailyIncome')}
@@ -623,11 +649,16 @@ export default function DashboardPage() {
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
           helper={`${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
-          subMetric={{ label: t('lastMonthInventoryValue'), amount: data.lastMonthInventoryValue }}
-          comparison={{
-            value: percentChange(totals.inventoryValue, data.lastMonthInventoryValue),
-            label: t('vsLastMonth'),
+          subMetric={{
+            label: t('lastMonthInventoryValue'),
+            amount: data.hasLastMonthInventoryData ? data.lastMonthInventoryValue : null,
+            unavailableLabel: t('noComparisonData'),
           }}
+          comparison={
+            data.hasLastMonthInventoryData
+              ? comparisonFor(totals.inventoryValue, data.lastMonthInventoryValue, t('vsLastMonth'))
+              : undefined
+          }
         />
       </MetricSection>
 

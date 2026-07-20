@@ -1,5 +1,5 @@
 import { calculateGameClubIncome } from './dailyCash';
-import { calculateBarMoney, sumStockPurchaseCost } from './barMoney';
+import { calculateBarMoney } from './barMoney';
 import type { StockPurchaseCostRow } from './barMoney';
 
 export { STOCK_PURCHASE_DEDUCTION_START_DATE, sumStockPurchaseCost } from './barMoney';
@@ -79,14 +79,21 @@ export interface DashboardTotals {
   computerIncome: number;
   gameClubIncome: number;
   barSales: number;
+  barCost: number;
   stockPurchaseCost: number;
+  /** Accounting profit: sales minus cost of goods sold and bar-paid expenses. */
+  barProfit: number;
+  /** Cash left in the bar: sales minus inventory purchases and bar-paid expenses. */
   barIncome: number;
   totalIncome: number;
   totalExpenses: number;
   gameClubExpenses: number;
   barExpenses: number;
   gameClubMoneyLeft: number;
+  /** Legacy cash-basis result retained for the existing reports. */
   netProfit: number;
+  /** Revenue minus cost of goods sold and all recorded operating expenses. */
+  accountingNetProfit: number;
   inventoryValue: number;
   activeDebts: number;
   activeDebtCount: number;
@@ -123,7 +130,9 @@ export const emptyDashboardTotals: DashboardTotals = {
   computerIncome: 0,
   gameClubIncome: 0,
   barSales: 0,
+  barCost: 0,
   stockPurchaseCost: 0,
+  barProfit: 0,
   barIncome: 0,
   totalIncome: 0,
   totalExpenses: 0,
@@ -131,6 +140,7 @@ export const emptyDashboardTotals: DashboardTotals = {
   barExpenses: 0,
   gameClubMoneyLeft: 0,
   netProfit: 0,
+  accountingNetProfit: 0,
   inventoryValue: 0,
   activeDebts: 0,
   activeDebtCount: 0,
@@ -216,6 +226,28 @@ export function getPreviousDashboardRange(range: {
   const previousTo = addDays(from, -1);
   const previousFrom = addDays(previousTo, 1 - days);
   return { from: localIsoDate(previousFrom), to: localIsoDate(previousTo) };
+}
+
+export function getDashboardComparisonRange(
+  period: DashboardPeriod,
+  range: { from: string; to: string },
+): { from: string; to: string } {
+  if (period === 'month' || period === 'lastMonth') {
+    const currentMonthStart = parseLocalIsoDate(range.from);
+    const previousMonthStart = new Date(
+      currentMonthStart.getFullYear(),
+      currentMonthStart.getMonth() - 1,
+      1,
+    );
+    const previousMonthEnd = new Date(
+      currentMonthStart.getFullYear(),
+      currentMonthStart.getMonth(),
+      0,
+    );
+    return { from: localIsoDate(previousMonthStart), to: localIsoDate(previousMonthEnd) };
+  }
+
+  return getPreviousDashboardRange(range);
 }
 
 export function countDashboardRangeDays(range: { from: string; to: string }): number {
@@ -344,6 +376,7 @@ export function calculateDashboardTotals(
   const computerIncome = collectedGameClub.computerIncome + debtIncome;
   const gameClubIncome = collectedGameClub.gameClubIncome + debtIncome;
   const barMoney = calculateBarMoney(stockRows, purchaseRows);
+  const barCost = stockRows.reduce((sum, row) => sum + Number(row.bar_cost ?? 0), 0);
   const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
   const barExpenses = expenseRows.reduce(
     (sum, row) => (row.payment_source === 'bar' ? sum + Number(row.amount ?? 0) : sum),
@@ -351,9 +384,11 @@ export function calculateDashboardTotals(
   );
   const gameClubExpenses = totalExpenses - barExpenses;
   const barIncome = barMoney.barMoney - barExpenses;
+  const barProfit = barMoney.barSales - barCost - barExpenses;
   const gameClubMoneyLeft = collectedGameClub.gameClubIncome + debtPaymentsCollected - gameClubExpenses;
   const totalIncome = gameClubIncome + barMoney.barMoney;
   const netProfit = totalIncome - totalExpenses;
+  const accountingNetProfit = gameClubIncome + barMoney.barSales - barCost - totalExpenses;
   const inventoryValue = calculateInventoryValue(products);
   const activeDebtRows = activeDebtSnapshot.filter((debt) => debt.status !== 'paid');
   const activeDebts = activeDebtRows.reduce(
@@ -368,7 +403,9 @@ export function calculateDashboardTotals(
     debtIncome,
     debtPaymentsCollected,
     barSales: barMoney.barSales,
+    barCost,
     stockPurchaseCost: barMoney.stockPurchaseCost,
+    barProfit,
     barIncome,
     totalIncome,
     totalExpenses,
@@ -376,10 +413,14 @@ export function calculateDashboardTotals(
     barExpenses,
     gameClubMoneyLeft,
     netProfit,
+    accountingNetProfit,
     inventoryValue,
     activeDebts,
     activeDebtCount: activeDebtRows.length,
-    profitMargin: totalIncome > 0 ? Math.round((netProfit / totalIncome) * 1000) / 10 : 0,
+    profitMargin:
+      gameClubIncome + barMoney.barSales > 0
+        ? Math.round((accountingNetProfit / (gameClubIncome + barMoney.barSales)) * 1000) / 10
+        : 0,
   };
 }
 
@@ -407,8 +448,8 @@ export function calculateInventoryValueFromLatestStockCounts(rows: InventorySnap
   );
 }
 
-export function percentChange(current: number, previous: number): number {
-  if (!previous) return current > 0 ? 100 : 0;
+export function percentChange(current: number, previous: number): number | null {
+  if (!previous) return null;
   return Math.round(((current - previous) / Math.abs(previous)) * 100);
 }
 
@@ -447,26 +488,25 @@ function buildTrendForDates(
   trendDates: string[],
   cashRows: DailyCashRow[],
   stockRows: StockCountRow[],
-  purchaseRows: StockPurchaseCostRow[],
+  _purchaseRows: StockPurchaseCostRow[],
   expenseRows: ExpenseRow[],
   debtRows: DebtValueRow[],
 ): TrendRow[] {
   return trendDates.map((date) => {
     const dayCash = cashRows.filter((row) => row.date === date);
     const dayStock = stockRows.filter((row) => row.date === date);
-    const dayPurchases = purchaseRows.filter((row) => row.date === date);
     const dayExpenses = expenseRows.filter((row) => row.date === date);
     const dayDebtIncome = debtRows
       .filter((row) => row.date === date)
       .reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
     const dayGame = sumGameClubRows(dayCash).gameClubIncome;
     const dayBarSales = dayStock.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
-    const dayPurchaseCost = sumStockPurchaseCost(dayPurchases);
+    const dayBarCost = dayStock.reduce((sum, row) => sum + Number(row.bar_cost ?? 0), 0);
 
     return {
       date,
-      income: dayGame + dayDebtIncome + dayBarSales - dayPurchaseCost,
-      expenses: dayExpenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
+      income: dayGame + dayDebtIncome + dayBarSales,
+      expenses: dayBarCost + dayExpenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
     };
   });
 }
