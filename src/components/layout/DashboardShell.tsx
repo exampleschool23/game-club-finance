@@ -14,6 +14,9 @@ import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
 
 interface DashboardShellProps {
   initialEmail?: string;
+  initialFullName?: string;
+  initialProfileRole?: UserRole;
+  initialMembershipRows?: ClubMembership[];
   children: React.ReactNode;
 }
 
@@ -111,15 +114,32 @@ function PendingApproval({ fullName }: { fullName: string }) {
   );
 }
 
-export function DashboardShell({ initialEmail = '', children }: DashboardShellProps) {
+function membershipOptions(rows: ClubMembership[]): ClubOption[] {
+  return rows
+    .map((membership) => ({
+      club: relatedClub(membership.clubs),
+      role: isUserRole(membership.role) ? membership.role : 'viewer',
+    }))
+    .filter((membership): membership is ClubOption => Boolean(membership.club?.is_active))
+    .sort((a, b) => a.club.name.localeCompare(b.club.name));
+}
+
+export function DashboardShell({
+  initialEmail = '',
+  initialFullName = '',
+  initialProfileRole = 'viewer',
+  initialMembershipRows = [],
+  children,
+}: DashboardShellProps) {
   const router = useRouter();
+  const initialMemberships = useMemo(() => membershipOptions(initialMembershipRows), [initialMembershipRows]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayIso);
-  const [profileRole, setProfileRole] = useState<UserRole>('viewer');
-  const [fullName, setFullName] = useState(initialEmail);
-  const [memberships, setMemberships] = useState<ClubOption[]>([]);
+  const [profileRole, setProfileRole] = useState<UserRole>(initialProfileRole);
+  const [fullName, setFullName] = useState(initialFullName || initialEmail);
+  const [memberships, setMemberships] = useState<ClubOption[]>(initialMemberships);
   const [selectedClubId, setSelectedClubIdState] = useState('');
-  const [clubLoading, setClubLoading] = useState(true);
+  const [clubLoading, setClubLoading] = useState(false);
 
   const selectedMembership = useMemo(
     () => memberships.find((membership) => membership.club.id === selectedClubId) ?? null,
@@ -160,13 +180,7 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
     setFullName(profileRes.data?.full_name ?? session.user.email ?? initialEmail);
     setProfileRole(isUserRole(profileRes.data?.role) ? profileRes.data.role : 'viewer');
 
-    const nextMemberships = ((membershipRes.data as ClubMembership[] | null) ?? [])
-      .map((membership) => ({
-        club: relatedClub(membership.clubs),
-        role: isUserRole(membership.role) ? membership.role : 'viewer',
-      }))
-      .filter((membership): membership is ClubOption => Boolean(membership.club?.is_active))
-      .sort((a, b) => a.club.name.localeCompare(b.club.name));
+    const nextMemberships = membershipOptions((membershipRes.data as ClubMembership[] | null) ?? []);
 
     setMemberships(nextMemberships);
     setSelectedClubIdState((currentClubId) => {
@@ -189,6 +203,20 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
   }, [initialEmail, router]);
 
   useEffect(() => {
+    const nextClubId =
+      initialMemberships.find((membership) => membership.club.id === window.localStorage.getItem(SELECTED_CLUB_STORAGE_KEY))?.club.id ??
+      initialMemberships[0]?.club.id ??
+      '';
+
+    if (nextClubId) {
+      setSelectedClubIdState(nextClubId);
+      window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, nextClubId);
+    }
+  }, [initialMemberships]);
+
+  useEffect(() => {
+    if (initialMembershipRows.length > 0) return;
+
     let cancelled = false;
 
     async function loadProfile() {
@@ -209,7 +237,7 @@ export function DashboardShell({ initialEmail = '', children }: DashboardShellPr
     return () => {
       cancelled = true;
     };
-  }, [initialEmail, refreshClubs]);
+  }, [initialEmail, initialMembershipRows.length, refreshClubs]);
 
   useEffect(() => {
     if (selectedClubId) {
