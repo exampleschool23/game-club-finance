@@ -6,23 +6,23 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { useClub } from '@/components/layout/DashboardShell';
-import { STOCK_PURCHASE_DEDUCTION_START_DATE } from '@/lib/calculations/barMoney';
 import { formatDateShort, formatNumber } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
 
-interface StockRow {
+interface CashRow {
   date: string;
-  bar_income: number;
+  cash_income: number;
+  terminal_income: number;
+  card_income: number;
+  playstation_income: number;
 }
 
-interface PurchaseRow {
+interface DebtPaymentRow {
   date: string;
-  quantity: number;
-  cost_price: number;
-  comment: string | null;
-  products?: { name: string } | { name: string }[] | null;
+  amount: number;
+  payment_method: string;
 }
 
 interface ExpenseRow {
@@ -35,9 +35,11 @@ interface ExpenseRow {
 
 interface DailyRow {
   date: string;
-  sales: number;
-  purchases: number;
-  purchaseDetails: string[];
+  cash: number;
+  terminal: number;
+  card: number;
+  playstation: number;
+  debtPayments: number;
   expenses: number;
   expenseDetails: string[];
   moneyLeft: number;
@@ -55,46 +57,42 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
   return query.gte('date', from).lte('date', to);
 }
 
-function buildDailyRows(stockRows: StockRow[], purchaseRows: PurchaseRow[], expenseRows: ExpenseRow[]): DailyRow[] {
+function buildDailyRows(cashRows: CashRow[], debtRows: DebtPaymentRow[], expenseRows: ExpenseRow[]): DailyRow[] {
   const dates = new Set<string>();
-  stockRows.forEach((row) => dates.add(row.date));
-  purchaseRows.forEach((row) => dates.add(row.date));
-  expenseRows.filter((row) => row.payment_source === 'bar').forEach((row) => dates.add(row.date));
+  cashRows.forEach((row) => dates.add(row.date));
+  debtRows.forEach((row) => dates.add(row.date));
+  expenseRows.filter((row) => row.payment_source !== 'bar').forEach((row) => dates.add(row.date));
 
   return Array.from(dates).sort().map((date) => {
-    const sales = stockRows
-      .filter((row) => row.date === date)
-      .reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
-    const dayPurchases = purchaseRows.filter(
-      (row) => row.date === date && date >= STOCK_PURCHASE_DEDUCTION_START_DATE,
-    );
+    const dayCash = cashRows.filter((row) => row.date === date);
+    const dayDebtPayments = debtRows.filter((row) => row.date === date);
     const dayExpenses = expenseRows.filter(
-      (row) => row.date === date && row.payment_source === 'bar',
+      (row) => row.date === date && row.payment_source !== 'bar',
     );
-    const purchases = dayPurchases.reduce(
-      (sum, row) => sum + Number(row.quantity ?? 0) * Number(row.cost_price ?? 0),
-      0,
-    );
+    const cash = dayCash.reduce((sum, row) => sum + Number(row.cash_income ?? 0), 0);
+    const terminal = dayCash.reduce((sum, row) => sum + Number(row.terminal_income ?? 0), 0);
+    const card = dayCash.reduce((sum, row) => sum + Number(row.card_income ?? 0), 0);
+    const playstation = dayCash.reduce((sum, row) => sum + Number(row.playstation_income ?? 0), 0);
+    const debtPayments = dayDebtPayments.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
     const expenses = dayExpenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
 
     return {
       date,
-      sales,
-      purchases,
-      purchaseDetails: dayPurchases.map((row) => {
-        const product = Array.isArray(row.products) ? row.products[0] : row.products;
-        return `${product?.name ?? row.comment ?? '—'} × ${Number(row.quantity ?? 0)}`;
-      }),
+      cash,
+      terminal,
+      card,
+      playstation,
+      debtPayments,
       expenses,
       expenseDetails: dayExpenses.map((row) =>
         row.comment ? `${row.category}: ${row.comment}` : row.category,
       ),
-      moneyLeft: sales - purchases - expenses,
+      moneyLeft: cash + terminal + card + playstation + debtPayments - expenses,
     };
   });
 }
 
-export default function BarMoneyDetailsPage({
+export default function GameClubMoneyDetailsPage({
   requestedFrom,
   requestedTo,
 }: {
@@ -122,23 +120,23 @@ export default function BarMoneyDetailsPage({
     setLoading(true);
     setError('');
     const supabase = createClient();
-    const [stockRes, purchaseRes, expenseRes] = await Promise.all([
-      fetchAllRows<StockRow>(() =>
+    const [cashRes, debtRes, expenseRes] = await Promise.all([
+      fetchAllRows<CashRow>(() =>
         inRangeQuery(
           supabase
-            .from('daily_stock_counts')
-            .select('date,bar_income')
+            .from('daily_cash_entries')
+            .select('date,cash_income,terminal_income,card_income,playstation_income')
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true }),
           from,
           to,
         ),
       ),
-      fetchAllRows<PurchaseRow>(() =>
+      fetchAllRows<DebtPaymentRow>(() =>
         inRangeQuery(
           supabase
-            .from('stock_purchases')
-            .select('date,quantity,cost_price,comment,products(name)')
+            .from('debt_payments')
+            .select('date,amount,payment_method')
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true }),
           from,
@@ -158,12 +156,12 @@ export default function BarMoneyDetailsPage({
       ),
     ]);
 
-    const firstError = [stockRes.error, purchaseRes.error, expenseRes.error].find(Boolean);
+    const firstError = [cashRes.error, debtRes.error, expenseRes.error].find(Boolean);
     if (firstError) {
       setError(firstError.message);
       setRows([]);
     } else {
-      setRows(buildDailyRows(stockRes.data ?? [], purchaseRes.data ?? [], expenseRes.data ?? []));
+      setRows(buildDailyRows(cashRes.data ?? [], debtRes.data ?? [], expenseRes.data ?? []));
     }
     setLoading(false);
   }, [from, selectedClubId, to]);
@@ -177,31 +175,32 @@ export default function BarMoneyDetailsPage({
 
   const totals = rows.reduce(
     (sum, row) => ({
-      sales: sum.sales + row.sales,
-      purchases: sum.purchases + row.purchases,
+      cash: sum.cash + row.cash,
+      terminal: sum.terminal + row.terminal,
+      card: sum.card + row.card,
+      playstation: sum.playstation + row.playstation,
+      debtPayments: sum.debtPayments + row.debtPayments,
       expenses: sum.expenses + row.expenses,
       moneyLeft: sum.moneyLeft + row.moneyLeft,
     }),
-    { sales: 0, purchases: 0, expenses: 0, moneyLeft: 0 },
+    { cash: 0, terminal: 0, card: 0, playstation: 0, debtPayments: 0, expenses: 0, moneyLeft: 0 },
   );
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-950"
-          >
-            <ArrowLeft size={17} />
-            {t('backToDashboard')}
-          </button>
-          <h1 className="text-2xl font-bold text-gray-950 sm:text-3xl">{t('barMoneyCalculation')}</h1>
-          <p className="mt-1 text-sm font-medium text-gray-600">
-            {t('barMoneyCalculationDesc')} · {formatDateShort(from, locale)} – {formatDateShort(to, locale)}
-          </p>
-        </div>
+      <div>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-950"
+        >
+          <ArrowLeft size={17} />
+          {t('backToDashboard')}
+        </button>
+        <h1 className="text-2xl font-bold text-gray-950 sm:text-3xl">{t('gameClubMoneyCalculation')}</h1>
+        <p className="mt-1 text-sm font-medium text-gray-600">
+          {t('gameClubMoneyCalculationDesc')} · {formatDateShort(from, locale)} – {formatDateShort(to, locale)}
+        </p>
       </div>
 
       {error ? (
@@ -214,18 +213,20 @@ export default function BarMoneyDetailsPage({
         {loading ? (
           <div className="p-10 text-center text-sm font-semibold text-gray-500">{t('loading')}</div>
         ) : rows.length === 0 ? (
-          <div className="p-10 text-center text-sm font-semibold text-gray-500">{t('noBarMoneyData')}</div>
+          <div className="p-10 text-center text-sm font-semibold text-gray-500">{t('noGameClubMoneyData')}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1150px] text-sm">
               <thead className="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-3 py-3">{t('date')}</th>
-                  <th className="px-3 py-3 text-right">{t('barSales')}</th>
-                  <th className="px-3 py-3">{t('purchasedProducts')}</th>
-                  <th className="px-3 py-3 text-right">{t('stockPurchases')}</th>
-                  <th className="px-3 py-3">{t('barExpenseDetails')}</th>
-                  <th className="px-3 py-3 text-right">{t('barPaidExpenses')}</th>
+                  <th className="px-3 py-3 text-right">{t('cash')}</th>
+                  <th className="px-3 py-3 text-right">{t('terminal')}</th>
+                  <th className="px-3 py-3 text-right">{t('card')}</th>
+                  <th className="px-3 py-3 text-right">{t('playstation')}</th>
+                  <th className="px-3 py-3 text-right">{t('debtPaymentsCollected')}</th>
+                  <th className="px-3 py-3">{t('expenseDetails')}</th>
+                  <th className="px-3 py-3 text-right">{t('gameClubPaidExpenses')}</th>
                   <th className="px-3 py-3 text-right">{t('moneyLeftForDay')}</th>
                 </tr>
               </thead>
@@ -233,21 +234,25 @@ export default function BarMoneyDetailsPage({
                 {rows.map((row) => (
                   <tr key={row.date} className="align-top">
                     <td className="whitespace-nowrap px-3 py-3 font-semibold text-gray-950">{formatDateShort(row.date, locale)}</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-semibold">{formatNumber(row.sales, locale)}</td>
-                    <td className="max-w-64 px-3 py-3 text-xs leading-5">{row.purchaseDetails.length ? row.purchaseDetails.join(', ') : '—'}</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-red-600">{row.purchases ? `− ${formatNumber(row.purchases, locale)}` : '—'}</td>
-                    <td className="max-w-64 px-3 py-3 text-xs leading-5">{row.expenseDetails.length ? row.expenseDetails.join(', ') : '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">{formatNumber(row.cash, locale)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">{formatNumber(row.terminal, locale)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">{formatNumber(row.card, locale)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">{formatNumber(row.playstation, locale)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">{row.debtPayments ? formatNumber(row.debtPayments, locale) : '—'}</td>
+                    <td className="max-w-72 px-3 py-3 text-xs leading-5">{row.expenseDetails.length ? row.expenseDetails.join(', ') : '—'}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-red-600">{row.expenses ? `− ${formatNumber(row.expenses, locale)}` : '—'}</td>
                     <td className={`whitespace-nowrap px-3 py-3 text-right font-bold ${row.moneyLeft < 0 ? 'text-red-600' : 'text-green-700'}`}>{formatNumber(row.moneyLeft, locale)}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="border-t-2 border-gray-200 bg-green-50 font-bold text-gray-950">
+              <tfoot className="border-t-2 border-gray-200 bg-emerald-50 font-bold text-gray-950">
                 <tr>
                   <td className="px-3 py-3">{t('total')}</td>
-                  <td className="px-3 py-3 text-right">{formatNumber(totals.sales, locale)}</td>
-                  <td />
-                  <td className="px-3 py-3 text-right text-red-600">− {formatNumber(totals.purchases, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatNumber(totals.cash, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatNumber(totals.terminal, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatNumber(totals.card, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatNumber(totals.playstation, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatNumber(totals.debtPayments, locale)}</td>
                   <td />
                   <td className="px-3 py-3 text-right text-red-600">− {formatNumber(totals.expenses, locale)}</td>
                   <td className={`px-3 py-3 text-right ${totals.moneyLeft < 0 ? 'text-red-600' : 'text-green-700'}`}>{formatNumber(totals.moneyLeft, locale)} UZS</td>

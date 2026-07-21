@@ -63,6 +63,7 @@ describe('formatDateOnly', () => {
 
   it('supports Uzbek month names', () => {
     expect(formatDateOnly('2026-06-03', 'uz')).toBe('3 iyun 2026');
+    expect(formatDateOnly('2026-07-01', 'uz')).toBe('1 iyul 2026');
   });
 
   it('returns "-" for null', () => {
@@ -82,6 +83,7 @@ describe('formatDateShort', () => {
   it('formats a localized short date', () => {
     expect(formatDateShort('2026-06-03', 'ru')).toBe('3 июня');
     expect(formatDateShort('2026-06-03', 'uz')).toBe('3 iyun');
+    expect(formatDateShort('2026-07-01', 'uz')).toBe('1 iyul');
   });
 });
 

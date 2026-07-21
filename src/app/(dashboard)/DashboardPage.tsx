@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  ArrowRight,
   Boxes,
   CalendarDays,
   ChartNoAxesCombined,
@@ -141,6 +142,8 @@ interface MetricSectionProps {
   gridClassName: string;
   className: string;
   titleClassName: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 function MetricSection({
@@ -150,12 +153,26 @@ function MetricSection({
   gridClassName,
   className,
   titleClassName,
+  actionLabel,
+  onAction,
 }: MetricSectionProps) {
   return (
     <section className={`space-y-4 rounded-xl p-4 ring-1 sm:p-5 ${className}`}>
-      <div>
-        <h2 className={`text-lg font-bold tracking-normal sm:text-xl ${titleClassName}`}>{title}</h2>
-        <p className="mt-1 max-w-4xl text-sm font-semibold leading-5 text-gray-700">{description}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className={`text-lg font-bold tracking-normal sm:text-xl ${titleClassName}`}>{title}</h2>
+          <p className="mt-1 max-w-4xl text-sm font-semibold leading-5 text-gray-700">{description}</p>
+        </div>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-lg bg-white px-4 py-2.5 text-base font-bold text-gray-900 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:self-center"
+          >
+            {actionLabel}
+            <ArrowRight size={18} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
       <div className={gridClassName}>{children}</div>
     </section>
@@ -569,6 +586,8 @@ export default function DashboardPage() {
         gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
         className="bg-cyan-200 ring-cyan-300"
         titleClassName="text-cyan-950"
+        actionLabel={t('details')}
+        onAction={() => router.push(`/game-club-money-details?from=${range.from}&to=${range.to}`)}
       >
         <MetricCard
           label={t('gameClubIncome')}
@@ -621,6 +640,8 @@ export default function DashboardPage() {
         gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
         className="bg-orange-200 ring-orange-300"
         titleClassName="text-orange-950"
+        actionLabel={t('details')}
+        onAction={() => router.push(`/bar-money-details?from=${range.from}&to=${range.to}`)}
       >
         <MetricCard
           label={t('barMoneyLeft')}
@@ -630,8 +651,6 @@ export default function DashboardPage() {
           iconClassName="text-green-600"
           helper={t('barMoneyLeftDesc')}
           comparison={comparisonFor(totals.barIncome, previousTotals.barIncome)}
-          onClick={() => router.push(`/bar-money-details?from=${range.from}&to=${range.to}`)}
-          actionLabel={t('details')}
         />
         <MetricCard
           label={t('averageDailyIncome')}

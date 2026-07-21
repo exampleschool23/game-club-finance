@@ -19,6 +19,23 @@ const TIME_LOCALES: Record<FormatterLocale, string> = {
   en: 'en-US',
 };
 
+// Some browsers ship incomplete Uzbek ICU data and return placeholders such as
+// "M07" instead of a month name. Keep Uzbek month names deterministic.
+const UZBEK_MONTHS = [
+  'yanvar',
+  'fevral',
+  'mart',
+  'aprel',
+  'may',
+  'iyun',
+  'iyul',
+  'avgust',
+  'sentabr',
+  'oktabr',
+  'noyabr',
+  'dekabr',
+] as const;
+
 let currentFormatterLocale: FormatterLocale = 'en';
 
 function isFormatterLocale(locale: string): locale is FormatterLocale {
@@ -50,6 +67,13 @@ function parseDateValue(value: string | Date | null | undefined): Date | null {
 
 function formatDayMonth(date: Date, includeYear: boolean, locale?: string): string {
   const appLocale = resolveFormatterLocale(locale);
+
+  if (appLocale === 'uz') {
+    const day = date.getDate();
+    const month = UZBEK_MONTHS[date.getMonth()];
+    return includeYear ? `${day} ${month} ${date.getFullYear()}` : `${day} ${month}`;
+  }
+
   const parts = new Intl.DateTimeFormat(DATE_LOCALES[appLocale], {
     day: 'numeric',
     month: 'long',
