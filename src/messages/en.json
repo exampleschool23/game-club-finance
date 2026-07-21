@@ -74,6 +74,8 @@
     "playstationIncome": "PlayStation Income",
     "barMoneyLeft": "Bar Money Left",
     "barMoneyLeftDesc": "Bar sales minus stock purchases and bar-paid expenses",
+    "barNetProfit": "Bar Net Profit",
+    "barNetProfitDesc": "Bar sales minus cost of goods sold and bar-paid expenses; stock purchases are not deducted",
     "barMoneyCalculation": "Bar Money Left calculation",
     "barMoneyCalculationDesc": "Breakdown for the selected period",
     "calculationItem": "Calculation item",

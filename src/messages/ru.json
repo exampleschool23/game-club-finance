@@ -74,6 +74,8 @@
     "playstationIncome": "PlayStation",
     "barMoneyLeft": "Остаток бара",
     "barMoneyLeftDesc": "Продажи минус закупки склада и расходы из денег бара",
+    "barNetProfit": "Чистая прибыль бара",
+    "barNetProfitDesc": "Продажи минус себестоимость проданных товаров и расходы бара; закупки склада не вычитаются",
     "barMoneyCalculation": "Расчёт остатка бара",
     "barMoneyCalculationDesc": "Расшифровка за выбранный период",
     "calculationItem": "Статья расчёта",

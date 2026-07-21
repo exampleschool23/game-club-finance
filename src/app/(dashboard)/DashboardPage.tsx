@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
+  BadgeDollarSign,
   Boxes,
   CalendarDays,
   ChartNoAxesCombined,
@@ -637,7 +638,7 @@ export default function DashboardPage() {
       <MetricSection
         title={t('barStatisticsSection')}
         description={t('barStatisticsSectionDesc')}
-        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
         className="bg-orange-200 ring-orange-300"
         titleClassName="text-orange-950"
         actionLabel={t('details')}
@@ -659,6 +660,15 @@ export default function DashboardPage() {
           iconBgClassName="bg-sky-100"
           iconClassName="text-sky-600"
           helper={t('averageDailyBarIncomeDesc')}
+        />
+        <MetricCard
+          label={t('barNetProfit')}
+          amount={totals.barProfit}
+          icon={BadgeDollarSign}
+          iconBgClassName="bg-emerald-100"
+          iconClassName="text-emerald-600"
+          helper={t('barNetProfitDesc')}
+          comparison={comparisonFor(totals.barProfit, previousTotals.barProfit)}
         />
         <MetricCard
           label={t('inventoryValue')}
