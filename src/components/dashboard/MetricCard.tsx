@@ -1,7 +1,7 @@
 'use client';
 
 import type { ElementType } from 'react';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 
 interface MetricCardProps {
@@ -20,6 +20,8 @@ interface MetricCardProps {
     unavailableLabel?: string;
   };
   helper?: string;
+  onClick?: () => void;
+  actionLabel?: string;
 }
 
 export function MetricCard({
@@ -31,11 +33,22 @@ export function MetricCard({
   comparison,
   subMetric,
   helper,
+  onClick,
+  actionLabel,
 }: MetricCardProps) {
   const isPositive = typeof comparison?.value === 'number' && comparison.value >= 0;
 
+  const Wrapper = onClick ? 'button' : 'div';
+
   return (
-    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+    <Wrapper
+      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      className={`min-w-0 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm sm:p-5 ${
+        onClick
+          ? 'group cursor-pointer transition hover:border-gray-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500'
+          : ''
+      }`}
+    >
       <div className="flex items-start gap-3">
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBgClassName}`}>
           <Icon size={22} className={iconClassName} />
@@ -77,6 +90,12 @@ export function MetricCard({
           </p>
         )
       ) : null}
-    </div>
+      {onClick && actionLabel ? (
+        <span className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-xs font-bold text-green-700 transition group-hover:bg-green-100">
+          {actionLabel}
+          <ArrowRight size={14} aria-hidden="true" />
+        </span>
+      ) : null}
+    </Wrapper>
   );
 }

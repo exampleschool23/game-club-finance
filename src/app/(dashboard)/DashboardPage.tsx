@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -60,7 +61,6 @@ interface StockPurchaseRow {
   cost_price: number;
   comment: string | null;
   created_at: string;
-  products?: { name: string } | { name: string }[] | null;
 }
 
 interface DebtRow {
@@ -163,6 +163,7 @@ function MetricSection({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { selectedDate } = useDashboardDate();
   const { selectedClubId, businessDayStartHour } = useClub();
   const { locale } = useAppLocale();
@@ -629,6 +630,8 @@ export default function DashboardPage() {
           iconClassName="text-green-600"
           helper={t('barMoneyLeftDesc')}
           comparison={comparisonFor(totals.barIncome, previousTotals.barIncome)}
+          onClick={() => router.push(`/bar-money-details?from=${range.from}&to=${range.to}`)}
+          actionLabel={t('details')}
         />
         <MetricCard
           label={t('averageDailyIncome')}
