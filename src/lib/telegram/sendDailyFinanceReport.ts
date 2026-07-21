@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatDateOnly } from '../formatters';
+import { fetchAllRows } from '../supabase/pagination';
 import {
   buildDailyFinanceReportInput,
   formatRussianDailyFinanceReport,
@@ -99,65 +100,105 @@ export async function buildDailyFinanceTelegramReport(
   const monthStart = monthStartIso(businessDate);
   const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes] = await Promise.all([
     getClub(supabase, clubId),
-    supabase
-      .from('daily_cash_entries')
-      .select('date,cash_income,terminal_income,card_income,playstation_income')
-      .eq('club_id', clubId)
-      .eq('date', businessDate),
-    supabase
-      .from('daily_stock_counts')
-      .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
-      .eq('club_id', clubId)
-      .eq('date', businessDate),
-    supabase
-      .from('stock_purchases')
-      .select('date,quantity,cost_price')
-      .eq('club_id', clubId)
-      .eq('date', businessDate),
-    supabase
-      .from('expenses')
-      .select('id,date,amount,category,payment_source,comment,created_at')
-      .eq('club_id', clubId)
-      .eq('date', businessDate),
-    supabase
-      .from('products')
-      .select('current_stock,cost_price')
-      .eq('club_id', clubId)
-      .eq('is_active', true),
-    supabase
-      .from('new_debts')
-      .select('date,amount,remaining_amount,status')
-      .eq('club_id', clubId),
-    supabase
-      .from('debt_payments')
-      .select('date,amount,payment_method')
-      .eq('club_id', clubId)
-      .gte('date', monthStart)
-      .lte('date', businessDate),
-    supabase
-      .from('daily_cash_entries')
-      .select('date,cash_income,terminal_income,card_income,playstation_income')
-      .eq('club_id', clubId)
-      .gte('date', monthStart)
-      .lte('date', businessDate),
-    supabase
-      .from('daily_stock_counts')
-      .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
-      .eq('club_id', clubId)
-      .gte('date', monthStart)
-      .lte('date', businessDate),
-    supabase
-      .from('stock_purchases')
-      .select('date,quantity,cost_price')
-      .eq('club_id', clubId)
-      .gte('date', monthStart)
-      .lte('date', businessDate),
-    supabase
-      .from('expenses')
-      .select('id,date,amount,category,payment_source,comment,created_at')
-      .eq('club_id', clubId)
-      .gte('date', monthStart)
-      .lte('date', businessDate),
+    fetchAllRows<DailyCashRow>(() =>
+      supabase
+        .from('daily_cash_entries')
+        .select('date,cash_income,terminal_income,card_income,playstation_income')
+        .eq('club_id', clubId)
+        .eq('date', businessDate)
+        .order('date', { ascending: true }),
+    ),
+    fetchAllRows<StockCountRow>(() =>
+      supabase
+        .from('daily_stock_counts')
+        .select('product_id,date,bar_income,bar_profit,bar_cost,sold_quantity')
+        .eq('club_id', clubId)
+        .eq('date', businessDate)
+        .order('date', { ascending: true })
+        .order('product_id', { ascending: true }),
+    ),
+    fetchAllRows<StockPurchaseCostRow>(() =>
+      supabase
+        .from('stock_purchases')
+        .select('id,date,quantity,cost_price')
+        .eq('club_id', clubId)
+        .eq('date', businessDate)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<ExpenseRow>(() =>
+      supabase
+        .from('expenses')
+        .select('id,date,amount,category,payment_source,comment,created_at')
+        .eq('club_id', clubId)
+        .eq('date', businessDate)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<ProductValueRow>(() =>
+      supabase
+        .from('products')
+        .select('id,current_stock,cost_price')
+        .eq('club_id', clubId)
+        .eq('is_active', true)
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<DailyFinanceReportDebtRow>(() =>
+      supabase
+        .from('new_debts')
+        .select('id,date,amount,remaining_amount,status')
+        .eq('club_id', clubId)
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<DailyFinanceReportDebtPaymentRow>(() =>
+      supabase
+        .from('debt_payments')
+        .select('id,date,amount,payment_method')
+        .eq('club_id', clubId)
+        .gte('date', monthStart)
+        .lte('date', businessDate)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<DailyCashRow>(() =>
+      supabase
+        .from('daily_cash_entries')
+        .select('date,cash_income,terminal_income,card_income,playstation_income')
+        .eq('club_id', clubId)
+        .gte('date', monthStart)
+        .lte('date', businessDate)
+        .order('date', { ascending: true }),
+    ),
+    fetchAllRows<StockCountRow>(() =>
+      supabase
+        .from('daily_stock_counts')
+        .select('product_id,date,bar_income,bar_profit,bar_cost,sold_quantity')
+        .eq('club_id', clubId)
+        .gte('date', monthStart)
+        .lte('date', businessDate)
+        .order('date', { ascending: true })
+        .order('product_id', { ascending: true }),
+    ),
+    fetchAllRows<StockPurchaseCostRow>(() =>
+      supabase
+        .from('stock_purchases')
+        .select('id,date,quantity,cost_price')
+        .eq('club_id', clubId)
+        .gte('date', monthStart)
+        .lte('date', businessDate)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<ExpenseRow>(() =>
+      supabase
+        .from('expenses')
+        .select('id,date,amount,category,payment_source,comment,created_at')
+        .eq('club_id', clubId)
+        .gte('date', monthStart)
+        .lte('date', businessDate)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
   ]);
 
   const firstError = [

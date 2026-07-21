@@ -30,7 +30,6 @@ export interface DailyFinanceReportInput {
   gameClubMoneyLeft: number;
   averageDailyGameClubIncome: number;
   barMoneyLeft: number;
-  netProfit: number;
   inventoryValue: number;
   activeDebts: number;
 }
@@ -165,7 +164,6 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     gameClubMoneyLeft: monthTotals.gameClubMoneyLeft,
     averageDailyGameClubIncome: calculateAverageDailyIncome(monthTotals.gameClubIncome, averageGameClubDayCount),
     barMoneyLeft: monthTotals.barIncome,
-    netProfit: dailyTotals.netProfit,
     inventoryValue: dailyTotals.inventoryValue,
     activeDebts: dailyTotals.activeDebts,
   };
@@ -194,7 +192,6 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     `💰 Остаток денег клуба за месяц: ${money(input.gameClubMoneyLeft)}`,
     `📈 Средний дневной доход клуба за месяц: ${money(input.averageDailyGameClubIncome)}`,
     `🧾 Остаток денег бара за месяц: ${money(input.barMoneyLeft)}`,
-    `✅ Чистая прибыль сегодня: ${money(input.netProfit)}`,
     '',
     `📦 Стоимость склада: ${money(input.inventoryValue)}`,
     `🤝 Активные долги: ${money(input.activeDebts)}`,

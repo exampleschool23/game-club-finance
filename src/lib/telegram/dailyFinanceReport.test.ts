@@ -25,7 +25,6 @@ describe('formatRussianDailyFinanceReport', () => {
         gameClubMoneyLeft: 3_024_000,
         averageDailyGameClubIncome: 756_000,
         barMoneyLeft: 2_311_000,
-        netProfit: 263_000,
         inventoryValue: 8_473_309,
         activeDebts: 0,
       }),
@@ -48,7 +47,6 @@ Pixel Game Zone
 💰 Остаток денег клуба за месяц: 3 024 000 UZS
 📈 Средний дневной доход клуба за месяц: 756 000 UZS
 🧾 Остаток денег бара за месяц: 2 311 000 UZS
-✅ Чистая прибыль сегодня: 263 000 UZS
 
 📦 Стоимость склада: 8 473 309 UZS
 🤝 Активные долги: 0 UZS`);
@@ -191,7 +189,6 @@ Pixel Game Zone
       gameClubMoneyLeft: 1_750_000,
       averageDailyGameClubIncome: 485_000,
       barMoneyLeft: 560_000,
-      netProfit: 880_000,
       inventoryValue: 50_000,
       activeDebts: 90_000,
     });
@@ -219,7 +216,6 @@ Pixel Game Zone
         gameClubMoneyLeft: 2_941_000,
         averageDailyGameClubIncome: 980_333,
         barMoneyLeft: 1_084_000,
-        netProfit: 1_872_000,
         inventoryValue: 8_473_309,
         activeDebts: 0,
       }),

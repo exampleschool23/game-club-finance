@@ -625,14 +625,13 @@ export default function DashboardPage() {
           helper={t('stockPurchaseMetricDesc')}
         />
         <MetricCard
-          label={t('barMoneyNetProfit')}
-          amount={totals.barProfit}
+          label={t('barMoneyLeft')}
+          amount={totals.barIncome}
           icon={ChartNoAxesCombined}
           iconBgClassName="bg-green-100"
           iconClassName="text-green-600"
-          helper={t('barMoneyNetProfitDesc')}
-          subMetric={{ label: t('barMoneyLeft'), amount: totals.barIncome }}
-          comparison={comparisonFor(totals.barProfit, previousTotals.barProfit)}
+          helper={t('barMoneyLeftDesc')}
+          comparison={comparisonFor(totals.barIncome, previousTotals.barIncome)}
         />
         <MetricCard
           label={t('averageDailyIncome')}
