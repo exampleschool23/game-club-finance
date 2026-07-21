@@ -2,7 +2,7 @@
 
 // Route: /
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Boxes,
   CalendarDays,
@@ -173,6 +173,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestSequence = useRef(0);
   const t = useTranslations('dashboard');
 
   const range = useMemo(
@@ -186,6 +187,8 @@ export default function DashboardPage() {
   }, [businessToday, selectedClubId]);
 
   const fetchDashboard = useCallback(async () => {
+    const requestId = ++requestSequence.current;
+
     if (!selectedClubId) {
       setData(emptyData);
       setLoading(false);
@@ -207,12 +210,6 @@ export default function DashboardPage() {
       debtRes,
       debtPaymentRes,
       purchaseRes,
-      prevCashRes,
-      prevStockRes,
-      prevPurchaseRes,
-      prevExpenseRes,
-      prevDebtPaymentRes,
-      lastMonthInventoryRes,
     ] = await Promise.all([
       fetchAllRows<DailyCashRow>(() =>
         inRangeQuery(
@@ -278,6 +275,89 @@ export default function DashboardPage() {
           range,
         ),
       ),
+    ]);
+
+    if (requestId !== requestSequence.current) return;
+
+    const firstError = [
+      cashRes.error,
+      stockRes.error,
+      expenseRes.error,
+      productRes.error,
+      debtRes.error,
+      debtPaymentRes.error,
+      purchaseRes.error,
+    ].find(Boolean);
+
+    if (firstError) {
+      setError(firstError.message);
+      setLoading(false);
+      return;
+    }
+
+    const cashRows = (cashRes.data ?? []) as DailyCashRow[];
+    const stockRows = (stockRes.data ?? []) as StockCountRow[];
+    const expenseRows = (expenseRes.data ?? []) as ExpenseRow[];
+    const products = (productRes.data ?? []) as Product[];
+    const debts = (debtRes.data ?? []) as DebtRow[];
+    const purchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
+    const activeDebts = debts.filter((debt) => debt.status !== 'paid');
+    const rangeDebts = debts.filter((debt) => debt.date >= range.from && debt.date <= range.to);
+    const debtPayments = (debtPaymentRes.data ?? []) as DebtPaymentValueRow[];
+
+    const totals = calculateDashboardTotals(
+      cashRows,
+      stockRows,
+      purchases,
+      expenseRows,
+      products,
+      rangeDebts,
+      debtPayments,
+      activeDebts,
+    );
+    const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(
+      cashRows,
+      expenseRows,
+      debtPayments,
+    );
+    const latestDailyCashEntryDate = getLatestRowDateInRange([...cashRows, ...rangeDebts], range);
+    const latestBarEntryDate = getLatestRowDateInRange(stockRows, range);
+    const trend = buildPeriodTrend(range, cashRows, stockRows, purchases, expenseRows, rangeDebts);
+    const lowStockCount = products.filter(
+      (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
+    ).length;
+    const expenseCategories = Array.from(
+      expenseRows.reduce((categoryMap, row) => {
+        categoryMap.set(row.category, (categoryMap.get(row.category) ?? 0) + Number(row.amount ?? 0));
+        return categoryMap;
+      }, new Map<string, number>()),
+      ([category, value]) => ({ category, value }),
+    ).sort((a, b) => b.value - a.value);
+
+    // Render the useful dashboard as soon as the selected period is ready.
+    // Historical comparisons are supplementary and can arrive afterward.
+    setData({
+      totals,
+      previousTotals: emptyDashboardTotals,
+      lastMonthInventoryValue: 0,
+      hasLastMonthInventoryData: false,
+      trend,
+      lowStockCount,
+      expenseCategories,
+      moneyLeftByPaymentMethod,
+      latestDailyCashEntryDate,
+      latestBarEntryDate,
+    });
+    setLoading(false);
+
+    const [
+      prevCashRes,
+      prevStockRes,
+      prevPurchaseRes,
+      prevExpenseRes,
+      prevDebtPaymentRes,
+      lastMonthInventoryRes,
+    ] = await Promise.all([
       fetchAllRows<DailyCashRow>(() =>
         inRangeQuery(
           supabase
@@ -344,14 +424,9 @@ export default function DashboardPage() {
       ),
     ]);
 
-    const firstError = [
-      cashRes.error,
-      stockRes.error,
-      expenseRes.error,
-      productRes.error,
-      debtRes.error,
-      debtPaymentRes.error,
-      purchaseRes.error,
+    if (requestId !== requestSequence.current) return;
+
+    const comparisonError = [
       prevCashRes.error,
       prevStockRes.error,
       prevPurchaseRes.error,
@@ -360,46 +435,15 @@ export default function DashboardPage() {
       lastMonthInventoryRes.error,
     ].find(Boolean);
 
-    if (firstError) {
-      setError(firstError.message);
-      setLoading(false);
+    if (comparisonError) {
+      setError(comparisonError.message);
       return;
     }
 
-    const cashRows = (cashRes.data ?? []) as DailyCashRow[];
-    const stockRows = (stockRes.data ?? []) as StockCountRow[];
-    const expenseRows = (expenseRes.data ?? []) as ExpenseRow[];
-    const products = (productRes.data ?? []) as Product[];
-    const debts = (debtRes.data ?? []) as DebtRow[];
-    const purchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
-    const activeDebts = debts.filter((debt) => debt.status !== 'paid');
-    const rangeDebts = debts.filter((debt) => debt.date >= range.from && debt.date <= range.to);
     const previousDebts = debts.filter(
       (debt) => debt.date >= previousRange.from && debt.date <= previousRange.to,
     );
-    const debtPayments = (debtPaymentRes.data ?? []) as DebtPaymentValueRow[];
     const previousDebtPayments = (prevDebtPaymentRes.data ?? []) as DebtPaymentValueRow[];
-
-    const totals = calculateDashboardTotals(
-      cashRows,
-      stockRows,
-      purchases,
-      expenseRows,
-      products,
-      rangeDebts,
-      debtPayments,
-      activeDebts,
-    );
-    const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(
-      cashRows,
-      expenseRows,
-      debtPayments,
-    );
-    const latestDailyCashEntryDate = getLatestRowDateInRange(
-      [...cashRows, ...rangeDebts],
-      range,
-    );
-    const latestBarEntryDate = getLatestRowDateInRange(stockRows, range);
     const lastMonthInventoryValue = calculateInventoryValueFromLatestStockCounts(
       (lastMonthInventoryRes.data ?? []) as InventorySnapshotRow[],
     );
@@ -414,40 +458,12 @@ export default function DashboardPage() {
       activeDebts,
     );
 
-    const trend = buildPeriodTrend(
-      range,
-      cashRows,
-      stockRows,
-      purchases,
-      expenseRows,
-      rangeDebts,
-    );
-
-    const lowStockCount = products.filter(
-      (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
-    ).length;
-
-    const expenseCategories = Array.from(
-      expenseRows.reduce((categoryMap, row) => {
-        categoryMap.set(row.category, (categoryMap.get(row.category) ?? 0) + Number(row.amount ?? 0));
-        return categoryMap;
-      }, new Map<string, number>()),
-      ([category, value]) => ({ category, value }),
-    ).sort((a, b) => b.value - a.value);
-
-    setData({
-      totals,
+    setData((current) => ({
+      ...current,
       previousTotals,
       lastMonthInventoryValue,
       hasLastMonthInventoryData: (lastMonthInventoryRes.data ?? []).length > 0,
-      trend,
-      lowStockCount,
-      expenseCategories,
-      moneyLeftByPaymentMethod,
-      latestDailyCashEntryDate,
-      latestBarEntryDate,
-    });
-    setLoading(false);
+    }));
   }, [businessToday, period, range, selectedClubId, selectedDate]);
 
   useEffect(() => {
