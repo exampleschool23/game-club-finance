@@ -4,13 +4,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  Banknote,
   Boxes,
   CalendarDays,
   ChartNoAxesCombined,
   Gamepad2,
   MonitorSmartphone,
-  ShoppingBag,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -603,27 +601,10 @@ export default function DashboardPage() {
       <MetricSection
         title={t('barStatisticsSection')}
         description={t('barStatisticsSectionDesc')}
-        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5"
+        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
         className="bg-orange-200 ring-orange-300"
         titleClassName="text-orange-950"
       >
-        <MetricCard
-          label={t('totalBarMoney')}
-          amount={totals.barSales}
-          icon={Banknote}
-          iconBgClassName="bg-orange-100"
-          iconClassName="text-orange-600"
-          helper={t('totalBarMoneyDesc')}
-          comparison={comparisonFor(totals.barSales, previousTotals.barSales)}
-        />
-        <MetricCard
-          label={t('stockPurchase')}
-          amount={totals.stockPurchaseCost}
-          icon={ShoppingBag}
-          iconBgClassName="bg-red-100"
-          iconClassName="text-red-500"
-          helper={t('stockPurchaseMetricDesc')}
-        />
         <MetricCard
           label={t('barMoneyLeft')}
           amount={totals.barIncome}
