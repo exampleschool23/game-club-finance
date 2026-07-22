@@ -5,6 +5,7 @@ import {
   calculateAverageDailyIncome,
   calculateDashboardTotals,
   calculateGameClubMoneyLeftByPaymentMethod,
+  calculateInventoryValue,
   calculateInventoryValueFromLatestStockCounts,
   countDashboardRangeDays,
   countDashboardRangeDaysThroughDate,
@@ -195,6 +196,30 @@ describe('dashboard metrics', () => {
         { product_id: 'water', date: '2026-06-12', closing_stock: 12, cost_price: 2_000 },
       ]),
     ).toBe(55_500);
+  });
+
+  it('excludes made-to-order products from current and historical inventory value', () => {
+    expect(calculateInventoryValue([
+      { current_stock: 10, cost_price: 4_000, tracks_inventory: true },
+      { current_stock: 922, cost_price: 11_000, tracks_inventory: false },
+    ])).toBe(40_000);
+
+    expect(calculateInventoryValueFromLatestStockCounts([
+      {
+        product_id: 'hot-dog',
+        date: '2026-07-22',
+        closing_stock: 922,
+        cost_price: 11_000,
+        products: { tracks_inventory: false },
+      },
+      {
+        product_id: 'cola',
+        date: '2026-07-22',
+        closing_stock: 10,
+        cost_price: 4_000,
+        products: { tracks_inventory: true },
+      },
+    ])).toBe(40_000);
   });
 
   it('subtracts expenses from the selected money source only', () => {

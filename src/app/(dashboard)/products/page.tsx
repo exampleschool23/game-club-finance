@@ -26,6 +26,7 @@ interface ProductForm {
   cost_price: string;
   current_stock: string;
   low_stock_threshold: string;
+  tracks_inventory: boolean;
   is_active: boolean;
 }
 
@@ -36,6 +37,7 @@ const emptyForm = (): ProductForm => ({
   cost_price: '',
   current_stock: '',
   low_stock_threshold: '5',
+  tracks_inventory: true,
   is_active: true,
 });
 
@@ -171,7 +173,6 @@ export default function ProductsPage() {
     if (!selectedCategory) return products;
     return products.filter((product) => productCategory(product.category) === selectedCategory);
   }, [products, selectedCategory]);
-
   useEffect(() => {
     if (!selectedCategory) return;
     const categoryExists = products.some((product) => productCategory(product.category) === selectedCategory);
@@ -194,6 +195,7 @@ export default function ProductsPage() {
       cost_price: formatCurrencyInput(p.cost_price),
       current_stock: String(p.current_stock),
       low_stock_threshold: String(p.low_stock_threshold ?? 5),
+      tracks_inventory: p.tracks_inventory !== false,
       is_active: p.is_active,
     });
     setError('');
@@ -225,7 +227,12 @@ export default function ProductsPage() {
       sale_price: parseCurrencyInput(form.sale_price),
       // Only owners can change cost_price and current_stock directly
       ...(isOwner ? { cost_price: parseCurrencyInput(form.cost_price) } : {}),
-      ...(isOwner ? { current_stock: parseFloat(form.current_stock) || 0 } : {}),
+      ...(isOwner ? {
+        tracks_inventory: form.tracks_inventory,
+        current_stock: !form.tracks_inventory
+          ? 0
+          : parseFloat(form.current_stock) || 0,
+      } : {}),
       low_stock_threshold: parseFloat(form.low_stock_threshold) || 5,
       is_active: form.is_active,
       updated_at: new Date().toISOString(),
@@ -449,6 +456,9 @@ export default function ProductsPage() {
                 key: 'current_stock',
                 header: t('currentStock'),
                 render: (r) => {
+                  if (r.tracks_inventory === false) {
+                    return <Badge variant="default">{t('madeToOrder')}</Badge>;
+                  }
                   const low = r.current_stock <= (r.low_stock_threshold ?? 5);
                   return (
                     <span className={low ? 'text-danger-500 font-semibold' : ''}>
@@ -555,10 +565,12 @@ export default function ProductsPage() {
                     step="0.01"
                     className="input-field disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     value={form.current_stock}
-                    disabled={!isOwner}
+                    disabled={!isOwner || !form.tracks_inventory}
                     onChange={(e) => set('current_stock', e.target.value)}
                   />
-                  {!isOwner && (
+                  {!form.tracks_inventory ? (
+                    <p className="mt-1 text-xs text-purple-600">{t('madeToOrderStockHelp')}</p>
+                  ) : !isOwner && (
                     <p className="mt-1 text-xs text-gray-400">Only owners can edit stock count</p>
                   )}
                 </div>
@@ -570,8 +582,28 @@ export default function ProductsPage() {
                     step="1"
                     className="input-field"
                     value={form.low_stock_threshold}
+                    disabled={!form.tracks_inventory}
                     onChange={(e) => set('low_stock_threshold', e.target.value)}
                   />
+                </div>
+              </div>
+              <div className="rounded-lg border border-purple-100 bg-purple-50 p-3">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="made_to_order"
+                    checked={!form.tracks_inventory}
+                    disabled={!isOwner}
+                    onChange={(e) => set('tracks_inventory', !e.target.checked)}
+                    className="mt-0.5 rounded"
+                  />
+                  <div>
+                    <label htmlFor="made_to_order" className="text-sm font-bold text-purple-900">
+                      {t('madeToOrder')}
+                    </label>
+                    <p className="mt-1 text-xs leading-5 text-purple-700">{t('madeToOrderHelp')}</p>
+                    {!isOwner && <p className="mt-1 text-xs text-gray-500">{t('ownerOnlyTrackingMode')}</p>}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">

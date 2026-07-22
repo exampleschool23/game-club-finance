@@ -57,6 +57,7 @@ function product(overrides: Partial<Product>): Product {
     sale_price: overrides.sale_price ?? 15000,
     cost_price: overrides.cost_price ?? 9000,
     current_stock: overrides.current_stock ?? 0,
+    tracks_inventory: overrides.tracks_inventory ?? true,
     low_stock_threshold: overrides.low_stock_threshold ?? null,
     sort_order: overrides.sort_order ?? null,
     is_active: overrides.is_active ?? true,
@@ -108,6 +109,28 @@ function sheetsFromWorkbook(sheets: Array<{ name: string; rows: unknown[][] }>):
 }
 
 describe('closing stock row defaults', () => {
+  it('uses direct sales with no stock balance for made-to-order products', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({
+        id: 'hot-dog',
+        name: 'XOT DOG',
+        current_stock: 922,
+        tracks_inventory: false,
+      })],
+      counts: [{ product_id: 'hot-dog', sold_quantity: 4 }],
+      purchases: [],
+      previousClosings: { 'hot-dog': 922 },
+      isCurrentDate: true,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '0',
+      addedToday: '0',
+      closingStock: '0',
+      soldQuantity: '4',
+    });
+  });
+
   it('does not leak current stock from later purchases into an unsaved historical date', () => {
     const rows = buildEditableClosingStockRows({
       products: [
@@ -515,6 +538,38 @@ describe('closing stock drafts', () => {
 });
 
 describe('closing stock save payloads', () => {
+  it('saves direct made-to-order sales without a finished-goods stock balance', () => {
+    const { upserts, savedClosings } = buildClosingStockUpserts({
+      date: '2026-07-22',
+      createdBy: 'user-1',
+      updatedAt: '2026-07-22T18:00:00.000Z',
+      rows: [row({
+        product: product({
+          id: 'hot-dog',
+          name: 'XOT DOG',
+          tracks_inventory: false,
+          current_stock: 922,
+          sale_price: 25_000,
+          cost_price: 11_000,
+        }),
+        previousStock: '922',
+        closingStock: '918',
+        soldQuantity: '4',
+      })],
+    });
+
+    expect(upserts[0]).toMatchObject({
+      previous_stock: 0,
+      added_today: 0,
+      closing_stock: 0,
+      sold_quantity: 4,
+      bar_income: 100_000,
+      bar_cost: 44_000,
+      bar_profit: 56_000,
+    });
+    expect(savedClosings).toEqual({});
+  });
+
   it('builds Supabase upsert rows with calculated sales, cost and profit', () => {
     const { upserts, savedClosings } = buildClosingStockUpserts({
       date: '2026-06-28',

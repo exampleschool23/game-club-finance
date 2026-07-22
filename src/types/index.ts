@@ -105,6 +105,7 @@ export interface Product {
   sale_price: number;
   cost_price: number;
   current_stock: number;
+  tracks_inventory?: boolean;
   low_stock_threshold: number | null;
   sort_order?: number | null;
   is_active: boolean;

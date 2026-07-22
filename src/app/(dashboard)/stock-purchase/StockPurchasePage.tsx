@@ -91,6 +91,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
     .select('*')
     .eq('club_id', clubId)
     .eq('is_active', true)
+    .eq('tracks_inventory', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
 
@@ -101,6 +102,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
     .select('*')
     .eq('club_id', clubId)
     .eq('is_active', true)
+    .eq('tracks_inventory', true)
     .order('name', { ascending: true });
 }
 

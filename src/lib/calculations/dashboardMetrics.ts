@@ -47,6 +47,7 @@ export interface ExpenseRow {
 export interface ProductValueRow {
   current_stock: number;
   cost_price: number;
+  tracks_inventory?: boolean;
 }
 
 export interface InventorySnapshotRow {
@@ -54,6 +55,7 @@ export interface InventorySnapshotRow {
   date: string;
   closing_stock: number;
   cost_price: number;
+  products?: { tracks_inventory?: boolean } | { tracks_inventory?: boolean }[] | null;
 }
 
 export interface DebtValueRow {
@@ -426,7 +428,9 @@ export function calculateDashboardTotals(
 
 export function calculateInventoryValue(products: ProductValueRow[]): number {
   return products.reduce(
-    (sum, product) => sum + Number(product.current_stock ?? 0) * Number(product.cost_price ?? 0),
+    (sum, product) => product.tracks_inventory === false
+      ? sum
+      : sum + Number(product.current_stock ?? 0) * Number(product.cost_price ?? 0),
     0,
   );
 }
@@ -443,7 +447,12 @@ export function calculateInventoryValueFromLatestStockCounts(rows: InventorySnap
   }, new Map<string, InventorySnapshotRow>());
 
   return Array.from(latestByProduct.values()).reduce(
-    (sum, row) => sum + Number(row.closing_stock ?? 0) * Number(row.cost_price ?? 0),
+    (sum, row) => {
+      const product = Array.isArray(row.products) ? row.products[0] : row.products;
+      return product?.tracks_inventory === false
+        ? sum
+        : sum + Number(row.closing_stock ?? 0) * Number(row.cost_price ?? 0);
+    },
     0,
   );
 }

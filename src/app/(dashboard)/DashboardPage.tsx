@@ -343,7 +343,8 @@ export default function DashboardPage() {
     const latestBarEntryDate = getLatestRowDateInRange(stockRows, range);
     const trend = buildPeriodTrend(range, cashRows, stockRows, purchases, expenseRows, rangeDebts);
     const lowStockCount = products.filter(
-      (product) => product.current_stock <= (product.low_stock_threshold ?? 5),
+      (product) => product.tracks_inventory !== false
+        && product.current_stock <= (product.low_stock_threshold ?? 5),
     ).length;
     const expenseCategories = Array.from(
       expenseRows.reduce((categoryMap, row) => {
@@ -434,7 +435,7 @@ export default function DashboardPage() {
       fetchAllRows<InventorySnapshotRow>(() =>
         supabase
           .from('daily_stock_counts')
-          .select('product_id,date,closing_stock,cost_price')
+          .select('product_id,date,closing_stock,cost_price,products(tracks_inventory)')
           .eq('club_id', selectedClubId)
           .gte('date', lastMonthRange.from)
           .lte('date', lastMonthRange.to)

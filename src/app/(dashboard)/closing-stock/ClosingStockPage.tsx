@@ -2,7 +2,7 @@
 
 // Route: /closing-stock
 
-import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -11,19 +11,18 @@ import { calendarTodayIso, todayIso } from '@/lib/utils';
 import { formatCurrency, formatDatePickerValue } from '@/lib/formatters';
 import {
   calculateClosingStockFromSold,
+  calculateDirectSalesSummary,
   recalculateFutureStockCounts,
   calculateStockCountSummary,
 } from '@/lib/calculations/stock';
 import {
   applyClosingStockDraft,
-  applyClosingStockImport,
   buildEditableClosingStockRows,
   buildClosingStockUpserts,
   clearClosingStockDraft,
   normalizeStockCount,
   readClosingStockDraft,
   saveClosingStockDraft,
-  selectClosingStockImportRows,
   type ClosingStockExistingCount,
   type ClosingStockRowData,
   type StorageLike,
@@ -39,7 +38,6 @@ import {
   Save,
   Search,
   TrendingUp,
-  Upload,
 } from 'lucide-react';
 import type { Product } from '@/types';
 
@@ -72,8 +70,8 @@ interface StockCountRow {
   sale_price: number;
   cost_price: number;
   products?:
-    | Pick<Product, 'id' | 'club_id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>
-    | Pick<Product, 'id' | 'club_id' | 'name' | 'category' | 'current_stock' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>[]
+    | Pick<Product, 'id' | 'club_id' | 'name' | 'category' | 'current_stock' | 'tracks_inventory' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>
+    | Pick<Product, 'id' | 'club_id' | 'name' | 'category' | 'current_stock' | 'tracks_inventory' | 'low_stock_threshold' | 'sort_order' | 'is_active' | 'is_deleted' | 'created_at' | 'updated_at'>[]
     | null;
 }
 
@@ -125,6 +123,10 @@ function initials(name: string) {
 
 function sortRowsByProductOrder(rows: RowData[]): RowData[] {
   return [...rows].sort((a, b) => {
+    const trackingOrderA = a.product.tracks_inventory === false ? 0 : 1;
+    const trackingOrderB = b.product.tracks_inventory === false ? 0 : 1;
+    if (trackingOrderA !== trackingOrderB) return trackingOrderA - trackingOrderB;
+
     const orderA = a.product.sort_order ?? Number.MAX_SAFE_INTEGER;
     const orderB = b.product.sort_order ?? Number.MAX_SAFE_INTEGER;
     if (orderA !== orderB) return orderA - orderB;
@@ -280,7 +282,6 @@ export default function ClosingStockPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  const importInputRef = useRef<HTMLInputElement>(null);
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
   const isAdmin = currentRole === 'admin';
@@ -327,7 +328,7 @@ export default function ClosingStockPage() {
     if (readOnlyDate) {
       const countsWithOrder = await supabase
         .from('daily_stock_counts')
-        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
+        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,tracks_inventory,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
@@ -338,7 +339,7 @@ export default function ClosingStockPage() {
       if (isMissingSortOrder(countsWithOrder.error)) {
         const countsWithoutOrder = await supabase
           .from('daily_stock_counts')
-          .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
+          .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,tracks_inventory,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
           .eq('club_id', selectedClubId)
           .eq('date', selectedDate)
           .order('updated_at', { ascending: false });
@@ -410,6 +411,7 @@ export default function ClosingStockPage() {
             sale_price: Number(count.sale_price ?? 0),
             cost_price: Number(count.cost_price ?? 0),
             current_stock: relation?.current_stock ?? Number(count.closing_stock ?? 0),
+            tracks_inventory: relation?.tracks_inventory ?? true,
             low_stock_threshold: relation?.low_stock_threshold ?? null,
             sort_order: relation?.sort_order ?? null,
             is_active: relation?.is_active ?? false,
@@ -507,6 +509,16 @@ export default function ClosingStockPage() {
 
       const copy = [...prev];
       const current = copy[index];
+      if (current.product.tracks_inventory === false) {
+        copy[index] = {
+          ...current,
+          soldQuantity: value,
+          previousStock: '0',
+          addedToday: '0',
+          closingStock: '0',
+        };
+        return copy;
+      }
       const closingStock = calculateClosingStockFromSold(
         parseNum(current.previousStock),
         parseNum(current.addedToday),
@@ -522,6 +534,14 @@ export default function ClosingStockPage() {
   }
 
   function rowSummary(row: RowData) {
+    if (row.product.tracks_inventory === false) {
+      return calculateDirectSalesSummary(
+        parseNum(row.soldQuantity),
+        row.product.sale_price,
+        row.product.cost_price,
+      );
+    }
+
     return calculateStockCountSummary({
       previousStock: parseNum(row.previousStock),
       addedToday: parseNum(row.addedToday),
@@ -552,9 +572,11 @@ export default function ClosingStockPage() {
         acc.sold += summary.soldQuantity;
         acc.income += summary.barIncome;
         acc.profit += summary.barProfit;
-        acc.stockValue += parseNum(row.closingStock) * row.product.cost_price;
-        acc.previous += parseNum(row.previousStock);
-        acc.added += parseNum(row.addedToday);
+        if (row.product.tracks_inventory !== false) {
+          acc.stockValue += parseNum(row.closingStock) * row.product.cost_price;
+          acc.previous += parseNum(row.previousStock);
+          acc.added += parseNum(row.addedToday);
+        }
         return acc;
       },
       { sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0 },
@@ -581,70 +603,6 @@ export default function ClosingStockPage() {
     }
 
     setSuccess(t('draftSaved'));
-  }
-
-  async function handleImportFromExcel(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-
-    if (!file) return;
-
-    if (isReadOnly) {
-      setError(t('readOnlyBody'));
-      return;
-    }
-
-    if (rows.length === 0) {
-      setError(tc('noData'));
-      return;
-    }
-
-    setError('');
-    setSuccess('');
-
-    try {
-      const XLSX = await import('xlsx');
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-
-      if (workbook.SheetNames.length === 0) {
-        setError(t('importEmpty'));
-        return;
-      }
-
-      const importSelection = selectClosingStockImportRows(
-        workbook.SheetNames.map((sheetName) => ({
-          name: sheetName,
-          rows: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
-            header: 1,
-            defval: '',
-            blankrows: false,
-            raw: false,
-          }),
-        })),
-        date,
-      );
-
-      if (!importSelection) {
-        setError(t('importEmpty'));
-        return;
-      }
-
-      const result = applyClosingStockImport(
-        rows,
-        importSelection.rows,
-        usesSoldEntry ? 'soldQuantity' : 'closingStock',
-      );
-
-      if (result.matchedCount === 0) {
-        setError(t('importNoMatches'));
-        return;
-      }
-
-      setRows(result.rows);
-      setSuccess(t('importSuccess', { count: result.matchedCount, sheet: importSelection.sheetName }));
-    } catch {
-      setError(t('importFailed'));
-    }
   }
 
   async function handleSubmitStockCounts() {
@@ -811,22 +769,6 @@ export default function ClosingStockPage() {
                 />
               </div>
             </div>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleImportFromExcel}
-            />
-            <button
-              type="button"
-              disabled={saving || loading || isReadOnly}
-              onClick={() => importInputRef.current?.click()}
-              className="btn-secondary min-h-10 w-full border border-gray-200 bg-white md:w-auto"
-            >
-              <Upload size={16} />
-              {t('importFromExcel')}
-            </button>
           </div>
 
           {categoryOptions.length > 0 && (
@@ -889,7 +831,7 @@ export default function ClosingStockPage() {
                       {t('soldQty')}
                       <br />
                       <span className="font-normal normal-case">({t('pcs')})</span>
-                      {usesSoldEntry && (
+                      {canSave && (usesSoldEntry || filteredRows.some((row) => row.product.tracks_inventory === false)) && (
                         <>
                           <br />
                           <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
@@ -916,6 +858,11 @@ export default function ClosingStockPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="font-bold text-gray-900">{row.product.name}</p>
+                              {row.product.tracks_inventory === false && (
+                                <span className="mt-1 inline-flex rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-700">
+                                  {t('madeToOrder')}
+                                </span>
+                              )}
                               <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatCurrency(row.product.cost_price)} {tc('currency')}</p>
                             </div>
                           </div>
@@ -924,19 +871,25 @@ export default function ClosingStockPage() {
                         <td className="px-4 py-4 text-right">
                           <p className="font-semibold text-gray-900">{formatCurrency(row.product.cost_price)}</p>
                           <p className="mt-1 text-xs text-gray-500">
-                            {t('valueLabel')} {formatCurrency(parseNum(row.closingStock) * row.product.cost_price)}
+                            {row.product.tracks_inventory === false
+                              ? t('notIncludedInStockValue')
+                              : `${t('valueLabel')} ${formatCurrency(parseNum(row.closingStock) * row.product.cost_price)}`}
                           </p>
                         </td>
-                        <td className="px-4 py-4 text-center font-medium text-gray-900">{parseNum(row.previousStock)}</td>
-                        <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{parseNum(row.addedToday)}</td>
+                        <td className="px-4 py-4 text-center font-medium text-gray-900">
+                          {row.product.tracks_inventory === false ? '—' : parseNum(row.previousStock)}
+                        </td>
+                        <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">
+                          {row.product.tracks_inventory === false ? '—' : parseNum(row.addedToday)}
+                        </td>
                         <td className="px-4 py-4">
-                          {isReadOnly || usesSoldEntry ? (
+                          {row.product.tracks_inventory === false ? (
+                            <p className="text-center font-semibold text-gray-400">—</p>
+                          ) : isReadOnly || usesSoldEntry ? (
                             <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
                           ) : (
                             <input
-                              type="number"
-                              min="0"
-                              step="1"
+                              type="text"
                               inputMode="numeric"
                               pattern="[0-9]*"
                               className="input-field mx-auto h-10 w-32 text-center font-semibold"
@@ -948,11 +901,9 @@ export default function ClosingStockPage() {
                           )}
                         </td>
                         <td className="px-4 py-4">
-                          {usesSoldEntry ? (
+                          {!isReadOnly && (usesSoldEntry || row.product.tracks_inventory === false) ? (
                             <input
-                              type="number"
-                              min="0"
-                              step="1"
+                              type="text"
                               inputMode="numeric"
                               pattern="[0-9]*"
                               className="input-field mx-auto h-10 w-28 text-center font-semibold"

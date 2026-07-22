@@ -2,6 +2,7 @@ import type { Product } from '../types';
 import {
   calculateClosingStockDefaults,
   calculateClosingStockFromSold,
+  calculateDirectSalesSummary,
   calculateStockCountSummary,
 } from './calculations/stock';
 
@@ -452,6 +453,18 @@ function applyImportToRow(
 ): ClosingStockRowData {
   const next = { ...row };
 
+  if (row.product.tracks_inventory === false) {
+    return {
+      ...next,
+      previousStock: '0',
+      addedToday: '0',
+      closingStock: '0',
+      soldQuantity: imported.soldQuantity === undefined
+        ? next.soldQuantity
+        : formatStockValue(normalizeStockCount(imported.soldQuantity)),
+    };
+  }
+
   if (imported.previousStock !== undefined) {
     next.previousStock = formatStockValue(imported.previousStock);
   }
@@ -598,6 +611,17 @@ export function buildEditableClosingStockRows({
 
   return products.map((product) => {
     const existing = counts.find((count) => count.product_id === product.id);
+
+    if (product.tracks_inventory === false) {
+      return {
+        product,
+        previousStock: '0',
+        addedToday: '0',
+        closingStock: '0',
+        soldQuantity: formatStockValue(existing?.sold_quantity ?? 0),
+      };
+    }
+
     const purchasedToday = purchasesByProduct[product.id];
     const addedToday = purchasedToday ?? 0;
     const defaults = calculateClosingStockDefaults({
@@ -642,6 +666,30 @@ export function buildClosingStockUpserts({
   updatedAt?: string;
 }): { upserts: ClosingStockUpsert[]; savedClosings: Record<string, number> } {
   const upserts = rows.map((row) => {
+    if (row.product.tracks_inventory === false) {
+      const summary = calculateDirectSalesSummary(
+        normalizeStockCount(row.soldQuantity),
+        row.product.sale_price,
+        row.product.cost_price,
+      );
+
+      return {
+        date,
+        product_id: row.product.id,
+        previous_stock: 0,
+        added_today: 0,
+        closing_stock: 0,
+        sold_quantity: summary.soldQuantity,
+        sale_price: row.product.sale_price,
+        cost_price: row.product.cost_price,
+        bar_income: summary.barIncome,
+        bar_cost: summary.barCost,
+        bar_profit: summary.barProfit,
+        created_by: createdBy,
+        updated_at: updatedAt,
+      };
+    }
+
     const previousStock = normalizeStockCount(row.previousStock);
     const addedToday = normalizeStockCount(row.addedToday);
     const closingStock = normalizeStockCount(row.closingStock);
@@ -672,8 +720,10 @@ export function buildClosingStockUpserts({
 
   return {
     upserts,
-    savedClosings: upserts.reduce<Record<string, number>>((acc, row) => {
-      acc[row.product_id] = row.closing_stock;
+    savedClosings: rows.reduce<Record<string, number>>((acc, row) => {
+      if (row.product.tracks_inventory !== false) {
+        acc[row.product.id] = normalizeStockCount(row.closingStock);
+      }
       return acc;
     }, {}),
   };

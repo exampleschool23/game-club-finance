@@ -84,20 +84,30 @@ export function calculateBarProfit(barIncome: number, barCost: number): number {
   return barIncome - barCost;
 }
 
+export function calculateDirectSalesSummary(
+  soldQuantity: number,
+  salePrice: number,
+  costPrice: number,
+): StockCountResult {
+  const normalizedSoldQuantity = Math.max(0, soldQuantity);
+  const barIncome = calculateBarIncome(normalizedSoldQuantity, salePrice);
+  const barCost = calculateBarCost(normalizedSoldQuantity, costPrice);
+
+  return {
+    soldQuantity: normalizedSoldQuantity,
+    barIncome,
+    barCost,
+    barProfit: calculateBarProfit(barIncome, barCost),
+  };
+}
+
 export function calculateStockCountSummary(input: StockCountInput): StockCountResult {
   const soldQuantity = calculateSoldQuantity(
     input.previousStock,
     input.addedToday,
     input.closingStock,
   );
-  const barIncome = calculateBarIncome(soldQuantity, input.salePrice);
-  const barCost = calculateBarCost(soldQuantity, input.costPrice);
-  return {
-    soldQuantity,
-    barIncome,
-    barCost,
-    barProfit: calculateBarProfit(barIncome, barCost),
-  };
+  return calculateDirectSalesSummary(soldQuantity, input.salePrice, input.costPrice);
 }
 
 export function applyPurchaseDeltaToStockCount(input: StockCountPurchaseDeltaInput): StockCountPurchaseDeltaResult {

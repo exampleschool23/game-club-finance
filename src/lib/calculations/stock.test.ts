@@ -5,6 +5,7 @@ import {
   calculateBarIncome,
   calculateBarCost,
   calculateBarProfit,
+  calculateDirectSalesSummary,
   calculateStockCountSummary,
   applyPurchaseDeltaToStockCount,
   calculateWeightedAverageCost,
@@ -60,6 +61,17 @@ describe('calculateBarProfit', () => {
 
   it('can return negative profit', () => {
     expect(calculateBarProfit(1000, 2000)).toBe(-1000);
+  });
+});
+
+describe('calculateDirectSalesSummary', () => {
+  it('calculates made-to-order revenue and cost without stock limits', () => {
+    expect(calculateDirectSalesSummary(4, 25_000, 11_000)).toEqual({
+      soldQuantity: 4,
+      barIncome: 100_000,
+      barCost: 44_000,
+      barProfit: 56_000,
+    });
   });
 });
 

@@ -138,7 +138,7 @@ export async function buildDailyFinanceTelegramReport(
     fetchAllRows<ProductValueRow>(() =>
       supabase
         .from('products')
-        .select('id,current_stock,cost_price')
+        .select('id,current_stock,cost_price,tracks_inventory')
         .eq('club_id', clubId)
         .eq('is_active', true)
         .order('id', { ascending: true }),
