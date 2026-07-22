@@ -169,6 +169,7 @@
     "gameClubOnly": "Bu sahifa faqat o'yin klubi daromadi uchun.",
     "barSalesNote": "Bar savdosi Ombor yopilishi orqali hisoblanadi.",
     "entryLocked": "Yozuv bloklangan. Adminlar faqat 15 daqiqa ichida tahrirlashi mumkin.",
+    "futureDateError": "Kunlik kassa yozuvini kelajakdagi ish sanasiga saqlab bo'lmaydi.",
     "incomeByMethod": "To'lov usuli bo'yicha daromad",
     "enterIncome": "O'yin klubidan umumiy daromadni kiriting.",
     "cash": "Naqd pul",

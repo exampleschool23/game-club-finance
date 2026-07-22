@@ -268,6 +268,11 @@ export default function DailyCashPage() {
       return;
     }
 
+    if (form.date > businessToday) {
+      setError(t('futureDateError'));
+      return;
+    }
+
     setSaving(true);
     setError('');
     setMessage('');
@@ -368,6 +373,7 @@ export default function DailyCashPage() {
                 type="date"
                 className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 value={form.date}
+                max={businessToday}
                 onClick={(event) => event.currentTarget.showPicker?.()}
                 onChange={(event) => setField('date', event.target.value)}
               />

@@ -169,6 +169,7 @@
     "gameClubOnly": "This page is only for Game Club income.",
     "barSalesNote": "Bar sales are calculated from Closing Stock.",
     "entryLocked": "This entry is locked. Admins can only edit entries within 15 minutes.",
+    "futureDateError": "Daily cash entries cannot be saved for a future business date.",
     "incomeByMethod": "Income by Payment Method",
     "enterIncome": "Enter total income from game club time and services.",
     "cash": "Cash",
