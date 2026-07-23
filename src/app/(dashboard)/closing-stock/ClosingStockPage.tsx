@@ -34,7 +34,9 @@ import {
   Coins,
   FileBox,
   Info,
+  Minus,
   Package,
+  Plus,
   Save,
   Search,
   TrendingUp,
@@ -503,6 +505,11 @@ export default function ClosingStockPage() {
     });
   }
 
+  function adjustClosingStock(index: number, amount: number) {
+    const currentValue = parseNum(rows[index]?.closingStock ?? '0');
+    updateRow(index, 'closingStock', String(Math.max(0, currentValue + amount)));
+  }
+
   function updateSoldQuantity(index: number, value: string) {
     setRows((prev) => {
       if (!isWholeNumberInput(value)) return prev;
@@ -531,6 +538,11 @@ export default function ClosingStockPage() {
       };
       return copy;
     });
+  }
+
+  function adjustSoldQuantity(index: number, amount: number) {
+    const currentValue = parseNum(rows[index]?.soldQuantity ?? '0');
+    updateSoldQuantity(index, String(Math.max(0, currentValue + amount)));
   }
 
   function rowSummary(row: RowData) {
@@ -888,30 +900,68 @@ export default function ClosingStockPage() {
                           ) : isReadOnly || usesSoldEntry ? (
                             <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
                           ) : (
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              className="input-field mx-auto h-10 w-32 text-center font-semibold"
-                              value={row.closingStock}
-                              onKeyDown={preventNonIntegerNumberInput}
-                              onWheel={(event) => event.currentTarget.blur()}
-                              onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
-                            />
+                            <div className="mx-auto flex w-fit items-center gap-2">
+                              <button
+                                type="button"
+                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label={t('decreaseClosingStock')}
+                                disabled={parseNum(row.closingStock) === 0}
+                                onClick={() => adjustClosingStock(originalIndex, -1)}
+                              >
+                                <Minus size={18} strokeWidth={2.5} />
+                              </button>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className="input-field h-10 w-20 text-center font-semibold"
+                                value={row.closingStock}
+                                onKeyDown={preventNonIntegerNumberInput}
+                                onWheel={(event) => event.currentTarget.blur()}
+                                onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+                                aria-label={t('increaseClosingStock')}
+                                onClick={() => adjustClosingStock(originalIndex, 1)}
+                              >
+                                <Plus size={18} strokeWidth={2.5} />
+                              </button>
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-4">
                           {!isReadOnly && (usesSoldEntry || row.product.tracks_inventory === false) ? (
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              className="input-field mx-auto h-10 w-28 text-center font-semibold"
-                              value={row.soldQuantity}
-                              onKeyDown={preventNonIntegerNumberInput}
-                              onWheel={(event) => event.currentTarget.blur()}
-                              onChange={(event) => updateSoldQuantity(originalIndex, event.target.value)}
-                            />
+                            <div className="mx-auto flex w-fit items-center gap-2">
+                              <button
+                                type="button"
+                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label={t('decreaseSoldQty')}
+                                disabled={parseNum(row.soldQuantity) === 0}
+                                onClick={() => adjustSoldQuantity(originalIndex, -1)}
+                              >
+                                <Minus size={18} strokeWidth={2.5} />
+                              </button>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className="input-field h-10 w-20 text-center font-semibold"
+                                value={row.soldQuantity}
+                                onKeyDown={preventNonIntegerNumberInput}
+                                onWheel={(event) => event.currentTarget.blur()}
+                                onChange={(event) => updateSoldQuantity(originalIndex, event.target.value)}
+                              />
+                              <button
+                                type="button"
+                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+                                aria-label={t('increaseSoldQty')}
+                                onClick={() => adjustSoldQuantity(originalIndex, 1)}
+                              >
+                                <Plus size={18} strokeWidth={2.5} />
+                              </button>
+                            </div>
                           ) : (
                             <p className="text-center font-semibold text-gray-900">{summary.soldQuantity}</p>
                           )}
