@@ -153,6 +153,32 @@ export function formatDatePickerValue(value: string | null | undefined, locale?:
   return formatDateOnly(value, locale);
 }
 
+/**
+ * Format an ISO year-month value.
+ * Output: "June 2026"
+ * Use for: month picker controls and month-based ledger entries.
+ */
+export function formatYearMonth(value: string | null | undefined, locale?: string): string {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) return '-';
+
+  const [year, month] = value.split('-').map(Number);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return '-';
+
+  const appLocale = resolveFormatterLocale(locale);
+  if (appLocale === 'uz') {
+    return `${UZBEK_MONTHS[month - 1]} ${year}`;
+  }
+
+  const parts = new Intl.DateTimeFormat(DATE_LOCALES[appLocale], {
+    month: 'long',
+    year: 'numeric',
+  }).formatToParts(new Date(year, month - 1, 1));
+  const formattedMonth = parts.find((part) => part.type === 'month')?.value;
+  const formattedYear = parts.find((part) => part.type === 'year')?.value;
+
+  return formattedMonth && formattedYear ? `${formattedMonth} ${formattedYear}` : '-';
+}
+
 export function formatDate(value: string | Date | null | undefined, locale?: string): string {
   return formatDateOnly(value, locale);
 }

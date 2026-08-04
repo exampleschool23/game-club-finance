@@ -210,10 +210,10 @@ export interface DebtPayment {
 export interface OwnerWithdrawal {
   id: string;
   club_id: string;
-  date: string;
+  /** First day of the calendar month represented by this withdrawal. */
+  period_month: string;
   source: OwnerWithdrawalSource;
   amount: number;
-  payment_method: EntryPaymentMethod;
   comment: string | null;
   created_by: string;
   created_at: string;

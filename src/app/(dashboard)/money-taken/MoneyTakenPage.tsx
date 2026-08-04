@@ -9,7 +9,6 @@ import {
   Gamepad2,
   GlassWater,
   Trash2,
-  WalletCards,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -19,7 +18,10 @@ import { MetricCard } from '@/components/ui/MetricCard';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
-import { calculateAvailableMoney } from '@/lib/calculations/availableMoney';
+import {
+  calculateAvailableMoney,
+  calculateAvailableMoneyForMonth,
+} from '@/lib/calculations/availableMoney';
 import type { StockPurchaseCostRow } from '@/lib/calculations/barMoney';
 import type {
   DailyCashRow,
@@ -29,19 +31,11 @@ import type {
 } from '@/lib/calculations/dashboardMetrics';
 import {
   formatCurrency,
-  formatCurrencyInput,
-  formatDateOnly,
-  formatDatePickerValue,
-  parseCurrencyInput,
+  formatDateTime,
+  formatYearMonth,
 } from '@/lib/formatters';
-import { todayIso } from '@/lib/utils';
-import {
-  OWNER_WITHDRAWAL_SOURCES,
-  PAYMENT_METHODS,
-  type EntryPaymentMethod,
-  type OwnerWithdrawal,
-  type OwnerWithdrawalSource,
-} from '@/types';
+import { currentYearMonth, todayIso } from '@/lib/utils';
+import { OWNER_WITHDRAWAL_SOURCES, type OwnerWithdrawal, type OwnerWithdrawalSource } from '@/types';
 
 type MoneySource = OwnerWithdrawalSource;
 
@@ -88,6 +82,7 @@ export default function MoneyTakenPage() {
   const { selectedClubId, role, businessDayStartHour } = useClub();
   const { toast, showToast, hideToast } = useToast();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
+  const currentMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [balances, setBalances] = useState<AvailableBalances>(emptyBalances);
   const [ledgerRows, setLedgerRows] = useState<LedgerRows>(emptyLedgerRows);
   const [withdrawals, setWithdrawals] = useState<OwnerWithdrawal[]>([]);
@@ -96,17 +91,15 @@ export default function MoneyTakenPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
-    date: businessToday,
+    month: currentMonth,
     source: 'game_club' as MoneySource,
-    amount: '',
-    payment_method: 'cash' as EntryPaymentMethod,
     comment: '',
   });
   const isOwner = role === 'owner';
 
   useEffect(() => {
-    setForm((current) => ({ ...current, date: businessToday }));
-  }, [businessToday, selectedClubId]);
+    setForm((current) => ({ ...current, month: currentMonth }));
+  }, [currentMonth, selectedClubId]);
 
   const loadData = useCallback(async () => {
     if (!selectedClubId) {
@@ -148,10 +141,10 @@ export default function MoneyTakenPage() {
         .lte('date', businessToday)),
       fetchAllRows<OwnerWithdrawal>(() => supabase
         .from('owner_withdrawals')
-        .select('id,club_id,date,source,amount,payment_method,comment,created_by,created_at,updated_at')
+        .select('id,club_id,period_month,source,amount,comment,created_by,created_at,updated_at')
         .eq('club_id', selectedClubId)
-        .lte('date', businessToday)
-        .order('date', { ascending: false })
+        .lte('period_month', `${currentMonth}-01`)
+        .order('period_month', { ascending: false })
         .order('created_at', { ascending: false })),
     ]);
     const firstError = [
@@ -193,7 +186,7 @@ export default function MoneyTakenPage() {
       barAvailable: availableMoney.bar.available,
     });
     setLoading(false);
-  }, [businessToday, selectedClubId]);
+  }, [businessToday, currentMonth, selectedClubId]);
 
   useEffect(() => {
     loadData().catch((loadError: unknown) => {
@@ -203,21 +196,20 @@ export default function MoneyTakenPage() {
   }, [loadData, tc]);
 
   const sourceAvailable = useMemo(() => {
-    const availableOnDate = calculateAvailableMoney({ ...ledgerRows, throughDate: form.date });
-    return form.source === 'bar' ? availableOnDate.bar.available : availableOnDate.gameClub.available;
-  }, [form.date, form.source, ledgerRows]);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(form.month)) return 0;
+
+    const availableForMonth = calculateAvailableMoneyForMonth({
+      ...ledgerRows,
+      month: form.month,
+    });
+    const sourceBalance = form.source === 'bar'
+      ? availableForMonth.bar.available
+      : availableForMonth.gameClub.available;
+
+    return Math.max(0, sourceBalance);
+  }, [form.month, form.source, ledgerRows]);
   const totalAvailable = balances.gameClubAvailable + balances.barAvailable;
   const totalTaken = balances.gameClubTaken + balances.barTaken;
-
-  useEffect(() => {
-    const maximumAmount = Math.max(0, Math.floor(sourceAvailable));
-    setForm((current) => {
-      const currentAmount = parseCurrencyInput(current.amount);
-      return currentAmount > maximumAmount
-        ? { ...current, amount: formatCurrencyInput(String(maximumAmount)) }
-        : current;
-    });
-  }, [sourceAvailable]);
 
   function setField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -225,30 +217,24 @@ export default function MoneyTakenPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const amount = parseCurrencyInput(form.amount);
+    const amount = sourceAvailable;
 
     if (!selectedClubId || !isOwner) {
       showToast(t('ownerOnly'), 'error');
       return;
     }
-    if (!amount || amount <= 0) {
-      showToast(tc('invalidAmount'), 'error');
-      return;
-    }
-    if (amount > sourceAvailable) {
+    if (amount <= 0) {
       showToast(t('exceedsAvailable'), 'error');
       return;
     }
 
     setSaving(true);
     const supabase = createClient();
-    const { error: insertError } = await supabase.from('owner_withdrawals').insert({
-      club_id: selectedClubId,
-      date: form.date,
-      source: form.source,
-      amount,
-      payment_method: form.payment_method,
-      comment: form.comment.trim() || null,
+    const { error: insertError } = await supabase.rpc('take_all_owner_money_for_month', {
+      p_club_id: selectedClubId,
+      p_period_month: `${form.month}-01`,
+      p_source: form.source,
+      p_comment: form.comment.trim() || null,
     });
     setSaving(false);
 
@@ -257,7 +243,7 @@ export default function MoneyTakenPage() {
       return;
     }
 
-    setForm((current) => ({ ...current, amount: '', comment: '' }));
+    setForm((current) => ({ ...current, comment: '' }));
     showToast(t('saved'), 'success');
     await loadData();
   }
@@ -356,64 +342,26 @@ export default function MoneyTakenPage() {
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="label">{t('date')}</label>
-                  <label className="relative block h-11 cursor-pointer">
-                    <input
-                      type="date"
-                      max={businessToday}
-                      value={form.date}
-                      onClick={(event) => event.currentTarget.showPicker?.()}
-                      onChange={(event) => setField('date', event.target.value)}
-                      className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                      required
-                    />
-                    <span className="pointer-events-none flex h-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                      <Calendar size={16} className="text-gray-500" />
-                      <span className="font-semibold text-gray-950">{formatDatePickerValue(form.date, locale)}</span>
-                      <ChevronDown size={16} className="ml-auto text-gray-400" />
-                    </span>
-                  </label>
-                </div>
-                <div>
-                  <label className="label">{t('amount')}</label>
+              <div>
+                <label className="label">{t('month')}</label>
+                <label className="relative block h-11 cursor-pointer">
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    value={form.amount}
+                    type="month"
+                    max={currentMonth}
+                    value={form.month}
+                    onClick={(event) => event.currentTarget.showPicker?.()}
                     onChange={(event) => {
-                      const formattedAmount = formatCurrencyInput(event.target.value);
-                      const enteredAmount = parseCurrencyInput(formattedAmount);
-                      const maximumAmount = Math.max(0, Math.floor(sourceAvailable));
-                      setField(
-                        'amount',
-                        enteredAmount > maximumAmount
-                          ? formatCurrencyInput(String(maximumAmount))
-                          : formattedAmount,
-                      );
+                      if (event.target.value) setField('month', event.target.value);
                     }}
-                    className="input-field h-11 font-bold"
-                    placeholder="0"
+                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     required
                   />
-                </div>
-              </div>
-
-              <div>
-                <label className="label">{t('paymentMethod')}</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {PAYMENT_METHODS.map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setField('payment_method', method)}
-                      className={`min-h-10 rounded-lg border px-2 text-sm font-bold transition ${form.payment_method === method ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-300'}`}
-                    >
-                      {tc(`paymentMethods.${method}`)}
-                    </button>
-                  ))}
-                </div>
+                  <span className="pointer-events-none flex h-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
+                    <Calendar size={16} className="text-gray-500" />
+                    <span className="font-semibold text-gray-950">{formatYearMonth(form.month, locale)}</span>
+                    <ChevronDown size={16} className="ml-auto text-gray-400" />
+                  </span>
+                </label>
               </div>
 
               <div>
@@ -433,7 +381,7 @@ export default function MoneyTakenPage() {
                 disabled={saving || sourceAvailable <= 0}
                 className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <WalletCards size={18} />
+                <ArrowDownToLine size={18} />
                 {saving ? tc('saving') : t('recordButton')}
               </button>
             </div>
@@ -459,11 +407,13 @@ export default function MoneyTakenPage() {
                           <span className={`rounded-full px-2 py-1 text-xs font-bold ${row.source === 'bar' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
                             {t(`sources.${row.source}`)}
                           </span>
-                          <span className="text-xs font-semibold text-gray-500">{formatDateOnly(row.date, locale)}</span>
-                          <span className="text-xs font-semibold text-gray-500">· {tc(`paymentMethods.${row.payment_method}`)}</span>
+                          <span className="text-xs font-semibold text-gray-500">{formatYearMonth(row.period_month.slice(0, 7), locale)}</span>
                         </div>
                         <p className="mt-2 text-lg font-black text-gray-950">− {formatCurrency(row.amount, locale)} {tc('currency')}</p>
                         {row.comment ? <p className="mt-1 break-words text-sm text-gray-600">{row.comment}</p> : null}
+                        <p className="mt-1 text-xs font-medium text-gray-400">
+                          {t('recordedAt', { date: formatDateTime(row.created_at, locale) })}
+                        </p>
                       </div>
                       {isOwner ? (
                         <button

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { calculateAvailableMoney } from './availableMoney';
+import {
+  calculateAvailableMoney,
+  calculateAvailableMoneyByMonth,
+  calculateAvailableMoneyForMonth,
+} from './availableMoney';
 
 const expense = (
   id: string,
@@ -17,8 +21,8 @@ const expense = (
 });
 
 describe('available owner money', () => {
-  it('carries retained money across months and subtracts withdrawals by source', () => {
-    const result = calculateAvailableMoney({
+  it('keeps retained money available in its original month and sums the month buckets', () => {
+    const input = {
       cashRows: [
         {
           date: '2026-07-31',
@@ -51,31 +55,110 @@ describe('available owner money', () => {
         { date: '2026-08-01', amount: 200_000, payment_method: 'cash' },
       ],
       withdrawalRows: [
-        { id: 'club-take', date: '2026-08-01', source: 'game_club', amount: 1_100_000 },
-        { id: 'bar-take', date: '2026-08-01', source: 'bar', amount: 400_000 },
+        { id: 'club-take', period_month: '2026-08-01', source: 'game_club' as const, amount: 1_000_000 },
+        { id: 'bar-take', period_month: '2026-08-01', source: 'bar' as const, amount: 400_000 },
       ],
-    });
+    };
 
-    expect(result.gameClub).toEqual({
+    const byMonth = calculateAvailableMoneyByMonth(input);
+    const total = calculateAvailableMoney(input);
+
+    expect(byMonth['2026-07'].gameClub.available).toBe(1_500_000);
+    expect(byMonth['2026-07'].bar.available).toBe(800_000);
+    expect(byMonth['2026-08'].gameClub.available).toBe(0);
+    expect(byMonth['2026-08'].bar.available).toBe(0);
+    expect(total.gameClub).toEqual({
       earned: 2_500_000,
-      withdrawn: 1_100_000,
-      available: 1_400_000,
+      withdrawn: 1_000_000,
+      available: 1_500_000,
       overdrawnBy: 0,
     });
-    expect(result.bar).toEqual({
+    expect(total.bar).toEqual({
       earned: 1_200_000,
       withdrawn: 400_000,
       available: 800_000,
       overdrawnBy: 0,
     });
-    expect(result.totalEarned).toBe(3_700_000);
-    expect(result.totalWithdrawn).toBe(1_500_000);
-    expect(result.totalAvailable).toBe(2_200_000);
-    expect(result.hasOverWithdrawal).toBe(false);
+    expect(total.totalEarned).toBe(3_700_000);
+    expect(total.totalWithdrawn).toBe(1_400_000);
+    expect(total.totalAvailable).toBe(2_300_000);
+    expect(total.hasOverWithdrawal).toBe(false);
+  });
+
+  it('returns only the selected calendar month and a full withdrawal leaves zero', () => {
+    const result = calculateAvailableMoneyForMonth({
+      month: '2026-08',
+      cashRows: [
+        { date: '2026-07-31', cash_income: 900, terminal_income: 0, card_income: 0 },
+        { date: '2026-08-01', cash_income: 1_000, terminal_income: 100, card_income: 0 },
+        { date: '2026-09-01', cash_income: 800, terminal_income: 0, card_income: 0 },
+      ],
+      stockRows: [],
+      purchaseRows: [],
+      expenseRows: [expense('august', '2026-08-20', 100, 'game_club')],
+      withdrawalRows: [
+        { period_month: '2026-07-01', source: 'game_club', amount: 900 },
+        { period_month: '2026-08-01', source: 'game_club', amount: 1_000 },
+      ],
+    });
+
+    expect(result.gameClub).toEqual({
+      earned: 1_000,
+      withdrawn: 1_000,
+      available: 0,
+      overdrawnBy: 0,
+    });
+    expect(result.totalAvailable).toBe(0);
+  });
+
+  it('does not let retained money from another month cover a withdrawal', () => {
+    const result = calculateAvailableMoney({
+      cashRows: [
+        { date: '2026-07-01', cash_income: 1_000, terminal_income: 0, card_income: 0 },
+        { date: '2026-08-01', cash_income: 100, terminal_income: 0, card_income: 0 },
+      ],
+      stockRows: [],
+      purchaseRows: [],
+      expenseRows: [],
+      withdrawalRows: [
+        { id: 'august-overdraw', period_month: '2026-08-01', source: 'game_club', amount: 200 },
+      ],
+    });
+
+    expect(result.gameClub.available).toBe(1_000);
+    expect(result.gameClub.overdrawnBy).toBe(100);
+    expect(result.totalAvailable).toBe(1_000);
+    expect(result.invalidWithdrawals).toEqual([
+      {
+        id: 'august-overdraw',
+        period_month: '2026-08-01',
+        source: 'game_club',
+        amount: 200,
+        availableBefore: 100,
+        overdrawnBy: 100,
+      },
+    ]);
+  });
+
+  it('does not let a loss bucket reduce another month/source withdrawable balance', () => {
+    const result = calculateAvailableMoney({
+      cashRows: [
+        { date: '2026-07-01', cash_income: 1_000, terminal_income: 0, card_income: 0 },
+      ],
+      stockRows: [],
+      purchaseRows: [],
+      expenseRows: [expense('august-loss', '2026-08-01', 300, 'game_club')],
+    });
+
+    expect(result.gameClub.earned).toBe(700);
+    expect(result.gameClub.available).toBe(1_000);
+    expect(result.gameClub.overdrawnBy).toBe(300);
+    expect(result.totalAvailable).toBe(1_000);
   });
 
   it('does not allow one source balance to cover a withdrawal from the other', () => {
-    const result = calculateAvailableMoney({
+    const result = calculateAvailableMoneyForMonth({
+      month: '2026-08',
       cashRows: [
         { date: '2026-08-01', cash_income: 1_000, terminal_income: 0, card_income: 0 },
       ],
@@ -83,7 +166,7 @@ describe('available owner money', () => {
       purchaseRows: [],
       expenseRows: [],
       withdrawalRows: [
-        { id: 'bar-overdraw', date: '2026-08-01', source: 'bar', amount: 100 },
+        { id: 'bar-overdraw', period_month: '2026-08-01', source: 'bar', amount: 100 },
       ],
     });
 
@@ -93,7 +176,7 @@ describe('available owner money', () => {
     expect(result.invalidWithdrawals).toEqual([
       {
         id: 'bar-overdraw',
-        date: '2026-08-01',
+        period_month: '2026-08-01',
         source: 'bar',
         amount: 100,
         availableBefore: 0,
@@ -103,7 +186,8 @@ describe('available owner money', () => {
   });
 
   it('deducts bar expenses when there are no stock purchases', () => {
-    const result = calculateAvailableMoney({
+    const result = calculateAvailableMoneyForMonth({
+      month: '2026-08',
       cashRows: [],
       stockRows: [
         { date: '2026-08-01', bar_income: 500, bar_profit: 500, bar_cost: 0, sold_quantity: 1 },
@@ -116,37 +200,7 @@ describe('available owner money', () => {
     expect(result.bar.available).toBe(375);
   });
 
-  it('flags a withdrawal that was invalid on its date even if later earnings recover the balance', () => {
-    const result = calculateAvailableMoney({
-      cashRows: [],
-      stockRows: [
-        { date: '2026-08-01', bar_income: 100, bar_profit: 100, bar_cost: 0, sold_quantity: 1 },
-        { date: '2026-08-03', bar_income: 100, bar_profit: 100, bar_cost: 0, sold_quantity: 1 },
-      ],
-      purchaseRows: [],
-      expenseRows: [],
-      withdrawalRows: [
-        { id: 'first', date: '2026-08-01', source: 'bar', amount: 80, created_at: '2026-08-01T10:00:00Z' },
-        { id: 'second', date: '2026-08-02', source: 'bar', amount: 30, created_at: '2026-08-02T10:00:00Z' },
-      ],
-    });
-
-    expect(result.bar.available).toBe(90);
-    expect(result.bar.overdrawnBy).toBe(0);
-    expect(result.hasOverWithdrawal).toBe(true);
-    expect(result.invalidWithdrawals).toEqual([
-      {
-        id: 'second',
-        date: '2026-08-02',
-        source: 'bar',
-        amount: 30,
-        availableBefore: 20,
-        overdrawnBy: 10,
-      },
-    ]);
-  });
-
-  it('uses rows through the requested date inclusively', () => {
+  it('uses rows through the requested date inclusively in aggregate totals', () => {
     const result = calculateAvailableMoney({
       cashRows: [
         { date: '2026-07-31', cash_income: 300, terminal_income: 0, card_income: 0 },
@@ -156,8 +210,8 @@ describe('available owner money', () => {
       purchaseRows: [],
       expenseRows: [expense('included', '2026-07-31', 50, 'game_club')],
       withdrawalRows: [
-        { date: '2026-07-31', source: 'game_club', amount: 100 },
-        { date: '2026-08-01', source: 'game_club', amount: 200 },
+        { period_month: '2026-07-01', source: 'game_club', amount: 100 },
+        { period_month: '2026-08-01', source: 'game_club', amount: 200 },
       ],
       throughDate: '2026-07-31',
     });
@@ -170,13 +224,23 @@ describe('available owner money', () => {
     });
   });
 
-  it('rejects malformed withdrawal amounts instead of increasing the balance', () => {
-    expect(() => calculateAvailableMoney({
+  it('rejects malformed withdrawal amounts and noncanonical periods', () => {
+    expect(() => calculateAvailableMoneyForMonth({
+      month: '2026-08',
       cashRows: [],
       stockRows: [],
       purchaseRows: [],
       expenseRows: [],
-      withdrawalRows: [{ date: '2026-08-01', source: 'bar', amount: -100 }],
+      withdrawalRows: [{ period_month: '2026-08-01', source: 'bar', amount: -100 }],
     })).toThrow(new RangeError('Withdrawal amount must be a finite number greater than zero'));
+
+    expect(() => calculateAvailableMoneyForMonth({
+      month: '2026-08',
+      cashRows: [],
+      stockRows: [],
+      purchaseRows: [],
+      expenseRows: [],
+      withdrawalRows: [{ period_month: '2026-08-03', source: 'bar', amount: 100 }],
+    })).toThrow(new RangeError('Withdrawal period_month must be the first day of a calendar month'));
   });
 });

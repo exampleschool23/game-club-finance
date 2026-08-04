@@ -9,6 +9,7 @@ import {
   formatDateShort,
   formatDateTime,
   formatNumber,
+  formatYearMonth,
   parseCurrencyInput,
   setFormatterLocale,
 } from './formatters';
@@ -94,6 +95,23 @@ describe('formatDatePickerValue', () => {
 
   it('returns "-" for invalid input', () => {
     expect(formatDatePickerValue('bad')).toBe('-');
+  });
+});
+
+describe('formatYearMonth', () => {
+  it('formats an ISO month in English', () => {
+    expect(formatYearMonth('2026-08')).toBe('August 2026');
+  });
+
+  it('formats localized month names', () => {
+    expect(formatYearMonth('2026-08', 'ru')).toBe('август 2026');
+    expect(formatYearMonth('2026-08', 'uz')).toBe('avgust 2026');
+  });
+
+  it('returns "-" for invalid input', () => {
+    expect(formatYearMonth('2026-13')).toBe('-');
+    expect(formatYearMonth('bad')).toBe('-');
+    expect(formatYearMonth(null)).toBe('-');
   });
 });
 
