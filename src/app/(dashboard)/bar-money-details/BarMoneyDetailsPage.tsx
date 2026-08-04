@@ -113,6 +113,7 @@ export default function BarMoneyDetailsPage({
   const from = validDate(requestedFrom) ? requestedFrom : fallbackDate;
   const to = validDate(requestedTo) ? requestedTo : fallbackDate;
   const [rows, setRows] = useState<DailyRow[]>([]);
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -188,6 +189,20 @@ export default function BarMoneyDetailsPage({
     }),
     { sales: 0, purchases: 0, expenses: 0, moneyLeft: 0 },
   );
+  const allRowsExpanded = rows.length > 0 && rows.every((row) => expandedDates.has(row.date));
+
+  function toggleDate(date: string) {
+    setExpandedDates((current) => {
+      const next = new Set(current);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  }
+
+  function toggleAllDates() {
+    setExpandedDates(allRowsExpanded ? new Set() : new Set(rows.map((row) => row.date)));
+  }
 
   return (
     <div className="space-y-4">
@@ -250,6 +265,19 @@ export default function BarMoneyDetailsPage({
         </section>
       ) : null}
 
+      {!loading && rows.length > 0 ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={toggleAllDates}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-bold text-gray-700 shadow-sm transition hover:border-gray-300 hover:bg-gray-50"
+          >
+            <ChevronDown size={17} className={`transition-transform ${allRowsExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+            {allRowsExpanded ? t('collapseAll') : t('expandAll')}
+          </button>
+        </div>
+      ) : null}
+
       <section className="space-y-3">
         {loading ? (
           <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500 shadow-sm">{t('loading')}</div>
@@ -257,8 +285,8 @@ export default function BarMoneyDetailsPage({
           <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500 shadow-sm">{t('noBarMoneyData')}</div>
         ) : (
           rows.map((row) => (
-            <details key={row.date} className="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <summary className="flex cursor-pointer list-none flex-col gap-3 bg-gray-50 px-4 py-3 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden">
+            <details key={row.date} open={expandedDates.has(row.date)} className="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <summary onClick={(event) => { event.preventDefault(); toggleDate(row.date); }} className="flex cursor-pointer list-none flex-col gap-3 bg-gray-50 px-4 py-3 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden">
                 <div className="flex items-center gap-2">
                   <CalendarDays size={18} className="text-gray-500" />
                   <h2 className="text-base font-black text-gray-950">{formatDateShort(row.date, locale)}</h2>

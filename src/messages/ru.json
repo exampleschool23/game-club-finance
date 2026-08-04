@@ -87,6 +87,8 @@
     "moneyLeftForPeriod": "Остаток за период",
     "totalCollected": "Всего получено",
     "totalDeductions": "Всего вычтено",
+    "expandAll": "Развернуть все",
+    "collapseAll": "Свернуть все",
     "details": "Подробнее",
     "backToDashboard": "Назад на главную",
     "noBarMoneyData": "Нет данных для расчёта бара за этот период",

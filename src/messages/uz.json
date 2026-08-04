@@ -87,6 +87,8 @@
     "moneyLeftForPeriod": "Davr uchun qoldiq",
     "totalCollected": "Jami tushum",
     "totalDeductions": "Jami chegirmalar",
+    "expandAll": "Barchasini ochish",
+    "collapseAll": "Barchasini yopish",
     "details": "Batafsil",
     "backToDashboard": "Bosh sahifaga qaytish",
     "noBarMoneyData": "Bu davr uchun bar hisob-kitob ma'lumotlari yo'q",

@@ -89,6 +89,8 @@
     "moneyLeftForPeriod": "Left for period",
     "totalCollected": "Total collected",
     "totalDeductions": "Total deductions",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
     "details": "View details",
     "backToDashboard": "Back to dashboard",
     "noBarMoneyData": "No bar calculation data for this period",
