@@ -308,8 +308,9 @@ export default function MoneyTakenPage() {
           {tc('loading')}
         </div>
       ) : (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-          <form onSubmit={handleSubmit} className="h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
+          {isOwner ? (
+            <form onSubmit={handleSubmit} className="h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-5 flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
                 <ArrowDownToLine size={21} />
@@ -375,7 +376,8 @@ export default function MoneyTakenPage() {
                 {saving ? tc('saving') : t('recordButton')}
               </button>
             </div>
-          </form>
+            </form>
+          ) : null}
 
           <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-4">

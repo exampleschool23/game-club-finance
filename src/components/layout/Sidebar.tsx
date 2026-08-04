@@ -144,7 +144,7 @@ export function Sidebar({
       href: '/money-taken',
       icon: CircleDollarSign,
       label: t('moneyTaken'),
-      roles: ['owner'],
+      roles: ['owner', 'admin', 'viewer'],
     },
     {
       href: '/debts',
