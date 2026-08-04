@@ -162,7 +162,7 @@ export function Sidebar({
       href: '/products',
       icon: Package,
       label: t('inventory'),
-      roles: ['owner', 'admin'],
+      roles: ['owner', 'admin', 'viewer'],
     },
     {
       href: '/team',

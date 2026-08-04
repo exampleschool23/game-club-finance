@@ -68,6 +68,7 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState('');
 
   const isOwner = currentRole === 'owner';
+  const canManageInventory = currentRole === 'owner' || currentRole === 'admin';
 
   const applyCurrentBusinessStock = useCallback(async (sourceProducts: Product[]): Promise<Product[]> => {
     if (!selectedClubId || sourceProducts.length === 0) return sourceProducts;
@@ -180,6 +181,7 @@ export default function ProductsPage() {
   }, [products, selectedCategory]);
 
   function openAdd() {
+    if (!canManageInventory) return;
     setEditingId(null);
     setForm(emptyForm());
     setError('');
@@ -187,6 +189,7 @@ export default function ProductsPage() {
   }
 
   function openEdit(p: Product) {
+    if (!canManageInventory) return;
     setEditingId(p.id);
     setForm({
       name: p.name,
@@ -207,6 +210,7 @@ export default function ProductsPage() {
   }
 
   async function handleSave() {
+    if (!canManageInventory) return;
     const existingProduct = editingId ? products.find((product) => product.id === editingId) : null;
     if (existingProduct && !existingProduct.is_active) {
       setError(t('inactiveEditBlocked'));
@@ -320,6 +324,7 @@ export default function ProductsPage() {
   }
 
   async function moveProduct(productId: string, direction: -1 | 1) {
+    if (!canManageInventory) return;
     const currentIndex = products.findIndex((product) => product.id === productId);
     const targetIndex = currentIndex + direction;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= products.length) return;
@@ -352,23 +357,23 @@ export default function ProductsPage() {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
+        action={canManageInventory ? (
           <button className="btn-primary flex items-center gap-2" onClick={openAdd}>
             <Plus size={16} />
             {t('addProduct')}
           </button>
-        }
+        ) : undefined}
       />
 
       {products.length === 0 ? (
         <EmptyState
           icon={Package}
           title={tc('noData')}
-          action={
+          action={canManageInventory ? (
             <button className="btn-primary" onClick={openAdd}>
               {t('addProduct')}
             </button>
-          }
+          ) : undefined}
         />
       ) : (
         <div className="space-y-3">
@@ -410,10 +415,10 @@ export default function ProductsPage() {
             stickyHeader
             columns={[
               { key: 'name', header: t('name') },
-              {
+              ...(canManageInventory ? [{
                 key: 'sort_order',
                 header: t('order'),
-                render: (r) => {
+                render: (r: Product) => {
                   const index = products.findIndex((product) => product.id === r.id);
                   return (
                     <div className="flex items-center gap-1">
@@ -440,7 +445,7 @@ export default function ProductsPage() {
                     </div>
                   );
                 },
-              },
+              }] : []),
               { key: 'category', header: t('category'), render: (r) => r.category ?? '-' },
               {
                 key: 'sale_price',
@@ -476,10 +481,10 @@ export default function ProductsPage() {
                   </Badge>
                 ),
               },
-              {
+              ...(canManageInventory ? [{
                 key: 'actions',
                 header: tc('actions'),
-                render: (r) => (
+                render: (r: Product) => (
                   <button
                     className="text-sm text-primary-600 hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
                     disabled={!r.is_active}
@@ -489,7 +494,7 @@ export default function ProductsPage() {
                     {tc('edit')}
                   </button>
                 ),
-              },
+              }] : []),
             ]}
           />
         </div>
