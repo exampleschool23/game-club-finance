@@ -14,7 +14,7 @@ import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, formatTime, parseCurrencyInput } from '@/lib/formatters';
 import { Calendar, ChevronDown, MinusCircle, Trash2 } from 'lucide-react';
-import type { Expense } from '@/types';
+import { PAYMENT_METHODS, type Expense } from '@/types';
 
 const CATEGORIES = [
   'rent', 'salary', 'electricity', 'internet', 'repair',
@@ -171,8 +171,6 @@ export default function ExpensesPage() {
     await loadExpenses();
   }
 
-  const paymentMethods = ['cash', 'terminal', 'qr', 'transfer'];
-
   return (
     <div className="mx-auto w-full max-w-4xl">
       <PageHeader title={t('title')} description={t('description')} />
@@ -246,7 +244,7 @@ export default function ExpensesPage() {
                   value={form.payment_method}
                   onChange={(e) => set('payment_method', e.target.value)}
                 >
-                  {paymentMethods.map((m) => (
+                  {PAYMENT_METHODS.map((m) => (
                     <option key={m} value={m}>
                       {tc(`paymentMethods.${m}`)}
                     </option>

@@ -84,6 +84,9 @@
     "purchasedProducts": "Xarid qilingan mahsulotlar",
     "barExpenseDetails": "Xarajat tafsilotlari",
     "moneyLeftForDay": "Kunlik qoldiq",
+    "moneyLeftForPeriod": "Davr uchun qoldiq",
+    "totalCollected": "Jami tushum",
+    "totalDeductions": "Jami chegirmalar",
     "details": "Batafsil",
     "backToDashboard": "Bosh sahifaga qaytish",
     "noBarMoneyData": "Bu davr uchun bar hisob-kitob ma'lumotlari yo'q",
@@ -545,6 +548,7 @@
     "paymentMethods": {
       "cash": "Naqd pul",
       "terminal": "Terminal",
+      "card": "Karta",
       "qr": "QR-kod",
       "transfer": "O'tkazma",
       "debt": "Qarz"

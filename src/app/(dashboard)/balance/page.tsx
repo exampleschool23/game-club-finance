@@ -171,7 +171,7 @@ export default function BalancePage() {
             >
               <option value="cash">Наличные</option>
               <option value="terminal">Терминал</option>
-              <option value="bank">QR / Банк</option>
+              <option value="bank">Карта</option>
             </select>
           </div>
 

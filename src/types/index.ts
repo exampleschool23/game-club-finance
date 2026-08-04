@@ -1,7 +1,9 @@
 // Shared application data types.
 
 export type UserRole = 'owner' | 'admin' | 'viewer';
-export type PaymentMethod = 'cash' | 'terminal' | 'qr' | 'transfer' | 'debt';
+export const PAYMENT_METHODS = ['terminal', 'cash', 'card'] as const;
+export type EntryPaymentMethod = (typeof PAYMENT_METHODS)[number];
+export type PaymentMethod = EntryPaymentMethod | 'qr' | 'transfer' | 'debt';
 export type PaymentSource = 'cash' | 'terminal' | 'bank';
 export type IncomeCategory = 'game_time' | 'food' | 'drinks' | 'other';
 export type ExpenseCategory =

@@ -9,9 +9,8 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { todayIso } from '@/lib/utils';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
-import type { PaymentMethod, IncomeCategory } from '@/types';
+import { PAYMENT_METHODS, type EntryPaymentMethod, type IncomeCategory } from '@/types';
 
-const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'terminal', 'qr', 'transfer', 'debt'];
 const CATEGORIES: IncomeCategory[] = ['game_time', 'food', 'drinks', 'other'];
 
 export default function IncomePage() {
@@ -23,7 +22,7 @@ export default function IncomePage() {
 
   const [form, setForm] = useState({
     amount: '',
-    payment_method: 'cash' as PaymentMethod,
+    payment_method: 'cash' as EntryPaymentMethod,
     category: 'game_time' as IncomeCategory,
     comment: '',
     transaction_date: businessToday,

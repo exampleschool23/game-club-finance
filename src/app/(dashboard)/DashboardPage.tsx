@@ -15,7 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -100,6 +100,18 @@ const emptyData: DashboardData = {
   latestBarEntryDate: null,
 };
 
+const dashboardFilterPeriods = ['today', 'yesterday', 'month', 'lastMonth', 'custom'] as const;
+
+function dashboardPeriodFromQuery(value: string | null): DashboardPeriod {
+  return dashboardFilterPeriods.includes(value as (typeof dashboardFilterPeriods)[number])
+    ? value as DashboardPeriod
+    : 'month';
+}
+
+function dateFromQuery(value: string | null, fallback: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
+}
+
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
@@ -182,13 +194,15 @@ function MetricSection({
 
 export default function DashboardPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { selectedDate } = useDashboardDate();
   const { selectedClubId, businessDayStartHour } = useClub();
   const { locale } = useAppLocale();
-  const [period, setPeriod] = useState<DashboardPeriod>('month');
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [customFrom, setCustomFrom] = useState(() => businessToday);
-  const [customTo, setCustomTo] = useState(() => businessToday);
+  const [period, setPeriod] = useState<DashboardPeriod>(() => dashboardPeriodFromQuery(searchParams.get('period')));
+  const [customFrom, setCustomFrom] = useState(() => dateFromQuery(searchParams.get('from'), businessToday));
+  const [customTo, setCustomTo] = useState(() => dateFromQuery(searchParams.get('to'), businessToday));
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -201,9 +215,22 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    setCustomFrom(businessToday);
-    setCustomTo(businessToday);
-  }, [businessToday, selectedClubId]);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('period', period);
+
+    if (period === 'custom') {
+      params.set('from', customFrom);
+      params.set('to', customTo);
+    } else {
+      params.delete('from');
+      params.delete('to');
+    }
+
+    const nextQuery = params.toString();
+    if (nextQuery !== searchParams.toString()) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [customFrom, customTo, pathname, period, router, searchParams]);
 
   const fetchDashboard = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -582,6 +609,17 @@ export default function DashboardPage() {
         </div>
       )}
 
+      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <PeriodTabs
+          value={period}
+          onChange={setPeriod}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+        />
+      </section>
+
       <MetricSection
         title={t('gameClubPlaystationSection')}
         description={t('gameClubPlaystationSectionDesc')}
@@ -690,17 +728,6 @@ export default function DashboardPage() {
           }
         />
       </MetricSection>
-
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <PeriodTabs
-          value={period}
-          onChange={setPeriod}
-          customFrom={customFrom}
-          customTo={customTo}
-          onCustomFromChange={setCustomFrom}
-          onCustomToChange={setCustomTo}
-        />
-      </section>
 
       {loading ? (
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">

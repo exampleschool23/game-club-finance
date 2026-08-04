@@ -61,9 +61,6 @@ export function PeriodTabs({
   const tabs = [
     { value: 'today' as const, label: t('today'), icon: CalendarDays },
     { value: 'yesterday' as const, label: t('yesterday'), icon: CalendarDays },
-    { value: 'last7Days' as const, label: t('last7Days'), icon: CalendarRange },
-    { value: 'week' as const, label: t('thisWeek'), icon: CalendarRange },
-    { value: 'lastWeek' as const, label: t('lastWeek'), icon: CalendarRange },
     { value: 'month' as const, label: t('thisMonth'), icon: Calendar },
     { value: 'lastMonth' as const, label: t('lastMonth'), icon: Calendar },
     { value: 'custom' as const, label: t('customRange'), icon: CalendarRange },

@@ -84,6 +84,9 @@
     "purchasedProducts": "Купленные товары",
     "barExpenseDetails": "Детали расходов",
     "moneyLeftForDay": "Остаток за день",
+    "moneyLeftForPeriod": "Остаток за период",
+    "totalCollected": "Всего получено",
+    "totalDeductions": "Всего вычтено",
     "details": "Подробнее",
     "backToDashboard": "Назад на главную",
     "noBarMoneyData": "Нет данных для расчёта бара за этот период",
@@ -545,6 +548,7 @@
     "paymentMethods": {
       "cash": "Наличные",
       "terminal": "Терминал",
+      "card": "Карта",
       "qr": "QR-код",
       "transfer": "Перевод",
       "debt": "Долг"

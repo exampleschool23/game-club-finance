@@ -86,6 +86,9 @@
     "purchasedProducts": "Purchased products",
     "barExpenseDetails": "Expense details",
     "moneyLeftForDay": "Left for day",
+    "moneyLeftForPeriod": "Left for period",
+    "totalCollected": "Total collected",
+    "totalDeductions": "Total deductions",
     "details": "View details",
     "backToDashboard": "Back to dashboard",
     "noBarMoneyData": "No bar calculation data for this period",
@@ -545,6 +548,7 @@
     "paymentMethods": {
       "cash": "Cash",
       "terminal": "Terminal",
+      "card": "Card",
       "qr": "QR Code",
       "transfer": "Transfer",
       "debt": "Debt"

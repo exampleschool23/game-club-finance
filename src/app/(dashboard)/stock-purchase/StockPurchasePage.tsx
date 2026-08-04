@@ -35,7 +35,7 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react';
-import type { Product, StockPurchase } from '@/types';
+import { PAYMENT_METHODS, type Product, type StockPurchase } from '@/types';
 
 const PURCHASES_PAGE_SIZE = 10;
 
@@ -467,8 +467,6 @@ export default function StockPurchasePage() {
     }
   }
 
-  const paymentMethods = ['cash', 'terminal', 'qr', 'transfer'];
-
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -483,7 +481,12 @@ export default function StockPurchasePage() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button className="btn-primary min-h-11 w-full px-5 sm:w-auto">
+          <button
+            type="submit"
+            form="stock-purchase-form"
+            disabled={saving}
+            className="btn-primary min-h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
             <Plus size={18} />
             {t('addNewPurchase')}
           </button>
@@ -491,7 +494,11 @@ export default function StockPurchasePage() {
       </div>
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_520px]">
-        <form onSubmit={handleSubmit} className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+        <form
+          id="stock-purchase-form"
+          onSubmit={handleSubmit}
+          className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5"
+        >
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
               <ShoppingCart size={18} />
@@ -594,7 +601,7 @@ export default function StockPurchasePage() {
                   value={form.payment_method}
                   onChange={(event) => set('payment_method', event.target.value)}
                 >
-                  {paymentMethods.map((method) => (
+                  {PAYMENT_METHODS.map((method) => (
                     <option key={method} value={method}>
                       {tc(`paymentMethods.${method}`)}
                     </option>

@@ -126,7 +126,7 @@ async function seed() {
       quantity: 12,
       cost_price: 10000,
       sale_price: 18000,
-      payment_method: 'transfer',
+      payment_method: 'card',
       comment: '[TEST DATA] Demo purchase',
     },
   ]);
@@ -195,7 +195,7 @@ async function seed() {
   const { error: expensesError } = await supabase.from('expenses').insert([
     { club_id: clubId, date: today, amount: 300000, category: 'salary', payment_method: 'cash', comment: '[TEST DATA] Staff salary' },
     { club_id: clubId, date: today, amount: 120000, category: 'cleaning', payment_method: 'cash', comment: '[TEST DATA] Cleaning service' },
-    { club_id: clubId, date: today, amount: 80000, category: 'electricity', payment_method: 'transfer', comment: '[TEST DATA] Electricity bill' },
+    { club_id: clubId, date: today, amount: 80000, category: 'electricity', payment_method: 'card', comment: '[TEST DATA] Electricity bill' },
   ]);
   if (expensesError) { console.error('❌ Expenses error:', expensesError.message); process.exit(1); }
   console.log('   ✅ 3 expenses inserted (total: 500,000 UZS)');

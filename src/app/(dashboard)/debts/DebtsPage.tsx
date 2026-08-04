@@ -15,9 +15,7 @@ import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue,
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
 import { validateDebtPayment } from '@/lib/validation';
 import { Calendar, ChevronDown, Plus, X, Users } from 'lucide-react';
-import type { NewDebt, DebtPayment } from '@/types';
-
-const PAYMENT_METHODS = ['cash', 'terminal', 'qr', 'transfer'];
+import { PAYMENT_METHODS, type NewDebt, type DebtPayment } from '@/types';
 
 type DebtStatusVariant = 'danger' | 'warning' | 'success';
 
