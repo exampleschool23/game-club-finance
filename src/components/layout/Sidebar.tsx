@@ -22,6 +22,7 @@ import {
   Settings,
   Shield,
   History,
+  CircleDollarSign,
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -138,6 +139,12 @@ export function Sidebar({
       icon: MinusCircle,
       label: t('expenses'),
       roles: ['owner', 'admin'],
+    },
+    {
+      href: '/money-taken',
+      icon: CircleDollarSign,
+      label: t('moneyTaken'),
+      roles: ['owner'],
     },
     {
       href: '/debts',

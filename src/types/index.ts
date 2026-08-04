@@ -10,6 +10,8 @@ export type ExpenseCategory =
   | 'rent' | 'salary' | 'electricity' | 'internet' | 'repair'
   | 'cleaning' | 'food_drinks' | 'marketing' | 'equipment' | 'tax' | 'other';
 export type ExpensePaymentSource = 'game_club' | 'bar';
+export const OWNER_WITHDRAWAL_SOURCES = ['game_club', 'bar'] as const;
+export type OwnerWithdrawalSource = (typeof OWNER_WITHDRAWAL_SOURCES)[number];
 export type MovementType = 'deposit' | 'withdraw' | 'correction';
 export type DebtStatus = 'unpaid' | 'partial' | 'paid';
 
@@ -203,4 +205,17 @@ export interface DebtPayment {
   payment_method: string;
   comment: string | null;
   created_at: string;
+}
+
+export interface OwnerWithdrawal {
+  id: string;
+  club_id: string;
+  date: string;
+  source: OwnerWithdrawalSource;
+  amount: number;
+  payment_method: EntryPaymentMethod;
+  comment: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }

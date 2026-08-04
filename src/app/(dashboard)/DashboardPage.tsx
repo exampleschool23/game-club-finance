@@ -197,7 +197,7 @@ export default function DashboardPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedDate } = useDashboardDate();
-  const { selectedClubId, businessDayStartHour } = useClub();
+  const { selectedClubId, businessDayStartHour, role } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [period, setPeriod] = useState<DashboardPeriod>(() => dashboardPeriodFromQuery(searchParams.get('period')));
@@ -601,6 +601,16 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
           <p className="mt-1 text-base text-gray-600">{t('subtitle')}</p>
         </div>
+        {role === 'owner' ? (
+          <button
+            type="button"
+            onClick={() => router.push('/money-taken')}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-primary-700"
+          >
+            <Wallet size={18} />
+            {t('recordMoneyTaken')}
+          </button>
+        ) : null}
       </div>
 
       {error && (
