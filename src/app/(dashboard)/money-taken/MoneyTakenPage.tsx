@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine,
-  Calendar,
-  ChevronDown,
   CircleDollarSign,
   Gamepad2,
   GlassWater,
@@ -344,24 +342,16 @@ export default function MoneyTakenPage() {
 
               <div>
                 <label className="label">{t('month')}</label>
-                <label className="relative block h-11 cursor-pointer">
-                  <input
-                    type="month"
-                    max={currentMonth}
-                    value={form.month}
-                    onClick={(event) => event.currentTarget.showPicker?.()}
-                    onChange={(event) => {
-                      if (event.target.value) setField('month', event.target.value);
-                    }}
-                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    required
-                  />
-                  <span className="pointer-events-none flex h-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                    <Calendar size={16} className="text-gray-500" />
-                    <span className="font-semibold text-gray-950">{formatYearMonth(form.month, locale)}</span>
-                    <ChevronDown size={16} className="ml-auto text-gray-400" />
-                  </span>
-                </label>
+                <input
+                  type="month"
+                  max={currentMonth}
+                  value={form.month}
+                  onChange={(event) => {
+                    if (event.target.value) setField('month', event.target.value);
+                  }}
+                  className="input-field h-11 w-full cursor-pointer font-semibold text-gray-950"
+                  required
+                />
               </div>
 
               <div>
