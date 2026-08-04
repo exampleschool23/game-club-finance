@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CalendarDays, CircleMinus, CirclePlus, Equal } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ChevronDown, CircleMinus, CirclePlus, Equal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -253,11 +253,12 @@ export default function GameClubMoneyDetailsPage({
           <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500 shadow-sm">{t('noGameClubMoneyData')}</div>
         ) : (
           rows.map((row) => (
-            <article key={row.date} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <header className="flex flex-col gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <details key={row.date} className="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <summary className="flex cursor-pointer list-none flex-col gap-3 bg-gray-50 px-4 py-3 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden">
                 <div className="flex items-center gap-2">
                   <CalendarDays size={18} className="text-gray-500" />
                   <h2 className="text-base font-black text-gray-950">{formatDateShort(row.date, locale)}</h2>
+                  <ChevronDown size={18} className="text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true" />
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:justify-end">
                   <span className="text-xs font-bold text-gray-500">{t('moneyLeftForDay')}</span>
@@ -265,9 +266,9 @@ export default function GameClubMoneyDetailsPage({
                     {formatNumber(row.moneyLeft, locale)} UZS
                   </span>
                 </div>
-              </header>
+              </summary>
 
-              <div className="grid lg:grid-cols-2">
+              <div className="grid border-t border-gray-200 lg:grid-cols-2">
                 <section className="p-4 sm:p-5 lg:border-r lg:border-gray-200">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <h3 className="text-sm font-black text-gray-950">{t('totalCollected')}</h3>
@@ -310,7 +311,7 @@ export default function GameClubMoneyDetailsPage({
                   )}
                 </section>
               </div>
-            </article>
+            </details>
           ))
         )}
       </section>
