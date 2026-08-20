@@ -7,7 +7,7 @@ function hasSupabaseAuthCookie(request: NextRequest) {
     .some(({ name, value }) => name.startsWith('sb-') && name.includes('-auth-token') && Boolean(value));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isProtectedPage = !isAuthPage && !isAuthCallback;

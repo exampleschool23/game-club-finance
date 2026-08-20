@@ -50,4 +50,59 @@ describe('buildDashboardDataFromSnapshot', () => {
     expect(result.inventoryComparisonValue).toBe(30_000);
     expect(result.hasInventoryComparisonData).toBe(true);
   });
+
+  it('uses separate closing snapshots for last month and its comparison month', () => {
+    const payload: DashboardSnapshotPayload = {
+      cashRows: [],
+      stockRows: [],
+      inventoryRows: [
+        { product_id: 'cola', date: '2026-05-31', closing_stock: 12, cost_price: 2_500 },
+        { product_id: 'cola', date: '2026-06-30', closing_stock: 7, cost_price: 3_000 },
+        { product_id: 'cola', date: '2026-07-31', closing_stock: 8, cost_price: 3_000 },
+      ],
+      purchaseRows: [],
+      expenseRows: [],
+      debtRows: [],
+      debtPaymentRows: [],
+      products: [product],
+    };
+
+    const result = buildDashboardDataFromSnapshot({
+      period: 'lastMonth',
+      range: { from: '2026-06-01', to: '2026-06-30' },
+      previousRange: { from: '2026-05-01', to: '2026-05-31' },
+      inventoryComparisonRange: { from: '2026-05-01', to: '2026-05-31' },
+      payload,
+    });
+
+    expect(result.totals.inventoryValue).toBe(21_000);
+    expect(result.inventoryComparisonValue).toBe(30_000);
+    expect(result.hasInventoryComparisonData).toBe(true);
+  });
+
+  it('does not invent comparable inventory data when the prior range has no closing', () => {
+    const payload: DashboardSnapshotPayload = {
+      cashRows: [],
+      stockRows: [],
+      inventoryRows: [
+        { product_id: 'cola', date: '2026-07-31', closing_stock: 8, cost_price: 3_000 },
+      ],
+      purchaseRows: [],
+      expenseRows: [],
+      debtRows: [],
+      debtPaymentRows: [],
+      products: [product],
+    };
+
+    const result = buildDashboardDataFromSnapshot({
+      period: 'month',
+      range: { from: '2026-08-01', to: '2026-08-31' },
+      previousRange: { from: '2026-07-01', to: '2026-07-31' },
+      inventoryComparisonRange: { from: '2026-06-01', to: '2026-06-30' },
+      payload,
+    });
+
+    expect(result.inventoryComparisonValue).toBe(0);
+    expect(result.hasInventoryComparisonData).toBe(false);
+  });
 });

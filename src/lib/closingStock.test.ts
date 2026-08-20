@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import * as XLSX from 'xlsx';
 import type { Product } from '@/types';
 import {
   applyClosingStockDraft,
@@ -78,34 +77,11 @@ function row(overrides: Partial<ClosingStockRowData>): ClosingStockRowData {
 }
 
 function recordsFromWorkbook(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Closing Stock');
-  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
-  const parsedWorkbook = XLSX.read(buffer, { type: 'buffer' });
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(
-    parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]],
-    { defval: '' },
-  );
+  return rows;
 }
 
 function sheetsFromWorkbook(sheets: Array<{ name: string; rows: unknown[][] }>): ClosingStockImportSheet[] {
-  const workbook = XLSX.utils.book_new();
-  sheets.forEach((sheet) => {
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet.rows), sheet.name);
-  });
-  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
-  const parsedWorkbook = XLSX.read(buffer, { type: 'buffer' });
-
-  return parsedWorkbook.SheetNames.map((sheetName) => ({
-    name: sheetName,
-    rows: XLSX.utils.sheet_to_json<unknown[]>(parsedWorkbook.Sheets[sheetName], {
-      header: 1,
-      defval: '',
-      blankrows: false,
-      raw: false,
-    }),
-  }));
+  return sheets;
 }
 
 describe('closing stock row defaults', () => {

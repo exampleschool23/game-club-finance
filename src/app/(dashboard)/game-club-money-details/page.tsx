@@ -1,9 +1,10 @@
 import GameClubMoneyDetailsPage from './GameClubMoneyDetailsPage';
 
-export default function Page({
+export default async function Page({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string };
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  return <GameClubMoneyDetailsPage requestedFrom={searchParams.from} requestedTo={searchParams.to} />;
+  const { from, to } = await searchParams;
+  return <GameClubMoneyDetailsPage requestedFrom={from} requestedTo={to} />;
 }

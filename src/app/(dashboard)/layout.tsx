@@ -16,7 +16,7 @@ export default async function DashboardLayout({
 
   if (!user) redirect('/login');
 
-  let initialEmail = user.email ?? '';
+  const initialEmail = user.email ?? '';
   let initialFullName = '';
   let initialRole: UserRole = 'viewer';
   let initialMemberships: ClubMembership[] = [];

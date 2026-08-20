@@ -1,13 +1,15 @@
 # 🎮 Game Club Finance
 
 Finance & Accounting web app for a game club.  
-**Stack:** Next.js 14 · Supabase · TypeScript · Tailwind CSS · Recharts
+**Stack:** Next.js 16 · Supabase · TypeScript · Tailwind CSS · Recharts
 
 ---
 
 ## Quick Start
 
 ### 1. Clone & install
+
+Node.js 20.9 or newer is required.
 
 ```bash
 git clone <your-repo>
@@ -17,21 +19,33 @@ npm install
 
 ### 2. Set up Supabase
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. Run `supabase/migrations/001_initial_schema.sql` in the **SQL Editor**
-3. Copy your project URL and keys
+1. Create a project at [supabase.com](https://supabase.com).
+2. Install the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+3. Link the repository and apply **all** committed migrations in order:
+
+```bash
+supabase login
+supabase link --project-ref <project-ref>
+supabase db push
+```
+
+Do not run only `001_initial_schema.sql`: later migrations contain required
+multi-club, inventory, authorization, and reporting changes.
 
 ### 3. Configure env
 
 ```bash
 cp .env.example .env.local
-# Fill in NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+# Fill in the required Supabase values. Configure the optional Telegram block
+# only when the scheduled daily report is enabled.
 ```
 
 ### 4. Create the first owner user
 
 In Supabase Dashboard → Authentication → Users → Add User.  
-Then update their profile role:
+Then promote their profile to the global owner role. Sign in as that user and
+create the first club from Settings; the database will create its owner
+membership atomically.
 
 ```sql
 UPDATE profiles SET role = 'owner' WHERE id = '<user-uuid>';
@@ -50,13 +64,14 @@ npm run dev
 
 | Page | Description |
 |---|---|
-| **Dashboard** | Today & month KPIs, all balance accounts |
-| **Add Income** | Cash / Terminal / QR / Transfer / Debt |
+| **Dashboard** | Daily, monthly, and custom-range KPIs |
+| **Add Income** | Cash / terminal / card income |
 | **Add Expense** | 11 categories, 3 payment sources |
 | **Daily Report** | Last 31 days, income by method, expense by category |
-| **Monthly Report** | Charts (bar + pie), Excel/CSV export |
+| **Monthly Report** | Daily income, expense, and profit summary for a selected month |
 | **Balance** | Cash movements (deposit/withdraw/correction) |
 | **Debts** | Customer debts, mark as paid with method selection |
+| **Products & Stock** | Product prices, purchases, daily closings, inventory value, and low-stock alerts |
 
 ## Roles
 
@@ -64,7 +79,22 @@ npm run dev
 |---|---|
 | **owner** | Everything |
 | **admin** | Add income & expense, view all reports, manage balance |
-| **cashier** | Add income, view today's report |
+| **viewer** | Read dashboards, reports, and ledgers without changing financial data |
+
+## Quality checks
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+## Scheduled Telegram report
+
+Vercel calls `/api/cron/daily-finance-report` daily. Configure `CRON_SECRET`,
+`TELEGRAM_BOT_TOKEN`, and at least one complete chat/club target pair from
+`.env.example`. The endpoint rejects requests without the exact bearer secret.
 
 ## Localization
 

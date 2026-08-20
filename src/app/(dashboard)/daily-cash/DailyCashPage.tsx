@@ -216,7 +216,7 @@ export default function DailyCashPage() {
 
       setLoading(false);
     },
-    [selectedClubId],
+    [selectedClubId, tc],
   );
 
   useEffect(() => {

@@ -2,10 +2,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const XLSX = require('xlsx');
+const readXlsxFile = require('read-excel-file/node');
 const { createClient } = require('@supabase/supabase-js');
 
-const DEFAULT_WORKBOOK = '/Users/hoggish/Downloads/Приход_Расход 05.2026.xlsx';
+const DEFAULT_WORKBOOK = '';
 const DEFAULT_SOURCE_SHEET = '31.05.2026';
 const DEFAULT_TARGET_DATE = '2026-06-01';
 
@@ -55,14 +55,8 @@ function asNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function readItems(workbookPath, sourceSheet) {
-  const workbook = XLSX.readFile(workbookPath, { cellFormula: true, cellDates: true });
-  const worksheet = workbook.Sheets[sourceSheet];
-  if (!worksheet) {
-    throw new Error(`Sheet "${sourceSheet}" not found. Available: ${workbook.SheetNames.join(', ')}`);
-  }
-
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+async function readItems(workbookPath, sourceSheet) {
+  const rows = await readXlsxFile(workbookPath, { sheet: sourceSheet });
 
   return rows
     .slice(1)
@@ -136,12 +130,15 @@ async function getTargetClubId(supabase, args) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (!args.workbook) {
+    throw new Error('Pass the workbook path with --workbook=/absolute/path/to/file.xlsx');
+  }
   const env = {
     ...loadEnvFile(path.join(process.cwd(), '.env.local')),
     ...process.env,
   };
 
-  const items = readItems(args.workbook, args.sourceSheet);
+  const items = await readItems(args.workbook, args.sourceSheet);
   const duplicateNames = items
     .map((item) => item.name)
     .filter((name, index, names) => names.indexOf(name) !== index);

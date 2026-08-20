@@ -78,19 +78,28 @@ export default function ExpensesPage() {
     }
 
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error: loadError } = await supabase
       .from('expenses')
       .select('*')
       .eq('club_id', selectedClubId)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(50);
+    if (loadError) {
+      setExpenses([]);
+      setError(loadError.message);
+      return;
+    }
+    setError('');
     setExpenses(data ?? []);
   }, [selectedClubId]);
 
   useEffect(() => {
-    loadExpenses().catch(() => {});
-  }, [loadExpenses]);
+    loadExpenses().catch((loadError) => {
+      setExpenses([]);
+      setError(loadError instanceof Error ? loadError.message : tc('error'));
+    });
+  }, [loadExpenses, tc]);
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));

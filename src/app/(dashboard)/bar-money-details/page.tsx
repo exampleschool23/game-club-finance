@@ -1,9 +1,10 @@
 import BarMoneyDetailsPage from './BarMoneyDetailsPage';
 
-export default function Page({
+export default async function Page({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string };
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  return <BarMoneyDetailsPage requestedFrom={searchParams.from} requestedTo={searchParams.to} />;
+  const { from, to } = await searchParams;
+  return <BarMoneyDetailsPage requestedFrom={from} requestedTo={to} />;
 }

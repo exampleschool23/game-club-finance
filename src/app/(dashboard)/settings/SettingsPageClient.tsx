@@ -45,6 +45,7 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
   const [businessDaySaving, setBusinessDaySaving] = useState(false);
   const [businessDayMessage, setBusinessDayMessage] = useState('');
   const [businessDayError, setBusinessDayError] = useState('');
+  const [accountLoadError, setAccountLoadError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +56,13 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
 
       if (!session?.user) return;
 
-      const { data } = await supabase
+      const { data, error: profileError } = await supabase
         .from('profiles')
         .select('full_name, role')
         .eq('id', session.user.id)
         .maybeSingle();
+
+      if (profileError) throw profileError;
 
       if (!cancelled) {
         setAccount({
@@ -70,7 +73,11 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
       }
     }
 
-    loadAccount().catch(() => {});
+    loadAccount().catch((loadError) => {
+      if (!cancelled) {
+        setAccountLoadError(loadError instanceof Error ? loadError.message : String(loadError));
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -154,6 +161,9 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
       <PageHeader title={t('title')} />
 
       <div className="space-y-4">
+        {accountLoadError && (
+          <p className="rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{accountLoadError}</p>
+        )}
         <div className="card">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
             {t('language')}

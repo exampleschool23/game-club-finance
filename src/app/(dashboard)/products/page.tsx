@@ -114,12 +114,22 @@ export default function ProductsPage() {
       .eq('club_id', selectedClubId)
       .order('name', { ascending: true });
 
+    if (fallback.error) {
+      setProducts([]);
+      setError(fallback.error.message);
+      return;
+    }
+
+    setError('');
     setProducts((fallback.data ?? []) as Product[]);
   }, [selectedClubId]);
 
   useEffect(() => {
-    loadProducts().catch(() => {});
-  }, [loadProducts]);
+    loadProducts().catch((loadError) => {
+      setProducts([]);
+      setError(loadError instanceof Error ? loadError.message : tc('error'));
+    });
+  }, [loadProducts, tc]);
 
   const categoryOptions = useMemo(() => {
     return Array.from(new Set(products.map((product) => productCategory(product.category)).filter(Boolean)))

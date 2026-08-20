@@ -108,7 +108,9 @@ export default function DebtsPage() {
     setPayDebtId(debtId);
     setPayForm({ amount: '', payment_method: 'cash', date: businessToday, comment: '' });
     setError('');
-    loadPayments(debtId).catch(() => {});
+    loadPayments(debtId).catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : tc('error'));
+    });
   }
 
   function openAddDebtModal(personName = '') {

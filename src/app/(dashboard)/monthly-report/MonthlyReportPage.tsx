@@ -29,6 +29,30 @@ interface DayRow {
   profit: number;
 }
 
+interface MonthlyCashRow {
+  date: string;
+  cash_income: number;
+  terminal_income: number;
+  card_income: number;
+  playstation_income: number | null;
+}
+
+interface MonthlyAmountRow {
+  date: string;
+  amount: number;
+}
+
+interface MonthlyStockRow {
+  date: string;
+  bar_income: number;
+}
+
+interface MonthlyPurchaseRow {
+  date: string;
+  quantity: number;
+  cost_price: number;
+}
+
 export default function MonthlyReportPage() {
   const t = useTranslations('monthlyReport');
   const tc = useTranslations('common');
@@ -38,6 +62,7 @@ export default function MonthlyReportPage() {
   const [month, setMonth] = useState(() => businessYearMonth);
   const [rows, setRows] = useState<DayRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const fetchData = useCallback(async (selectedMonth: string) => {
     if (!selectedClubId) {
@@ -83,11 +108,20 @@ export default function MonthlyReportPage() {
         .lte('date', to),
     ]);
 
-    const cashEntries = cashRes.data ?? [];
-    const stockCounts = stockRes.data ?? [];
-    const stockPurchases = purchaseRes.data ?? [];
-    const expenses = expRes.data ?? [];
-    const debts = debtRes.data ?? [];
+    const firstError = [cashRes, stockRes, purchaseRes, expRes, debtRes]
+      .find((result) => result.error)?.error;
+    if (firstError) {
+      setRows([]);
+      setLoadError(firstError.message);
+      setLoading(false);
+      return;
+    }
+
+    const cashEntries = (cashRes.data ?? []) as MonthlyCashRow[];
+    const stockCounts = (stockRes.data ?? []) as MonthlyStockRow[];
+    const stockPurchases = (purchaseRes.data ?? []) as MonthlyPurchaseRow[];
+    const expenses = (expRes.data ?? []) as MonthlyAmountRow[];
+    const debts = (debtRes.data ?? []) as MonthlyAmountRow[];
 
     // Collect all unique dates
     const datesSet = new Set<string>([
@@ -125,12 +159,17 @@ export default function MonthlyReportPage() {
     });
 
     setRows(dayRows);
+    setLoadError('');
     setLoading(false);
   }, [selectedClubId]);
 
   useEffect(() => {
-    fetchData(month).catch(() => {});
-  }, [month, fetchData]);
+    fetchData(month).catch((fetchError) => {
+      setRows([]);
+      setLoadError(fetchError instanceof Error ? fetchError.message : tc('error'));
+      setLoading(false);
+    });
+  }, [month, fetchData, tc]);
 
   useEffect(() => {
     setMonth(businessYearMonth);
@@ -144,6 +183,8 @@ export default function MonthlyReportPage() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader title={t('title')} />
+
+      {loadError && <p className="mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{loadError}</p>}
 
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <label className="label mb-0">{t('selectMonth')}</label>

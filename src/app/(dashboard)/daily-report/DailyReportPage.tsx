@@ -42,6 +42,7 @@ export default function DailyReportPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [debtIncome, setDebtIncome] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const fetchData = useCallback(async (selectedDate: string) => {
     if (!selectedClubId) {
@@ -57,7 +58,7 @@ export default function DailyReportPage() {
     setLoading(true);
     const supabase = createClient();
 
-    let [cashRes, stockRes, purchaseRes, expRes, debtRes] = await Promise.all([
+    const [cashRes, initialStockRes, purchaseRes, expRes, debtRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')
         .select('*')
@@ -87,12 +88,21 @@ export default function DailyReportPage() {
         .eq('date', selectedDate),
     ]);
 
+    let stockRes = initialStockRes;
     if (isMissingSortOrder(stockRes.error)) {
       stockRes = await supabase
         .from('daily_stock_counts')
         .select('*, products(name)')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate);
+    }
+
+    const firstError = [cashRes, stockRes, purchaseRes, expRes, debtRes]
+      .find((result) => result.error)?.error;
+    if (firstError) {
+      setLoadError(firstError.message);
+      setLoading(false);
+      return;
     }
 
     setCashEntry(cashRes.data as DailyCashEntry | null);
@@ -106,13 +116,20 @@ export default function DailyReportPage() {
     );
     setStockPurchases((purchaseRes.data as StockPurchase[]) ?? []);
     setExpenses((expRes.data as Expense[]) ?? []);
-    setDebtIncome((debtRes.data ?? []).reduce((sum, debt) => sum + Number(debt.amount ?? 0), 0));
+    setDebtIncome(((debtRes.data ?? []) as Array<{ amount: number | null }>).reduce(
+      (sum, debt) => sum + Number(debt.amount ?? 0),
+      0,
+    ));
+    setLoadError('');
     setLoading(false);
   }, [selectedClubId]);
 
   useEffect(() => {
-    fetchData(date).catch(() => {});
-  }, [date, fetchData]);
+    fetchData(date).catch((fetchError) => {
+      setLoadError(fetchError instanceof Error ? fetchError.message : tc('error'));
+      setLoading(false);
+    });
+  }, [date, fetchData, tc]);
 
   useEffect(() => {
     setDate(businessToday);
@@ -138,6 +155,8 @@ export default function DailyReportPage() {
   return (
     <div className="mx-auto w-full max-w-4xl">
       <PageHeader title={t('title')} />
+
+      {loadError && <p className="mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{loadError}</p>}
 
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <label className="label mb-0">{t('date')}</label>
