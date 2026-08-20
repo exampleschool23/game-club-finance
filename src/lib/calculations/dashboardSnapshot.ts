@@ -1,0 +1,163 @@
+import type { Product } from '@/types';
+import {
+  buildPeriodTrend,
+  calculateDashboardInventoryValue,
+  calculateDashboardTotals,
+  calculateGameClubMoneyLeftByPaymentMethod,
+  calculateInventoryValueFromLatestStockCounts,
+  emptyDashboardTotals,
+  emptyMoneyLeftByPaymentMethod,
+  getLatestRowDateInRange,
+  type DailyCashRow,
+  type DashboardPeriod,
+  type DashboardTotals,
+  type DebtPaymentValueRow,
+  type ExpenseRow,
+  type InventorySnapshotRow,
+  type MoneyLeftByPaymentMethod,
+  type StockCountRow,
+  type StockPurchaseCostRow,
+  type TrendRow,
+} from './dashboardMetrics';
+
+export interface DashboardDebtRow {
+  id: string;
+  person_name: string;
+  date: string;
+  amount: number;
+  remaining_amount: number;
+  status: string;
+}
+
+export interface DashboardStockPurchaseRow extends StockPurchaseCostRow {
+  id: string;
+  comment?: string | null;
+  created_at?: string;
+}
+
+export interface DashboardSnapshotPayload {
+  cashRows: DailyCashRow[];
+  stockRows: StockCountRow[];
+  inventoryRows: InventorySnapshotRow[];
+  purchaseRows: DashboardStockPurchaseRow[];
+  expenseRows: ExpenseRow[];
+  debtRows: DashboardDebtRow[];
+  debtPaymentRows: DebtPaymentValueRow[];
+  products: Product[];
+}
+
+export interface DashboardData {
+  totals: DashboardTotals;
+  previousTotals: DashboardTotals;
+  inventoryComparisonValue: number;
+  hasInventoryComparisonData: boolean;
+  trend: TrendRow[];
+  lowStockCount: number;
+  expenseCategories: Array<{ category: string; value: number }>;
+  moneyLeftByPaymentMethod: MoneyLeftByPaymentMethod;
+  latestDailyCashEntryDate: string | null;
+  latestBarEntryDate: string | null;
+}
+
+export const emptyDashboardData: DashboardData = {
+  totals: emptyDashboardTotals,
+  previousTotals: emptyDashboardTotals,
+  inventoryComparisonValue: 0,
+  hasInventoryComparisonData: false,
+  trend: [],
+  lowStockCount: 0,
+  expenseCategories: [],
+  moneyLeftByPaymentMethod: emptyMoneyLeftByPaymentMethod,
+  latestDailyCashEntryDate: null,
+  latestBarEntryDate: null,
+};
+
+function rowsInRange<T extends { date: string }>(rows: T[], range: { from: string; to: string }): T[] {
+  return rows.filter((row) => row.date >= range.from && row.date <= range.to);
+}
+
+export function buildDashboardDataFromSnapshot({
+  period,
+  range,
+  previousRange,
+  inventoryComparisonRange,
+  payload,
+}: {
+  period: DashboardPeriod;
+  range: { from: string; to: string };
+  previousRange: { from: string; to: string };
+  inventoryComparisonRange: { from: string; to: string };
+  payload: DashboardSnapshotPayload;
+}): DashboardData {
+  const cashRows = rowsInRange(payload.cashRows, range);
+  const previousCashRows = rowsInRange(payload.cashRows, previousRange);
+  const stockRows = rowsInRange(payload.stockRows, range);
+  const previousStockRows = rowsInRange(payload.stockRows, previousRange);
+  const purchaseRows = rowsInRange(payload.purchaseRows, range);
+  const previousPurchaseRows = rowsInRange(payload.purchaseRows, previousRange);
+  const expenseRows = rowsInRange(payload.expenseRows, range);
+  const previousExpenseRows = rowsInRange(payload.expenseRows, previousRange);
+  const debtPaymentRows = rowsInRange(payload.debtPaymentRows, range);
+  const previousDebtPaymentRows = rowsInRange(payload.debtPaymentRows, previousRange);
+  const rangeDebts = rowsInRange(payload.debtRows, range);
+  const previousDebts = rowsInRange(payload.debtRows, previousRange);
+  const activeDebts = payload.debtRows.filter((debt) => debt.status !== 'paid');
+  const inventoryComparisonRows = rowsInRange(payload.inventoryRows, inventoryComparisonRange);
+
+  const liveTotals = calculateDashboardTotals(
+    cashRows,
+    stockRows,
+    purchaseRows,
+    expenseRows,
+    payload.products,
+    rangeDebts,
+    debtPaymentRows,
+    activeDebts,
+  );
+  const totals = {
+    ...liveTotals,
+    inventoryValue: calculateDashboardInventoryValue(
+      period,
+      liveTotals.inventoryValue,
+      payload.inventoryRows,
+      range,
+    ),
+  };
+  const previousTotals = calculateDashboardTotals(
+    previousCashRows,
+    previousStockRows,
+    previousPurchaseRows,
+    previousExpenseRows,
+    payload.products,
+    previousDebts,
+    previousDebtPaymentRows,
+    activeDebts,
+  );
+  const expenseCategories = Array.from(
+    expenseRows.reduce((categoryMap, row) => {
+      categoryMap.set(row.category, (categoryMap.get(row.category) ?? 0) + Number(row.amount ?? 0));
+      return categoryMap;
+    }, new Map<string, number>()),
+    ([category, value]) => ({ category, value }),
+  ).sort((a, b) => b.value - a.value);
+
+  return {
+    totals,
+    previousTotals,
+    inventoryComparisonValue: calculateInventoryValueFromLatestStockCounts(inventoryComparisonRows),
+    hasInventoryComparisonData: inventoryComparisonRows.length > 0,
+    trend: buildPeriodTrend(range, cashRows, stockRows, purchaseRows, expenseRows, rangeDebts),
+    lowStockCount: payload.products.filter(
+      (product) => product.tracks_inventory !== false
+        && product.current_stock <= (product.low_stock_threshold ?? 5),
+    ).length,
+    expenseCategories,
+    moneyLeftByPaymentMethod: calculateGameClubMoneyLeftByPaymentMethod(
+      cashRows,
+      expenseRows,
+      debtPaymentRows,
+    ),
+    latestDailyCashEntryDate: getLatestRowDateInRange([...cashRows, ...rangeDebts], range),
+    latestBarEntryDate: getLatestRowDateInRange(stockRows, range),
+  };
+}

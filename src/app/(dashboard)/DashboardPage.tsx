@@ -15,6 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { fetchAllRows } from '@/lib/supabase/pagination';
@@ -24,12 +25,6 @@ import { formatDateShort } from '@/lib/formatters';
 import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
-import { DashboardBarChart } from '@/components/dashboard/DashboardBarChart';
-import { PaymentMethodChart } from '@/components/dashboard/PaymentMethodChart';
-import { IncomeTrendChart } from '@/components/dashboard/IncomeTrendChart';
-import { IncomeCategoryChart } from '@/components/dashboard/IncomeCategoryChart';
-import { ExpensesByCategoryChart } from '@/components/dashboard/ExpensesByCategoryChart';
-import { MoneyLeftBreakdownChart } from '@/components/dashboard/MoneyLeftBreakdownChart';
 import {
   buildPeriodTrend,
   calculateAverageDailyIncome,
@@ -38,30 +33,63 @@ import {
   calculateGameClubMoneyLeftByPaymentMethod,
   calculateInventoryValueFromLatestStockCounts,
   countDashboardRangeDaysThroughDate,
-  emptyDashboardTotals,
-  emptyMoneyLeftByPaymentMethod,
   getDashboardComparisonRange,
   getDashboardRange,
   getLatestRowDateInRange,
   percentChange,
   type DailyCashRow,
   type DashboardPeriod,
-  type DashboardTotals,
   type DebtPaymentValueRow,
   type ExpenseRow,
   type InventorySnapshotRow,
-  type MoneyLeftByPaymentMethod,
   type StockCountRow,
   type StockPurchaseCostRow,
-  type TrendRow,
 } from '@/lib/calculations/dashboardMetrics';
+import {
+  buildDashboardDataFromSnapshot,
+  emptyDashboardData,
+  type DashboardData,
+  type DashboardSnapshotPayload,
+} from '@/lib/calculations/dashboardSnapshot';
+import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
+import {
+  markPerformanceRpcAvailable,
+  markPerformanceRpcMissing,
+  shouldTryPerformanceRpc,
+} from '@/lib/supabase/performanceRpc';
 import type { Product } from '@/types';
 
-interface StockPurchaseRow {
+function ChartLoading() {
+  return <div className="h-80 animate-pulse rounded-xl border border-gray-200 bg-gray-100" />;
+}
+
+const DashboardBarChart = dynamic(
+  () => import('@/components/dashboard/DashboardBarChart').then((module) => module.DashboardBarChart),
+  { ssr: false, loading: ChartLoading },
+);
+const PaymentMethodChart = dynamic(
+  () => import('@/components/dashboard/PaymentMethodChart').then((module) => module.PaymentMethodChart),
+  { ssr: false, loading: ChartLoading },
+);
+const IncomeTrendChart = dynamic(
+  () => import('@/components/dashboard/IncomeTrendChart').then((module) => module.IncomeTrendChart),
+  { ssr: false, loading: ChartLoading },
+);
+const IncomeCategoryChart = dynamic(
+  () => import('@/components/dashboard/IncomeCategoryChart').then((module) => module.IncomeCategoryChart),
+  { ssr: false, loading: ChartLoading },
+);
+const ExpensesByCategoryChart = dynamic(
+  () => import('@/components/dashboard/ExpensesByCategoryChart').then((module) => module.ExpensesByCategoryChart),
+  { ssr: false, loading: ChartLoading },
+);
+const MoneyLeftBreakdownChart = dynamic(
+  () => import('@/components/dashboard/MoneyLeftBreakdownChart').then((module) => module.MoneyLeftBreakdownChart),
+  { ssr: false, loading: ChartLoading },
+);
+
+interface StockPurchaseRow extends StockPurchaseCostRow {
   id: string;
-  date: string;
-  quantity: number;
-  cost_price: number;
   comment: string | null;
   created_at: string;
 }
@@ -74,32 +102,6 @@ interface DebtRow {
   remaining_amount: number;
   status: string;
 }
-
-interface DashboardData {
-  totals: DashboardTotals;
-  previousTotals: DashboardTotals;
-  inventoryComparisonValue: number;
-  hasInventoryComparisonData: boolean;
-  trend: TrendRow[];
-  lowStockCount: number;
-  expenseCategories: Array<{ category: string; value: number }>;
-  moneyLeftByPaymentMethod: MoneyLeftByPaymentMethod;
-  latestDailyCashEntryDate: string | null;
-  latestBarEntryDate: string | null;
-}
-
-const emptyData: DashboardData = {
-  totals: emptyDashboardTotals,
-  previousTotals: emptyDashboardTotals,
-  inventoryComparisonValue: 0,
-  hasInventoryComparisonData: false,
-  trend: [],
-  lowStockCount: 0,
-  expenseCategories: [],
-  moneyLeftByPaymentMethod: emptyMoneyLeftByPaymentMethod,
-  latestDailyCashEntryDate: null,
-  latestBarEntryDate: null,
-};
 
 const dashboardFilterPeriods = ['today', 'yesterday', 'month', 'lastMonth', 'custom'] as const;
 
@@ -204,7 +206,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<DashboardPeriod>(() => dashboardPeriodFromQuery(searchParams.get('period')));
   const [customFrom, setCustomFrom] = useState(() => dateFromQuery(searchParams.get('from'), businessToday));
   const [customTo, setCustomTo] = useState(() => dateFromQuery(searchParams.get('to'), businessToday));
-  const [data, setData] = useState<DashboardData>(emptyData);
+  const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const requestSequence = useRef(0);
@@ -237,7 +239,7 @@ export default function DashboardPage() {
     const requestId = ++requestSequence.current;
 
     if (!selectedClubId) {
-      setData(emptyData);
+      setData(emptyDashboardData);
       setLoading(false);
       return;
     }
@@ -252,6 +254,53 @@ export default function DashboardPage() {
     const inventorySnapshotRange = period === 'lastMonth'
       ? { from: previousRange.from, to: range.to }
       : lastMonthRange;
+
+    if (shouldTryPerformanceRpc()) {
+      const snapshotResult = await supabase.rpc('get_dashboard_snapshot', {
+        p_club_id: selectedClubId,
+        p_range_from: range.from,
+        p_range_to: range.to,
+        p_previous_from: previousRange.from,
+        p_previous_to: previousRange.to,
+        p_inventory_from: inventorySnapshotRange.from,
+        p_inventory_to: inventorySnapshotRange.to,
+      });
+
+      if (requestId !== requestSequence.current) return;
+
+      if (!snapshotResult.error) {
+        const snapshot = snapshotResult.data as Omit<DashboardSnapshotPayload, 'inventoryRows'>;
+        setData(buildDashboardDataFromSnapshot({
+          period,
+          range,
+          previousRange,
+          inventoryComparisonRange,
+          payload: {
+            ...snapshot,
+            inventoryRows: snapshot.stockRows as unknown as InventorySnapshotRow[],
+          },
+        }));
+        markPerformanceRpcAvailable();
+        setLoading(false);
+        return;
+      }
+
+      if (!isMissingDatabaseFunction(snapshotResult.error, 'get_dashboard_snapshot')) {
+        setError(snapshotResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      markPerformanceRpcMissing();
+    }
+
+    // Compatibility path for deployments where migration 030 has not reached
+    // the database yet. Each table is read once for the union of the current
+    // and comparison periods, keeping the fallback to one parallel phase.
+    const financeRange = {
+      from: range.from < previousRange.from ? range.from : previousRange.from,
+      to: range.to > previousRange.to ? range.to : previousRange.to,
+    };
 
     const [
       cashRes,
@@ -271,7 +320,7 @@ export default function DashboardPage() {
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true })
             .order('created_at', { ascending: true }),
-          range,
+          financeRange,
         ),
       ),
       fetchAllRows<StockCountRow>(() =>
@@ -282,7 +331,7 @@ export default function DashboardPage() {
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true })
             .order('product_id', { ascending: true }),
-          range,
+          financeRange,
         ),
       ),
       fetchAllRows<ExpenseRow>(() =>
@@ -293,7 +342,7 @@ export default function DashboardPage() {
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true })
             .order('id', { ascending: true }),
-          range,
+          financeRange,
         ),
       ),
       fetchActiveProductsOrdered(supabase, selectedClubId),
@@ -313,7 +362,7 @@ export default function DashboardPage() {
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true })
             .order('id', { ascending: true }),
-          range,
+          financeRange,
         ),
       ),
       fetchAllRows<StockPurchaseRow>(() =>
@@ -324,7 +373,7 @@ export default function DashboardPage() {
             .eq('club_id', selectedClubId)
             .order('date', { ascending: true })
             .order('id', { ascending: true }),
-          range,
+          financeRange,
         ),
       ),
       fetchAllRows<InventorySnapshotRow>(() =>
@@ -358,15 +407,20 @@ export default function DashboardPage() {
       return;
     }
 
-    const cashRows = (cashRes.data ?? []) as DailyCashRow[];
-    const stockRows = (stockRes.data ?? []) as StockCountRow[];
-    const expenseRows = (expenseRes.data ?? []) as ExpenseRow[];
+    const allCashRows = (cashRes.data ?? []) as DailyCashRow[];
+    const allStockRows = (stockRes.data ?? []) as StockCountRow[];
+    const allExpenseRows = (expenseRes.data ?? []) as ExpenseRow[];
     const products = (productRes.data ?? []) as Product[];
     const debts = (debtRes.data ?? []) as DebtRow[];
-    const purchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
+    const allPurchases = (purchaseRes.data ?? []) as unknown as StockPurchaseRow[];
+    const allDebtPayments = (debtPaymentRes.data ?? []) as DebtPaymentValueRow[];
+    const cashRows = allCashRows.filter((row) => row.date >= range.from && row.date <= range.to);
+    const stockRows = allStockRows.filter((row) => row.date >= range.from && row.date <= range.to);
+    const expenseRows = allExpenseRows.filter((row) => row.date >= range.from && row.date <= range.to);
+    const purchases = allPurchases.filter((row) => row.date >= range.from && row.date <= range.to);
+    const debtPayments = allDebtPayments.filter((row) => row.date >= range.from && row.date <= range.to);
     const activeDebts = debts.filter((debt) => debt.status !== 'paid');
     const rangeDebts = debts.filter((debt) => debt.date >= range.from && debt.date <= range.to);
-    const debtPayments = (debtPaymentRes.data ?? []) as DebtPaymentValueRow[];
     const inventorySnapshotRows = (inventorySnapshotRes.data ?? []) as InventorySnapshotRow[];
     const inventoryComparisonRows = inventorySnapshotRows.filter(
       (row) => row.date >= inventoryComparisonRange.from && row.date <= inventoryComparisonRange.to,
@@ -413,12 +467,23 @@ export default function DashboardPage() {
       }, new Map<string, number>()),
       ([category, value]) => ({ category, value }),
     ).sort((a, b) => b.value - a.value);
+    const previousDebts = debts.filter(
+      (debt) => debt.date >= previousRange.from && debt.date <= previousRange.to,
+    );
+    const previousTotals = calculateDashboardTotals(
+      allCashRows.filter((row) => row.date >= previousRange.from && row.date <= previousRange.to),
+      allStockRows.filter((row) => row.date >= previousRange.from && row.date <= previousRange.to),
+      allPurchases.filter((row) => row.date >= previousRange.from && row.date <= previousRange.to),
+      allExpenseRows.filter((row) => row.date >= previousRange.from && row.date <= previousRange.to),
+      products,
+      previousDebts,
+      allDebtPayments.filter((row) => row.date >= previousRange.from && row.date <= previousRange.to),
+      activeDebts,
+    );
 
-    // Render the useful dashboard as soon as the selected period is ready.
-    // Historical comparisons are supplementary and can arrive afterward.
     setData({
       totals,
-      previousTotals: emptyDashboardTotals,
+      previousTotals,
       inventoryComparisonValue,
       hasInventoryComparisonData: inventoryComparisonRows.length > 0,
       trend,
@@ -429,104 +494,6 @@ export default function DashboardPage() {
       latestBarEntryDate,
     });
     setLoading(false);
-
-    const [
-      prevCashRes,
-      prevStockRes,
-      prevPurchaseRes,
-      prevExpenseRes,
-      prevDebtPaymentRes,
-    ] = await Promise.all([
-      fetchAllRows<DailyCashRow>(() =>
-        inRangeQuery(
-          supabase
-            .from('daily_cash_entries')
-            .select('date,cash_income,terminal_income,card_income,playstation_income')
-            .eq('club_id', selectedClubId)
-            .order('date', { ascending: true }),
-          previousRange,
-        ),
-      ),
-      fetchAllRows<StockCountRow>(() =>
-        inRangeQuery(
-          supabase
-            .from('daily_stock_counts')
-            .select('product_id,date,bar_income,bar_profit,bar_cost,sold_quantity')
-            .eq('club_id', selectedClubId)
-            .order('date', { ascending: true })
-            .order('product_id', { ascending: true }),
-          previousRange,
-        ),
-      ),
-      fetchAllRows<StockPurchaseCostRow>(() =>
-        inRangeQuery(
-          supabase
-            .from('stock_purchases')
-            .select('id,date,quantity,cost_price')
-            .eq('club_id', selectedClubId)
-            .order('date', { ascending: true })
-            .order('id', { ascending: true }),
-          previousRange,
-        ),
-      ),
-      fetchAllRows<ExpenseRow>(() =>
-        inRangeQuery(
-          supabase
-            .from('expenses')
-            .select('id,date,amount,category,payment_source,comment,created_at')
-            .eq('club_id', selectedClubId)
-            .order('date', { ascending: true })
-            .order('id', { ascending: true }),
-          previousRange,
-        ),
-      ),
-      fetchAllRows<DebtPaymentValueRow>(() =>
-        inRangeQuery(
-          supabase
-            .from('debt_payments')
-            .select('id,date,amount,payment_method')
-            .eq('club_id', selectedClubId)
-            .order('date', { ascending: true })
-            .order('id', { ascending: true }),
-          previousRange,
-        ),
-      ),
-    ]);
-
-    if (requestId !== requestSequence.current) return;
-
-    const comparisonError = [
-      prevCashRes.error,
-      prevStockRes.error,
-      prevPurchaseRes.error,
-      prevExpenseRes.error,
-      prevDebtPaymentRes.error,
-    ].find(Boolean);
-
-    if (comparisonError) {
-      setError(comparisonError.message);
-      return;
-    }
-
-    const previousDebts = debts.filter(
-      (debt) => debt.date >= previousRange.from && debt.date <= previousRange.to,
-    );
-    const previousDebtPayments = (prevDebtPaymentRes.data ?? []) as DebtPaymentValueRow[];
-    const previousTotals = calculateDashboardTotals(
-      (prevCashRes.data ?? []) as DailyCashRow[],
-      (prevStockRes.data ?? []) as StockCountRow[],
-      (prevPurchaseRes.data ?? []) as StockPurchaseCostRow[],
-      (prevExpenseRes.data ?? []) as ExpenseRow[],
-      products,
-      previousDebts,
-      previousDebtPayments,
-      activeDebts,
-    );
-
-    setData((current) => ({
-      ...current,
-      previousTotals,
-    }));
   }, [businessToday, period, range, selectedClubId, selectedDate]);
 
   useEffect(() => {

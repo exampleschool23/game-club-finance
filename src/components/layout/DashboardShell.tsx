@@ -17,6 +17,7 @@ interface DashboardShellProps {
   initialFullName?: string;
   initialProfileRole?: UserRole;
   initialMembershipRows?: ClubMembership[];
+  initialSelectedClubId?: string;
   children: React.ReactNode;
 }
 
@@ -76,6 +77,17 @@ function relatedClub(relation: ClubMembership['clubs']): Club | null {
 }
 
 const SELECTED_CLUB_STORAGE_KEY = 'game-club-finance:selected-club-id';
+const SELECTED_CLUB_COOKIE = 'game-club-finance-selected-club-id';
+
+function persistSelectedClubId(clubId: string) {
+  if (clubId) {
+    window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, clubId);
+    document.cookie = `${SELECTED_CLUB_COOKIE}=${encodeURIComponent(clubId)}; path=/; max-age=31536000; samesite=lax`;
+  } else {
+    window.localStorage.removeItem(SELECTED_CLUB_STORAGE_KEY);
+    document.cookie = `${SELECTED_CLUB_COOKIE}=; path=/; max-age=0; samesite=lax`;
+  }
+}
 
 function PendingApproval({ fullName }: { fullName: string }) {
   const router = useRouter();
@@ -129,6 +141,7 @@ export function DashboardShell({
   initialFullName = '',
   initialProfileRole = 'viewer',
   initialMembershipRows = [],
+  initialSelectedClubId = '',
   children,
 }: DashboardShellProps) {
   const router = useRouter();
@@ -138,7 +151,11 @@ export function DashboardShell({
   const [profileRole, setProfileRole] = useState<UserRole>(initialProfileRole);
   const [fullName, setFullName] = useState(initialFullName || initialEmail);
   const [memberships, setMemberships] = useState<ClubOption[]>(initialMemberships);
-  const [selectedClubId, setSelectedClubIdState] = useState('');
+  const [selectedClubId, setSelectedClubIdState] = useState(() =>
+    initialMemberships.some((membership) => membership.club.id === initialSelectedClubId)
+      ? initialSelectedClubId
+      : initialMemberships[0]?.club.id ?? '',
+  );
   const [clubLoading, setClubLoading] = useState(false);
 
   const selectedMembership = useMemo(
@@ -151,7 +168,7 @@ export function DashboardShell({
 
   const setSelectedClubId = useCallback((clubId: string) => {
     setSelectedClubIdState(clubId);
-    window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, clubId);
+    persistSelectedClubId(clubId);
   }, []);
 
   const refreshClubs = useCallback(async () => {
@@ -191,11 +208,7 @@ export function DashboardShell({
         nextMemberships[0]?.club.id ??
         '';
 
-      if (nextClubId) {
-        window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, nextClubId);
-      } else {
-        window.localStorage.removeItem(SELECTED_CLUB_STORAGE_KEY);
-      }
+      persistSelectedClubId(nextClubId);
 
       return nextClubId;
     });
@@ -203,16 +216,13 @@ export function DashboardShell({
   }, [initialEmail, router]);
 
   useEffect(() => {
-    const nextClubId =
-      initialMemberships.find((membership) => membership.club.id === window.localStorage.getItem(SELECTED_CLUB_STORAGE_KEY))?.club.id ??
-      initialMemberships[0]?.club.id ??
-      '';
+    const nextClubId = selectedClubId || initialMemberships[0]?.club.id || '';
 
     if (nextClubId) {
       setSelectedClubIdState(nextClubId);
-      window.localStorage.setItem(SELECTED_CLUB_STORAGE_KEY, nextClubId);
+      persistSelectedClubId(nextClubId);
     }
-  }, [initialMemberships]);
+  }, [initialMemberships, selectedClubId]);
 
   useEffect(() => {
     if (initialMembershipRows.length > 0) return;

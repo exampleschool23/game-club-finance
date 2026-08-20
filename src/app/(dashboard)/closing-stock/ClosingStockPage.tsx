@@ -5,6 +5,12 @@
 import { useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
+import {
+  markPerformanceRpcAvailable,
+  markPerformanceRpcMissing,
+  shouldTryPerformanceRpc,
+} from '@/lib/supabase/performanceRpc';
 import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
@@ -186,6 +192,29 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
 }
 
 async function fetchPreviousClosings(supabase: ReturnType<typeof createClient>, selectedDate: string, clubId: string) {
+  if (shouldTryPerformanceRpc()) {
+    const latestResult = await supabase.rpc('get_latest_stock_closings', {
+      p_club_id: clubId,
+      p_before_date: selectedDate,
+    });
+
+    if (!latestResult.error) {
+      const latestRows = (latestResult.data ?? []) as Array<{ product_id: string; closing_stock: number }>;
+      markPerformanceRpcAvailable();
+      return {
+        data: Object.fromEntries(latestRows.map((row) => [row.product_id, Number(row.closing_stock ?? 0)])),
+        error: null,
+      };
+    }
+
+    if (!isMissingDatabaseFunction(latestResult.error, 'get_latest_stock_closings')) {
+      return { data: null, error: latestResult.error };
+    }
+
+    markPerformanceRpcMissing();
+  }
+
+  // Compatibility fallback while migration 030 is being deployed.
   const { data, error } = await supabase
     .from('daily_stock_counts')
     .select('product_id,closing_stock')

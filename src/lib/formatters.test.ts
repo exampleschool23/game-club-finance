@@ -147,12 +147,19 @@ describe('currency input helpers', () => {
     expect(extractCurrencyDigits('1 234 567 UZS')).toBe('1234567');
   });
 
+  it('rounds numeric database prices before extracting digits', () => {
+    expect(extractCurrencyDigits(2108.420119808507)).toBe('2108');
+    expect(extractCurrencyDigits(2108.6)).toBe('2109');
+  });
+
   it('parses formatted currency input', () => {
     expect(parseCurrencyInput('1 234 567')).toBe(1234567);
+    expect(parseCurrencyInput(2108.420119808507)).toBe(2108);
   });
 
   it('formats text-field currency values', () => {
     expect(formatCurrencyInput('1234567')).toBe('1 234 567');
+    expect(formatCurrencyInput(2108.420119808507)).toBe('2 108');
     expect(formatCurrencyInput('')).toBe('');
   });
 });

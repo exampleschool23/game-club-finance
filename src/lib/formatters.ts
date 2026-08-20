@@ -196,6 +196,15 @@ export function formatCurrency(amount: number, locale = 'ru-UZ'): string {
 
 export function extractCurrencyDigits(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
+
+  // Database numeric columns can contain fractional weighted-average prices.
+  // Treat numeric values as numbers before extracting digits so 2108.42 does
+  // not become 210842 when it is loaded into a whole-currency input.
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return '';
+    return String(Math.max(0, Math.round(value)));
+  }
+
   return String(value).replace(/\D/g, '');
 }
 

@@ -7,20 +7,14 @@ function hasSupabaseAuthCookie(request: NextRequest) {
     .some(({ name, value }) => name.startsWith('sb-') && name.includes('-auth-token') && Boolean(value));
 }
 
-function isAppRouterNavigation(request: NextRequest) {
-  return (
-    request.headers.get('rsc') === '1' ||
-    request.headers.has('next-url') ||
-    request.headers.get('next-router-prefetch') === '1'
-  );
-}
-
 export async function middleware(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isProtectedPage = !isAuthPage && !isAuthCallback;
 
-  if (isProtectedPage && isAppRouterNavigation(request) && hasSupabaseAuthCookie(request)) {
+  // The dashboard layout validates the user before rendering. Avoid making the
+  // same remote getUser() request in middleware when an auth cookie is present.
+  if (isProtectedPage && hasSupabaseAuthCookie(request)) {
     return NextResponse.next({ request });
   }
 
