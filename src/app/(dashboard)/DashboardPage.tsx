@@ -33,6 +33,7 @@ import { MoneyLeftBreakdownChart } from '@/components/dashboard/MoneyLeftBreakdo
 import {
   buildPeriodTrend,
   calculateAverageDailyIncome,
+  calculateDashboardInventoryValue,
   calculateDashboardTotals,
   calculateGameClubMoneyLeftByPaymentMethod,
   calculateInventoryValueFromLatestStockCounts,
@@ -77,8 +78,8 @@ interface DebtRow {
 interface DashboardData {
   totals: DashboardTotals;
   previousTotals: DashboardTotals;
-  lastMonthInventoryValue: number;
-  hasLastMonthInventoryData: boolean;
+  inventoryComparisonValue: number;
+  hasInventoryComparisonData: boolean;
   trend: TrendRow[];
   lowStockCount: number;
   expenseCategories: Array<{ category: string; value: number }>;
@@ -90,8 +91,8 @@ interface DashboardData {
 const emptyData: DashboardData = {
   totals: emptyDashboardTotals,
   previousTotals: emptyDashboardTotals,
-  lastMonthInventoryValue: 0,
-  hasLastMonthInventoryData: false,
+  inventoryComparisonValue: 0,
+  hasInventoryComparisonData: false,
   trend: [],
   lowStockCount: 0,
   expenseCategories: [],
@@ -247,6 +248,10 @@ export default function DashboardPage() {
     const supabase = createClient();
     const previousRange = getDashboardComparisonRange(period, range);
     const lastMonthRange = getDashboardRange('lastMonth', selectedDate || businessToday);
+    const inventoryComparisonRange = period === 'lastMonth' ? previousRange : lastMonthRange;
+    const inventorySnapshotRange = period === 'lastMonth'
+      ? { from: previousRange.from, to: range.to }
+      : lastMonthRange;
 
     const [
       cashRes,
@@ -256,6 +261,7 @@ export default function DashboardPage() {
       debtRes,
       debtPaymentRes,
       purchaseRes,
+      inventorySnapshotRes,
     ] = await Promise.all([
       fetchAllRows<DailyCashRow>(() =>
         inRangeQuery(
@@ -321,6 +327,16 @@ export default function DashboardPage() {
           range,
         ),
       ),
+      fetchAllRows<InventorySnapshotRow>(() =>
+        supabase
+          .from('daily_stock_counts')
+          .select('product_id,date,closing_stock,cost_price,products(tracks_inventory)')
+          .eq('club_id', selectedClubId)
+          .gte('date', inventorySnapshotRange.from)
+          .lte('date', inventorySnapshotRange.to)
+          .order('date', { ascending: true })
+          .order('product_id', { ascending: true }),
+      ),
     ]);
 
     if (requestId !== requestSequence.current) return;
@@ -333,6 +349,7 @@ export default function DashboardPage() {
       debtRes.error,
       debtPaymentRes.error,
       purchaseRes.error,
+      inventorySnapshotRes.error,
     ].find(Boolean);
 
     if (firstError) {
@@ -350,8 +367,12 @@ export default function DashboardPage() {
     const activeDebts = debts.filter((debt) => debt.status !== 'paid');
     const rangeDebts = debts.filter((debt) => debt.date >= range.from && debt.date <= range.to);
     const debtPayments = (debtPaymentRes.data ?? []) as DebtPaymentValueRow[];
+    const inventorySnapshotRows = (inventorySnapshotRes.data ?? []) as InventorySnapshotRow[];
+    const inventoryComparisonRows = inventorySnapshotRows.filter(
+      (row) => row.date >= inventoryComparisonRange.from && row.date <= inventoryComparisonRange.to,
+    );
 
-    const totals = calculateDashboardTotals(
+    const liveTotals = calculateDashboardTotals(
       cashRows,
       stockRows,
       purchases,
@@ -360,6 +381,18 @@ export default function DashboardPage() {
       rangeDebts,
       debtPayments,
       activeDebts,
+    );
+    const totals = {
+      ...liveTotals,
+      inventoryValue: calculateDashboardInventoryValue(
+        period,
+        liveTotals.inventoryValue,
+        inventorySnapshotRows,
+        range,
+      ),
+    };
+    const inventoryComparisonValue = calculateInventoryValueFromLatestStockCounts(
+      inventoryComparisonRows,
     );
     const moneyLeftByPaymentMethod = calculateGameClubMoneyLeftByPaymentMethod(
       cashRows,
@@ -386,8 +419,8 @@ export default function DashboardPage() {
     setData({
       totals,
       previousTotals: emptyDashboardTotals,
-      lastMonthInventoryValue: 0,
-      hasLastMonthInventoryData: false,
+      inventoryComparisonValue,
+      hasInventoryComparisonData: inventoryComparisonRows.length > 0,
       trend,
       lowStockCount,
       expenseCategories,
@@ -403,7 +436,6 @@ export default function DashboardPage() {
       prevPurchaseRes,
       prevExpenseRes,
       prevDebtPaymentRes,
-      lastMonthInventoryRes,
     ] = await Promise.all([
       fetchAllRows<DailyCashRow>(() =>
         inRangeQuery(
@@ -459,16 +491,6 @@ export default function DashboardPage() {
           previousRange,
         ),
       ),
-      fetchAllRows<InventorySnapshotRow>(() =>
-        supabase
-          .from('daily_stock_counts')
-          .select('product_id,date,closing_stock,cost_price,products(tracks_inventory)')
-          .eq('club_id', selectedClubId)
-          .gte('date', lastMonthRange.from)
-          .lte('date', lastMonthRange.to)
-          .order('date', { ascending: true })
-          .order('product_id', { ascending: true }),
-      ),
     ]);
 
     if (requestId !== requestSequence.current) return;
@@ -479,7 +501,6 @@ export default function DashboardPage() {
       prevPurchaseRes.error,
       prevExpenseRes.error,
       prevDebtPaymentRes.error,
-      lastMonthInventoryRes.error,
     ].find(Boolean);
 
     if (comparisonError) {
@@ -491,9 +512,6 @@ export default function DashboardPage() {
       (debt) => debt.date >= previousRange.from && debt.date <= previousRange.to,
     );
     const previousDebtPayments = (prevDebtPaymentRes.data ?? []) as DebtPaymentValueRow[];
-    const lastMonthInventoryValue = calculateInventoryValueFromLatestStockCounts(
-      (lastMonthInventoryRes.data ?? []) as InventorySnapshotRow[],
-    );
     const previousTotals = calculateDashboardTotals(
       (prevCashRes.data ?? []) as DailyCashRow[],
       (prevStockRes.data ?? []) as StockCountRow[],
@@ -508,8 +526,6 @@ export default function DashboardPage() {
     setData((current) => ({
       ...current,
       previousTotals,
-      lastMonthInventoryValue,
-      hasLastMonthInventoryData: (lastMonthInventoryRes.data ?? []).length > 0,
     }));
   }, [businessToday, period, range, selectedClubId, selectedDate]);
 
@@ -725,15 +741,21 @@ export default function DashboardPage() {
           icon={Boxes}
           iconBgClassName="bg-blue-100"
           iconClassName="text-blue-600"
-          helper={`${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
+          helper={period === 'lastMonth'
+            ? t('inventoryValuePeriodDesc')
+            : `${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
           subMetric={{
-            label: t('lastMonthInventoryValue'),
-            amount: data.hasLastMonthInventoryData ? data.lastMonthInventoryValue : null,
+            label: period === 'lastMonth' ? t('previousMonthInventoryValue') : t('lastMonthInventoryValue'),
+            amount: data.hasInventoryComparisonData ? data.inventoryComparisonValue : null,
             unavailableLabel: t('noComparisonData'),
           }}
           comparison={
-            data.hasLastMonthInventoryData
-              ? comparisonFor(totals.inventoryValue, data.lastMonthInventoryValue, t('vsLastMonth'))
+            data.hasInventoryComparisonData
+              ? comparisonFor(
+                  totals.inventoryValue,
+                  data.inventoryComparisonValue,
+                  period === 'lastMonth' ? t('vsPreviousPeriod') : t('vsLastMonth'),
+                )
               : undefined
           }
         />

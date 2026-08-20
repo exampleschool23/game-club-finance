@@ -457,6 +457,19 @@ export function calculateInventoryValueFromLatestStockCounts(rows: InventorySnap
   );
 }
 
+export function calculateDashboardInventoryValue(
+  period: DashboardPeriod,
+  liveInventoryValue: number,
+  rows: InventorySnapshotRow[],
+  range: { from: string; to: string },
+): number {
+  if (period !== 'lastMonth') return liveInventoryValue;
+
+  return calculateInventoryValueFromLatestStockCounts(
+    rows.filter((row) => row.date >= range.from && row.date <= range.to),
+  );
+}
+
 export function percentChange(current: number, previous: number): number | null {
   if (!previous) return null;
   return Math.round(((current - previous) / Math.abs(previous)) * 100);

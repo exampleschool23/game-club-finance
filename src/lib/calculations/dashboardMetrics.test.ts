@@ -3,6 +3,7 @@ import {
   buildIncomeTrend,
   buildPeriodTrend,
   calculateAverageDailyIncome,
+  calculateDashboardInventoryValue,
   calculateDashboardTotals,
   calculateGameClubMoneyLeftByPaymentMethod,
   calculateInventoryValue,
@@ -196,6 +197,19 @@ describe('dashboard metrics', () => {
         { product_id: 'water', date: '2026-06-12', closing_stock: 12, cost_price: 2_000 },
       ]),
     ).toBe(55_500);
+  });
+
+  it('uses the selected month closing stock for the last-month dashboard', () => {
+    const rows = [
+      { product_id: 'cola', date: '2026-06-30', closing_stock: 9, cost_price: 4_000 },
+      { product_id: 'cola', date: '2026-07-31', closing_stock: 7, cost_price: 4_500 },
+      { product_id: 'water', date: '2026-07-15', closing_stock: 12, cost_price: 2_000 },
+      { product_id: 'cola', date: '2026-08-01', closing_stock: 6, cost_price: 4_500 },
+    ];
+    const july = { from: '2026-07-01', to: '2026-07-31' };
+
+    expect(calculateDashboardInventoryValue('month', 99_000, rows, july)).toBe(99_000);
+    expect(calculateDashboardInventoryValue('lastMonth', 99_000, rows, july)).toBe(55_500);
   });
 
   it('excludes made-to-order products from current and historical inventory value', () => {
