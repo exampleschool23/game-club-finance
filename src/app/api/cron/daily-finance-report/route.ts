@@ -30,7 +30,7 @@ function requireEnv(name: string): string {
 }
 
 interface TelegramReportTarget {
-  key: 'pixel' | 'main';
+  key: 'pixel' | 'main' | 'bunker';
   chatId: string;
   clubId: string;
 }
@@ -55,6 +55,7 @@ function getTelegramReportTargets(): TelegramReportTarget[] {
   const targets = [
     optionalTarget('pixel', 'TELEGRAM_PIXEL_CHAT_ID', 'TELEGRAM_PIXEL_CLUB_ID'),
     optionalTarget('main', 'TELEGRAM_MAIN_CHAT_ID', 'TELEGRAM_MAIN_CLUB_ID'),
+    optionalTarget('bunker', 'TELEGRAM_BUNKER_CHAT_ID', 'TELEGRAM_BUNKER_CLUB_ID'),
   ].filter((target): target is TelegramReportTarget => Boolean(target));
 
   if (targets.length === 0) {
@@ -70,8 +71,8 @@ function filterTargets(
 ): TelegramReportTarget[] {
   if (!targetKey) return targets;
 
-  if (targetKey !== 'pixel' && targetKey !== 'main') {
-    throw new Error('target must be pixel or main');
+  if (targetKey !== 'pixel' && targetKey !== 'main' && targetKey !== 'bunker') {
+    throw new Error('target must be pixel, main, or bunker');
   }
 
   const selectedTarget = targets.find((target) => target.key === targetKey);
