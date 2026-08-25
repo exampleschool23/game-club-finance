@@ -18,6 +18,7 @@ import { useTranslations } from 'next-intl';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DateRangePicker } from '@/components/ui/CalendarPicker';
+import { Skeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import {
   buildMoneyReport,
@@ -99,12 +100,14 @@ function SummaryCard({
   icon: Icon,
   iconClassName,
   iconBackground,
+  loading = false,
 }: {
   label: string;
   value: number;
   icon: ElementType;
   iconClassName: string;
   iconBackground: string;
+  loading?: boolean;
 }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
@@ -112,9 +115,16 @@ function SummaryCard({
         <Icon size={20} className={iconClassName} aria-hidden="true" />
       </div>
       <p className="mt-4 text-sm font-medium text-gray-500">{label}</p>
-      <p className="mt-1 break-words text-2xl font-extrabold tracking-tight text-gray-950">
-        <Amount value={value} />
-      </p>
+      {loading ? (
+        <div className="mt-2 space-y-2" role="status" aria-label="Loading">
+          <Skeleton className="h-7 w-4/5" />
+          <Skeleton className="h-3 w-16 bg-gray-100" />
+        </div>
+      ) : (
+        <p className="mt-1 break-words text-2xl font-extrabold tracking-tight text-gray-950">
+          <Amount value={value} />
+        </p>
+      )}
     </div>
   );
 }
@@ -358,6 +368,7 @@ export default function ReportsPage() {
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard
+          loading={loading}
           label={t('totalCollected')}
           value={report.totalCollected}
           icon={WalletCards}
@@ -365,6 +376,7 @@ export default function ReportsPage() {
           iconBackground="bg-blue-50"
         />
         <SummaryCard
+          loading={loading}
           label={t('expenses')}
           value={report.totalExpenses}
           icon={ReceiptText}
@@ -372,6 +384,7 @@ export default function ReportsPage() {
           iconBackground="bg-red-50"
         />
         <SummaryCard
+          loading={loading}
           label={t('totalLeft')}
           value={report.totalLeft}
           icon={CircleDollarSign}
@@ -416,7 +429,7 @@ export default function ReportsPage() {
           <p className="mt-1 text-sm text-gray-500">{t('dailyCloseoutDescription')}</p>
         </div>
         {loading ? (
-          <div className="p-8 text-center text-sm font-semibold text-gray-500">{tc('loading')}</div>
+          <TableSkeleton rows={6} columns={isOwner ? 7 : 6} className="rounded-none border-0 shadow-none" />
         ) : report.days.length === 0 ? (
           <div className="p-8 text-center text-sm font-semibold text-gray-500">{t('noData')}</div>
         ) : (

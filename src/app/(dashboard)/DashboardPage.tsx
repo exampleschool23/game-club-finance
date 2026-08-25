@@ -22,9 +22,9 @@ import { fetchAllRows } from '@/lib/supabase/pagination';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatDateShort } from '@/lib/formatters';
-import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
+import { useClub } from '@/components/layout/DashboardShell';
 import { MetricCard } from '@/components/dashboard/MetricCard';
-import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
+import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import {
   buildPeriodTrend,
   calculateAverageDailyIncome,
@@ -103,16 +103,45 @@ interface DebtRow {
   status: string;
 }
 
-const dashboardFilterPeriods = ['today', 'yesterday', 'month', 'lastMonth', 'custom'] as const;
+const dashboardPresetPeriods = ['today', 'yesterday', 'last7Days', 'week', 'lastWeek', 'month', 'lastMonth'] as const;
 
 function dashboardPeriodFromQuery(value: string | null): DashboardPeriod {
-  return dashboardFilterPeriods.includes(value as (typeof dashboardFilterPeriods)[number])
+  return [...dashboardPresetPeriods, 'custom'].includes(value as DashboardPeriod)
     ? value as DashboardPeriod
     : 'month';
 }
 
-function dateFromQuery(value: string | null, fallback: string) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
+function validQueryDate(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function initialDashboardRange(
+  query: { get: (name: string) => string | null },
+  businessToday: string,
+): { from: string; to: string } {
+  const queryFrom = query.get('from');
+  const queryTo = query.get('to');
+
+  if (validQueryDate(queryFrom) && validQueryDate(queryTo)) {
+    return queryFrom <= queryTo
+      ? { from: queryFrom, to: queryTo }
+      : { from: queryTo, to: queryFrom };
+  }
+
+  return getDashboardRange(dashboardPeriodFromQuery(query.get('period')), businessToday, {
+    from: businessToday,
+    to: businessToday,
+  });
+}
+
+function dashboardPeriodForRange(
+  range: { from: string; to: string },
+  businessToday: string,
+): DashboardPeriod {
+  return dashboardPresetPeriods.find((preset) => {
+    const presetRange = getDashboardRange(preset, businessToday);
+    return presetRange.from === range.from && presetRange.to === range.to;
+  }) ?? 'custom';
 }
 
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
@@ -199,41 +228,32 @@ export default function DashboardPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { selectedDate } = useDashboardDate();
   const { selectedClubId, businessDayStartHour, role } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [period, setPeriod] = useState<DashboardPeriod>(() => dashboardPeriodFromQuery(searchParams.get('period')));
-  const [customFrom, setCustomFrom] = useState(() => dateFromQuery(searchParams.get('from'), businessToday));
-  const [customTo, setCustomTo] = useState(() => dateFromQuery(searchParams.get('to'), businessToday));
+  const [range, setRange] = useState(() => initialDashboardRange(searchParams, businessToday));
   const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const requestSequence = useRef(0);
   const t = useTranslations('dashboard');
 
-  const range = useMemo(
-    () => getDashboardRange(period, selectedDate || businessToday, { from: customFrom, to: customTo }),
-    [businessToday, customFrom, customTo, period, selectedDate],
+  const period = useMemo(
+    () => dashboardPeriodForRange(range, businessToday),
+    [businessToday, range],
   );
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set('period', period);
-
-    if (period === 'custom') {
-      params.set('from', customFrom);
-      params.set('to', customTo);
-    } else {
-      params.delete('from');
-      params.delete('to');
-    }
+    params.delete('period');
+    params.set('from', range.from);
+    params.set('to', range.to);
 
     const nextQuery = params.toString();
     if (nextQuery !== searchParams.toString()) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     }
-  }, [customFrom, customTo, pathname, period, router, searchParams]);
+  }, [pathname, range.from, range.to, router, searchParams]);
 
   const fetchDashboard = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -249,7 +269,7 @@ export default function DashboardPage() {
 
     const supabase = createClient();
     const previousRange = getDashboardComparisonRange(period, range);
-    const lastMonthRange = getDashboardRange('lastMonth', selectedDate || businessToday);
+    const lastMonthRange = getDashboardRange('lastMonth', businessToday);
     const inventoryComparisonRange = period === 'lastMonth' ? previousRange : lastMonthRange;
     const inventorySnapshotRange = period === 'lastMonth'
       ? { from: previousRange.from, to: range.to }
@@ -494,7 +514,7 @@ export default function DashboardPage() {
       latestBarEntryDate,
     });
     setLoading(false);
-  }, [businessToday, period, range, selectedClubId, selectedDate]);
+  }, [businessToday, period, range, selectedClubId]);
 
   useEffect(() => {
     fetchDashboard().catch((fetchError) => {
@@ -602,16 +622,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <PeriodTabs
-          value={period}
-          onChange={setPeriod}
-          customFrom={customFrom}
-          customTo={customTo}
-          onCustomFromChange={setCustomFrom}
-          onCustomToChange={setCustomTo}
-        />
-      </section>
+      <DateRangePicker
+        from={range.from}
+        to={range.to}
+        fromLabel={t('from')}
+        toLabel={t('to')}
+        className="max-w-3xl"
+        onChange={setRange}
+      />
 
       <MetricSection
         title={t('gameClubPlaystationSection')}
@@ -623,6 +641,7 @@ export default function DashboardPage() {
         onAction={() => router.push(`/game-club-money-details?from=${range.from}&to=${range.to}`)}
       >
         <MetricCard
+          loading={loading}
           label={t('gameClubIncome')}
           amount={totals.computerIncome}
           icon={MonitorSmartphone}
@@ -632,6 +651,7 @@ export default function DashboardPage() {
           comparison={comparisonFor(totals.computerIncome, previousTotals.computerIncome)}
         />
         <MetricCard
+          loading={loading}
           label={t('playstationIncome')}
           amount={totals.playstationIncome}
           icon={Gamepad2}
@@ -641,6 +661,7 @@ export default function DashboardPage() {
           comparison={comparisonFor(totals.playstationIncome, previousTotals.playstationIncome)}
         />
         <MetricCard
+          loading={loading}
           label={t('activeDebts')}
           amount={totals.activeDebts}
           icon={Users}
@@ -649,6 +670,7 @@ export default function DashboardPage() {
           helper={t('activeDebtsDesc', { count: totals.activeDebtCount })}
         />
         <MetricCard
+          loading={loading}
           label={t('averageDailyIncome')}
           amount={averageGameClubIncome}
           icon={CalendarDays}
@@ -657,6 +679,7 @@ export default function DashboardPage() {
           helper={t('averageDailyClubIncomeDesc')}
         />
         <MetricCard
+          loading={loading}
           label={t('totalMoneyLeft')}
           amount={totals.gameClubMoneyLeft}
           icon={Wallet}
@@ -677,6 +700,7 @@ export default function DashboardPage() {
         onAction={() => router.push(`/bar-money-details?from=${range.from}&to=${range.to}`)}
       >
         <MetricCard
+          loading={loading}
           label={t('barMoneyLeft')}
           amount={totals.barIncome}
           icon={ChartNoAxesCombined}
@@ -686,6 +710,7 @@ export default function DashboardPage() {
           comparison={comparisonFor(totals.barIncome, previousTotals.barIncome)}
         />
         <MetricCard
+          loading={loading}
           label={t('averageDailyIncome')}
           amount={averageBarIncome}
           icon={CalendarDays}
@@ -694,6 +719,7 @@ export default function DashboardPage() {
           helper={t('averageDailyBarIncomeDesc')}
         />
         <MetricCard
+          loading={loading}
           label={t('barNetProfit')}
           amount={totals.barProfit}
           icon={BadgeDollarSign}
@@ -703,6 +729,7 @@ export default function DashboardPage() {
           comparison={comparisonFor(totals.barProfit, previousTotals.barProfit)}
         />
         <MetricCard
+          loading={loading}
           label={t('inventoryValue')}
           amount={totals.inventoryValue}
           icon={Boxes}
@@ -729,8 +756,8 @@ export default function DashboardPage() {
       </MetricSection>
 
       {loading ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">
-          {t('loading')}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3" role="status" aria-label={t('loading')}>
+          {Array.from({ length: 6 }).map((_, index) => <ChartLoading key={index} />)}
         </div>
       ) : (
         <>

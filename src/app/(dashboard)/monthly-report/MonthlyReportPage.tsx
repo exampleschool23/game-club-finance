@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { MonthPicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { currentYearMonth, monthRange } from '@/lib/utils';
@@ -62,7 +63,7 @@ export default function MonthlyReportPage() {
   const businessYearMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [month, setMonth] = useState(() => businessYearMonth);
   const [rows, setRows] = useState<DayRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
   const fetchData = useCallback(async (selectedMonth: string) => {
@@ -193,7 +194,10 @@ export default function MonthlyReportPage() {
       </div>
 
       {loading ? (
-        <p className="text-gray-500">{tc('loading')}</p>
+        <div className="space-y-4">
+          <MetricGridSkeleton count={3} className="xl:grid-cols-3" />
+          <TableSkeleton rows={8} columns={7} />
+        </div>
       ) : rows.length === 0 ? (
         <EmptyState icon={BarChart2} title={t('noData')} />
       ) : (

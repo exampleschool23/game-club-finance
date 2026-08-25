@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { todayIso } from '@/lib/utils';
@@ -165,7 +166,10 @@ export default function DailyReportPage() {
       </div>
 
       {loading ? (
-        <p className="text-gray-500">{tc('loading')}</p>
+        <div className="space-y-6">
+          <MetricGridSkeleton count={5} className="lg:grid-cols-5" />
+          <TableSkeleton rows={4} columns={4} />
+        </div>
       ) : !hasData ? (
         <EmptyState icon={FileText} title={t('noData')} />
       ) : (

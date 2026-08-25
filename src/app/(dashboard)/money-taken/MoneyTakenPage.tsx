@@ -13,6 +13,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { FormSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { MonthPicker } from '@/components/ui/CalendarPicker';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { fetchAllRows } from '@/lib/supabase/pagination';
@@ -280,24 +281,28 @@ export default function MoneyTakenPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
+          loading={loading}
           label={t('totalAvailable')}
           value={`${formatCurrency(totalAvailable, locale)} ${tc('currency')}`}
           icon={CircleDollarSign}
           valueClassName={totalAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}
         />
         <MetricCard
+          loading={loading}
           label={t('gameClubAvailable')}
           value={`${formatCurrency(balances.gameClubAvailable, locale)} ${tc('currency')}`}
           icon={Gamepad2}
           valueClassName={balances.gameClubAvailable < 0 ? 'text-red-600' : 'text-blue-700'}
         />
         <MetricCard
+          loading={loading}
           label={t('barAvailable')}
           value={`${formatCurrency(balances.barAvailable, locale)} ${tc('currency')}`}
           icon={GlassWater}
           valueClassName={balances.barAvailable < 0 ? 'text-red-600' : 'text-orange-700'}
         />
         <MetricCard
+          loading={loading}
           label={t('totalTaken')}
           value={`${formatCurrency(totalTaken, locale)} ${tc('currency')}`}
           icon={ArrowDownToLine}
@@ -305,8 +310,9 @@ export default function MoneyTakenPage() {
       </div>
 
       {loading ? (
-        <div className="mt-5 rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">
-          {tc('loading')}
+        <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
+          {isOwner ? <FormSkeleton /> : null}
+          <TableSkeleton rows={5} columns={4} />
         </div>
       ) : (
         <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>

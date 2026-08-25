@@ -9,6 +9,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { DetailListSkeleton } from '@/components/ui/LoadingSkeleton';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
@@ -34,6 +35,7 @@ export default function DebtsPage() {
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
 
   const [debts, setDebts] = useState<NewDebt[]>([]);
+  const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [payDebtId, setPayDebtId] = useState<string | null>(null);
   const [paymentsMap, setPaymentsMap] = useState<Record<string, DebtPayment[]>>({});
@@ -63,8 +65,10 @@ export default function DebtsPage() {
   }, [businessToday, selectedClubId]);
 
   const fetchDebts = useCallback(async () => {
+    setLoading(true);
     if (!selectedClubId) {
       setDebts([]);
+      setLoading(false);
       return;
     }
 
@@ -76,15 +80,18 @@ export default function DebtsPage() {
       .order('date', { ascending: false });
     if (fetchError) {
       setLoadError(fetchError.message);
+      setLoading(false);
       return;
     }
     setLoadError('');
     setDebts((data as NewDebt[]) ?? []);
+    setLoading(false);
   }, [selectedClubId]);
 
   useEffect(() => {
     fetchDebts().catch((fetchError) => {
       setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      setLoading(false);
     });
   }, [fetchDebts]);
 
@@ -218,7 +225,9 @@ export default function DebtsPage() {
         </div>
       )}
 
-      {debts.length === 0 ? (
+      {loading ? (
+        <DetailListSkeleton rows={7} />
+      ) : debts.length === 0 ? (
         <EmptyState icon={Users} title={tc('noData')} />
       ) : (
         <div className="space-y-6">

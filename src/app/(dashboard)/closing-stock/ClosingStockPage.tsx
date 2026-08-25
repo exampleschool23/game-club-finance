@@ -13,6 +13,7 @@ import {
 } from '@/lib/supabase/performanceRpc';
 import { useClub } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/CalendarPicker';
+import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatters';
 import {
@@ -762,6 +763,9 @@ export default function ClosingStockPage() {
         </div>
       </div>
 
+      {loading ? (
+        <MetricGridSkeleton count={6} className="lg:grid-cols-3 2xl:grid-cols-6" />
+      ) : (
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {kpis.map(({ label, value, unit, icon: Icon, color, bg }) => (
           <div key={label} className="min-w-0 rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
@@ -778,6 +782,7 @@ export default function ClosingStockPage() {
           </div>
         ))}
       </section>
+      )}
 
       {error && <p className="rounded-lg bg-danger-50 px-4 py-3 text-sm font-medium text-danger-600">{error}</p>}
       {success && <p className="rounded-lg bg-success-50 px-4 py-3 text-sm font-medium text-success-600">{success}</p>}
@@ -833,7 +838,7 @@ export default function ClosingStockPage() {
           )}
 
           {loading ? (
-            <div className="p-8 text-gray-500">{tc('loading')}</div>
+            <TableSkeleton rows={8} columns={9} className="rounded-none border-0 shadow-none" />
           ) : rows.length === 0 ? (
             <div className="p-8 text-gray-500">{tc('noData')}</div>
           ) : filteredRows.length === 0 ? (

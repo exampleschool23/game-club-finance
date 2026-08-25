@@ -9,6 +9,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DatePicker } from '@/components/ui/CalendarPicker';
+import { Skeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { fetchAllRows } from '@/lib/supabase/pagination';
@@ -55,6 +56,7 @@ export default function ExpensesPage() {
   const [expensePage, setExpensePage] = useState(1);
   const [expenseCount, setExpenseCount] = useState(0);
   const [expensesLoading, setExpensesLoading] = useState(true);
+  const [metadataLoading, setMetadataLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
@@ -80,6 +82,7 @@ export default function ExpensesPage() {
     setCustomCategories([]);
     setTodaySummary({ count: 0, total: 0 });
     setExpensesLoading(true);
+    setMetadataLoading(true);
   }, [businessToday, selectedClubId]);
 
   function categoryLabel(category: string): string {
@@ -136,10 +139,12 @@ export default function ExpensesPage() {
 
   const loadExpenseMetadata = useCallback(async () => {
     const requestId = ++metadataLoadSequence.current;
+    setMetadataLoading(true);
 
     if (!selectedClubId) {
       setCustomCategories([]);
       setTodaySummary({ count: 0, total: 0 });
+      setMetadataLoading(false);
       return;
     }
 
@@ -167,6 +172,7 @@ export default function ExpensesPage() {
     if (loadError) {
       setTodaySummary({ count: 0, total: 0 });
       setError(loadError.message);
+      setMetadataLoading(false);
       return;
     }
 
@@ -180,6 +186,7 @@ export default function ExpensesPage() {
       count: todayResult.data?.length ?? 0,
       total: (todayResult.data ?? []).reduce((total, expense) => total + Number(expense.amount), 0),
     });
+    setMetadataLoading(false);
   }, [businessToday, selectedClubId]);
 
   useEffect(() => {
@@ -193,6 +200,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     loadExpenseMetadata().catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      setMetadataLoading(false);
     });
   }, [loadExpenseMetadata]);
 
@@ -467,7 +475,7 @@ export default function ExpensesPage() {
                 {t('todaySpend')}
               </div>
               <p className="mt-2 break-words text-xl font-black tabular-nums text-gray-950 sm:text-2xl">
-                {formatCurrency(todaySummary.total)}
+                {metadataLoading ? <Skeleton className="h-7 w-32" /> : formatCurrency(todaySummary.total)}
               </p>
               <p className="mt-1 text-xs text-gray-500">{tc('currency')}</p>
             </div>
@@ -476,7 +484,9 @@ export default function ExpensesPage() {
                 <Calendar size={15} />
                 {t('todayEntries')}
               </div>
-              <p className="mt-2 text-xl font-black tabular-nums text-gray-950 sm:text-2xl">{todaySummary.count}</p>
+              <p className="mt-2 text-xl font-black tabular-nums text-gray-950 sm:text-2xl">
+                {metadataLoading ? <Skeleton className="h-7 w-14" /> : todaySummary.count}
+              </p>
               <p className="mt-1 text-xs text-gray-500">{formatDatePickerValue(businessToday, locale)}</p>
             </div>
           </div>
@@ -495,10 +505,7 @@ export default function ExpensesPage() {
             </div>
 
             {expensesLoading ? (
-              <div className="flex min-h-36 items-center justify-center gap-2 p-5 text-sm font-semibold text-gray-500">
-                <LoaderCircle size={18} className="animate-spin" />
-                {tc('loading')}
-              </div>
+              <TableSkeleton rows={7} columns={isOwner ? 5 : 4} className="rounded-none border-0 shadow-none" />
             ) : expenses.length === 0 ? (
               <div className="p-5">
                 <EmptyState icon={MinusCircle} title={tc('noData')} />

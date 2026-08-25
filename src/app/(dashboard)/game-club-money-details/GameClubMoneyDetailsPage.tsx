@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { useClub } from '@/components/layout/DashboardShell';
+import { DetailListSkeleton } from '@/components/ui/LoadingSkeleton';
 import { formatDateShort, formatNumber } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
@@ -276,7 +277,7 @@ export default function GameClubMoneyDetailsPage({
 
       <section className="space-y-3">
         {loading ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500 shadow-sm">{t('loading')}</div>
+          <DetailListSkeleton />
         ) : rows.length === 0 ? (
           <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500 shadow-sm">{t('noGameClubMoneyData')}</div>
         ) : (

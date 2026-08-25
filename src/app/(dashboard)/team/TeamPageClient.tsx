@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
 import { ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
@@ -450,7 +451,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   }
 
   if (!authorized) {
-    return <p className="text-gray-500">{tc('loading')}</p>;
+    return <TableSkeleton rows={6} columns={4} />;
   }
 
   return (
@@ -466,6 +467,9 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         }
       />
 
+      {loading ? (
+        <MetricGridSkeleton count={3} className="mb-4 sm:grid-cols-3 xl:grid-cols-3" />
+      ) : (
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         {ROLES.map((role) => (
           <div key={role} className="card flex items-center justify-between">
@@ -487,12 +491,13 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
           </div>
         ))}
       </div>
+      )}
 
       {error && <p className="mb-3 text-sm text-danger-500">{error}</p>}
       {message && <p className="mb-3 text-sm text-success-600">{message}</p>}
 
       {loading ? (
-        <p className="text-gray-500">{tc('loading')}</p>
+        <TableSkeleton rows={7} columns={4} />
       ) : (
         <div className="space-y-6">
           {pendingProfiles.length > 0 && (

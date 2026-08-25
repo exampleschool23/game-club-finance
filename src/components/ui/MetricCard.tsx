@@ -10,6 +10,7 @@ interface MetricCardProps {
   trendLabel?: string;
   className?: string;
   valueClassName?: string;
+  loading?: boolean;
 }
 
 export function MetricCard({
@@ -20,21 +21,29 @@ export function MetricCard({
   trendLabel,
   className,
   valueClassName,
+  loading = false,
 }: MetricCardProps) {
   return (
     <div className={cn('bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-w-0', className)}>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-500 truncate">{label}</p>
-          <p
-            className={cn(
-              'mt-1 text-xl sm:text-2xl font-bold text-gray-900 leading-tight break-words tabular-nums',
-              valueClassName,
-            )}
-          >
-            {value}
-          </p>
-          {trendLabel && (
+          {loading ? (
+            <div className="mt-2 space-y-2" role="status" aria-label="Loading">
+              <div className="h-7 w-36 max-w-full animate-pulse rounded bg-gray-200" />
+              <div className="h-3 w-20 animate-pulse rounded bg-gray-100" />
+            </div>
+          ) : (
+            <p
+              className={cn(
+                'mt-1 text-xl sm:text-2xl font-bold text-gray-900 leading-tight break-words tabular-nums',
+                valueClassName,
+              )}
+            >
+              {value}
+            </p>
+          )}
+          {!loading && trendLabel && (
             <p
               className={cn('mt-1 text-xs font-medium', {
                 'text-success-600': trend === 'up',

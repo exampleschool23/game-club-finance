@@ -7,6 +7,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
@@ -51,6 +52,7 @@ export default function ProductsPage() {
   const tc = useTranslations('common');
   const { selectedClubId, role: currentRole } = useClub();
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm());
@@ -63,8 +65,10 @@ export default function ProductsPage() {
   const canManageInventory = currentRole === 'owner' || currentRole === 'admin';
 
   const loadProducts = useCallback(async () => {
+    setLoading(true);
     if (!selectedClubId) {
       setProducts([]);
+      setLoading(false);
       return;
     }
 
@@ -79,6 +83,7 @@ export default function ProductsPage() {
 
     if (!ordered.error) {
       setProducts((ordered.data ?? []) as Product[]);
+      setLoading(false);
       return;
     }
 
@@ -92,6 +97,7 @@ export default function ProductsPage() {
 
       if (!named.error) {
         setProducts((named.data ?? []) as Product[]);
+        setLoading(false);
         return;
       }
     }
@@ -105,6 +111,7 @@ export default function ProductsPage() {
 
     if (!orderedWithoutDeletedFilter.error) {
       setProducts((orderedWithoutDeletedFilter.data ?? []) as Product[]);
+      setLoading(false);
       return;
     }
 
@@ -117,17 +124,20 @@ export default function ProductsPage() {
     if (fallback.error) {
       setProducts([]);
       setError(fallback.error.message);
+      setLoading(false);
       return;
     }
 
     setError('');
     setProducts((fallback.data ?? []) as Product[]);
+    setLoading(false);
   }, [selectedClubId]);
 
   useEffect(() => {
     loadProducts().catch((loadError) => {
       setProducts([]);
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      setLoading(false);
     });
   }, [loadProducts]);
 
@@ -331,7 +341,9 @@ export default function ProductsPage() {
         ) : undefined}
       />
 
-      {products.length === 0 ? (
+      {loading ? (
+        <TableSkeleton rows={8} columns={canManageInventory ? 8 : 6} />
+      ) : products.length === 0 ? (
         <EmptyState
           icon={Package}
           title={tc('noData')}

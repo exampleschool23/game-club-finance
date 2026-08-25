@@ -22,6 +22,7 @@ interface MetricCardProps {
   helper?: string;
   onClick?: () => void;
   actionLabel?: string;
+  loading?: boolean;
 }
 
 export function MetricCard({
@@ -35,6 +36,7 @@ export function MetricCard({
   helper,
   onClick,
   actionLabel,
+  loading = false,
 }: MetricCardProps) {
   const isPositive = typeof comparison?.value === 'number' && comparison.value >= 0;
 
@@ -55,14 +57,28 @@ export function MetricCard({
         </div>
         <div className="min-w-0">
           <p className="break-words text-sm font-semibold text-gray-600">{label}</p>
-          <p className="mt-2 break-words text-xl font-bold leading-tight text-gray-950 sm:text-2xl">
-            {formatCurrency(amount)}
-          </p>
-          <p className="text-sm font-medium text-gray-600">UZS</p>
+          {loading ? (
+            <div className="mt-2 space-y-2" role="status" aria-label="Loading">
+              <div className="h-7 w-32 max-w-full animate-pulse rounded bg-gray-200" />
+              <div className="h-3 w-12 animate-pulse rounded bg-gray-100" />
+            </div>
+          ) : (
+            <>
+              <p className="mt-2 break-words text-xl font-bold leading-tight text-gray-950 sm:text-2xl">
+                {formatCurrency(amount)}
+              </p>
+              <p className="text-sm font-medium text-gray-600">UZS</p>
+            </>
+          )}
         </div>
       </div>
-      {helper && <p className="mt-3 text-xs font-medium leading-snug text-gray-500">{helper}</p>}
-      {subMetric ? (
+      {loading ? (
+        <div className="mt-3 space-y-2">
+          <div className="h-3 w-full animate-pulse rounded bg-gray-100" />
+          <div className="h-3 w-3/4 animate-pulse rounded bg-gray-100" />
+        </div>
+      ) : helper ? <p className="mt-3 text-xs font-medium leading-snug text-gray-500">{helper}</p> : null}
+      {!loading && subMetric ? (
         <div className="mt-3 border-t border-gray-100 pt-3">
           <p className="text-xs font-semibold text-gray-500">{subMetric.label}</p>
           <p className="mt-1 break-words text-sm font-bold leading-tight text-gray-800">
@@ -76,7 +92,7 @@ export function MetricCard({
           </p>
         </div>
       ) : null}
-      {comparison ? (
+      {!loading && comparison ? (
         comparison.value === null ? (
           <p className="mt-3 text-xs font-medium text-gray-500">{comparison.label}</p>
         ) : (

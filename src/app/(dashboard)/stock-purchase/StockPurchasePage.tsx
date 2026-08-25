@@ -6,6 +6,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
+import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import {
@@ -112,7 +113,7 @@ export default function StockPurchasePage() {
   const [query, setQuery] = useState('');
   const [purchasePage, setPurchasePage] = useState(1);
   const [purchaseCount, setPurchaseCount] = useState(0);
-  const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [purchasesLoading, setPurchasesLoading] = useState(true);
 
   const [form, setForm] = useState({
     date: businessToday,
@@ -154,6 +155,7 @@ export default function StockPurchasePage() {
     if (!selectedClubId) {
       setPurchases([]);
       setPurchaseCount(0);
+      setPurchasesLoading(false);
       return;
     }
 
@@ -615,12 +617,12 @@ export default function StockPurchasePage() {
           </div>
         </div>
 
-        {purchasesLoading && purchases.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-gray-500">{tc('loading')}</div>
+        {purchasesLoading ? (
+          <TableSkeleton rows={6} columns={9} className="rounded-lg shadow-none" />
         ) : purchases.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-gray-500">{tc('noData')}</div>
         ) : (
-          <div className={`overflow-x-auto rounded-lg border border-gray-100 ${purchasesLoading ? 'opacity-60' : ''}`}>
+          <div className="overflow-x-auto rounded-lg border border-gray-100">
             <table className="w-full min-w-[1080px] text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">

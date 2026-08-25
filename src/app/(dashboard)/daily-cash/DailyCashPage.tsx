@@ -23,6 +23,7 @@ import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
 import { useClub } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/CalendarPicker';
+import { FormSkeleton, MetricGridSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
@@ -340,6 +341,19 @@ export default function DailyCashPage() {
     setMessage('');
     setError('');
     setForm(entry ? entryToForm(entry) : emptyForm(form.date));
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
+          <p className="mt-1 text-sm text-gray-600">{t('subtitle')}</p>
+        </div>
+        <FormSkeleton />
+        <MetricGridSkeleton count={3} className="xl:grid-cols-3" />
+      </div>
+    );
   }
 
   return (
