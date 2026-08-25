@@ -127,9 +127,9 @@ export default function ExpensesPage() {
   useEffect(() => {
     loadExpenses().catch((loadError) => {
       setExpenses([]);
-      setError(loadError instanceof Error ? loadError.message : tc('error'));
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
     });
-  }, [loadExpenses, tc]);
+  }, [loadExpenses]);
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));

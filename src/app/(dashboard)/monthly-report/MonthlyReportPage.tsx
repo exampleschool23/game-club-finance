@@ -167,10 +167,10 @@ export default function MonthlyReportPage() {
   useEffect(() => {
     fetchData(month).catch((fetchError) => {
       setRows([]);
-      setLoadError(fetchError instanceof Error ? fetchError.message : tc('error'));
+      setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
-  }, [month, fetchData, tc]);
+  }, [month, fetchData]);
 
   useEffect(() => {
     setMonth(businessYearMonth);

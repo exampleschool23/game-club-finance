@@ -71,6 +71,56 @@ describe('money report', () => {
         card: 350_000,
         playstation: 200_000,
         total: 3_150_000,
+        income: 3_550_000,
+        expenses: 400_000,
+        activities: [
+          {
+            id: null,
+            source: 'daily_cash',
+            kind: 'income',
+            category: null,
+            amount: 3_500_000,
+            paymentMethod: null,
+            comment: null,
+            createdAt: null,
+            paymentBreakdown: {
+              cash: 1_000_000,
+              terminal: 2_000_000,
+              card: 300_000,
+              playstation: 200_000,
+            },
+          },
+          {
+            id: null,
+            source: 'debt_payment',
+            kind: 'debt_payment',
+            category: null,
+            amount: 50_000,
+            paymentMethod: 'card',
+            comment: null,
+            createdAt: null,
+          },
+          {
+            id: 'cash-expense',
+            source: 'expense',
+            kind: 'expense',
+            category: 'other',
+            amount: -150_000,
+            paymentMethod: 'cash',
+            comment: null,
+            createdAt: '2026-08-25T10:00:00Z',
+          },
+          {
+            id: 'terminal-expense',
+            source: 'expense',
+            kind: 'expense',
+            category: 'other',
+            amount: -250_000,
+            paymentMethod: 'terminal',
+            comment: null,
+            createdAt: '2026-08-25T11:00:00Z',
+          },
+        ],
       },
     ]);
   });
@@ -92,5 +142,30 @@ describe('money report', () => {
 
     expect(report.days.map((day) => day.date)).toEqual(['2026-08-25', '2026-08-24']);
     expect(report.days[0].total).toBe(-40);
+    expect(report.days[0].activities).toEqual([
+      {
+        id: 'expense-only',
+        source: 'expense',
+        kind: 'expense',
+        category: 'other',
+        amount: -40,
+        paymentMethod: 'cash',
+        comment: null,
+        createdAt: '2026-08-25T10:00:00Z',
+      },
+    ]);
+    expect(report.days[1].activities).toEqual([
+      {
+        id: null,
+        source: 'daily_cash',
+        kind: 'income',
+        category: null,
+        amount: 100,
+        paymentMethod: null,
+        comment: null,
+        createdAt: null,
+        paymentBreakdown: { cash: 100, terminal: 0, card: 0, playstation: 0 },
+      },
+    ]);
   });
 });

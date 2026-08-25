@@ -9,7 +9,9 @@ import {
   CreditCard,
   Gamepad2,
   Landmark,
+  LoaderCircle,
   ReceiptText,
+  Trash2,
   WalletCards,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -17,21 +19,21 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
-import { buildMoneyReport, type MoneyReportPaymentBreakdown } from '@/lib/calculations/moneyReport';
 import {
-  getDashboardRange,
-  type DailyCashRow,
-  type DashboardPeriod,
-  type DebtPaymentValueRow,
+  buildMoneyReport,
+  type MoneyReportActivity,
+  type MoneyReportCashRow,
+  type MoneyReportDebtPaymentRow,
+  type MoneyReportPaymentBreakdown,
+} from '@/lib/calculations/moneyReport';
+import {
   type ExpenseRow,
 } from '@/lib/calculations/dashboardMetrics';
-import { formatCurrency, formatDateOnly } from '@/lib/formatters';
+import { formatCurrency, formatDateOnly, formatTime } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
-
-type ReportPeriod = Extract<DashboardPeriod, 'today' | 'yesterday' | 'last7Days' | 'month' | 'custom'>;
 
 const emptyReport = buildMoneyReport([], [], []);
 
@@ -41,6 +43,53 @@ function Amount({ value, className }: { value: number; className?: string }) {
       {formatCurrency(value)} UZS
     </span>
   );
+}
+
+const knownExpenseCategories = [
+  'rent',
+  'salary',
+  'electricity',
+  'internet',
+  'repair',
+  'cleaning',
+  'food_drinks',
+  'marketing',
+  'equipment',
+  'tax',
+  'other',
+] as const;
+
+type KnownExpenseCategory = (typeof knownExpenseCategories)[number];
+
+function isKnownExpenseCategory(category: string): category is KnownExpenseCategory {
+  return knownExpenseCategories.includes(category as KnownExpenseCategory);
+}
+
+const expenseActivityStyles: Record<KnownExpenseCategory, string> = {
+  salary: 'border-violet-200 bg-violet-50 text-violet-700',
+  rent: 'border-amber-200 bg-amber-50 text-amber-700',
+  electricity: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+  internet: 'border-blue-200 bg-blue-50 text-blue-700',
+  repair: 'border-orange-200 bg-orange-50 text-orange-700',
+  cleaning: 'border-teal-200 bg-teal-50 text-teal-700',
+  food_drinks: 'border-pink-200 bg-pink-50 text-pink-700',
+  marketing: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+  equipment: 'border-sky-200 bg-sky-50 text-sky-700',
+  tax: 'border-rose-200 bg-rose-50 text-rose-700',
+  other: 'border-red-200 bg-red-50 text-red-700',
+};
+
+function expenseCategoryStyle(category: string): string {
+  return isKnownExpenseCategory(category)
+    ? expenseActivityStyles[category]
+    : 'border-red-200 bg-red-50 text-red-700';
+}
+
+function activityRowStyle(activity: MoneyReportActivity): string {
+  if (activity.kind === 'income') return 'border-l-emerald-500 bg-emerald-50/20';
+  if (activity.kind === 'debt_payment') return 'border-l-cyan-500 bg-cyan-50/20';
+  if (activity.category === 'salary') return 'border-l-violet-500 bg-violet-50/20';
+  return 'border-l-red-500 bg-red-50/20';
 }
 
 function SummaryCard({
@@ -128,21 +177,18 @@ function PaymentCard({
 export default function ReportsPage() {
   const t = useTranslations('reports');
   const tc = useTranslations('common');
+  const te = useTranslations('expenses.categories');
   const { locale } = useAppLocale();
-  const { selectedClubId, businessDayStartHour } = useClub();
+  const { selectedClubId, businessDayStartHour, role } = useClub();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [period, setPeriod] = useState<ReportPeriod>('today');
-  const [customFrom, setCustomFrom] = useState(() => businessToday);
-  const [customTo, setCustomTo] = useState(() => businessToday);
+  const [range, setRange] = useState(() => ({ from: businessToday, to: businessToday }));
   const [report, setReport] = useState(emptyReport);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const requestSequence = useRef(0);
-
-  const range = useMemo(
-    () => getDashboardRange(period, businessToday, { from: customFrom, to: customTo }),
-    [businessToday, customFrom, customTo, period],
-  );
+  const isOwner = role === 'owner';
 
   const loadReport = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -157,9 +203,9 @@ export default function ReportsPage() {
     setError('');
     const supabase = createClient();
     const [cashResult, expenseResult, debtPaymentResult] = await Promise.all([
-      fetchAllRows<DailyCashRow>(() => supabase
+      fetchAllRows<MoneyReportCashRow>(() => supabase
         .from('daily_cash_entries')
-        .select('date,cash_income,terminal_income,card_income,playstation_income,created_at')
+        .select('id,date,cash_income,terminal_income,card_income,playstation_income,comment,created_at')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to)
@@ -173,9 +219,9 @@ export default function ReportsPage() {
         .lte('date', range.to)
         .order('date', { ascending: true })
         .order('id', { ascending: true })),
-      fetchAllRows<DebtPaymentValueRow>(() => supabase
+      fetchAllRows<MoneyReportDebtPaymentRow>(() => supabase
         .from('debt_payments')
-        .select('id,date,amount,payment_method')
+        .select('id,date,amount,payment_method,comment,created_at')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to)
@@ -194,33 +240,68 @@ export default function ReportsPage() {
     }
 
     setReport(buildMoneyReport(
-      (cashResult.data ?? []) as DailyCashRow[],
+      (cashResult.data ?? []) as MoneyReportCashRow[],
       (expenseResult.data ?? []) as ExpenseRow[],
-      (debtPaymentResult.data ?? []) as DebtPaymentValueRow[],
+      (debtPaymentResult.data ?? []) as MoneyReportDebtPaymentRow[],
     ));
     setLoading(false);
   }, [range.from, range.to, selectedClubId]);
 
   useEffect(() => {
     loadReport().catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : tc('error'));
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
       setLoading(false);
     });
-  }, [loadReport, tc]);
+  }, [loadReport]);
 
   useEffect(() => {
-    setPeriod('today');
-    setCustomFrom(businessToday);
-    setCustomTo(businessToday);
+    setRange({ from: businessToday, to: businessToday });
   }, [businessToday, selectedClubId]);
 
-  const periodOptions: Array<{ value: ReportPeriod; label: string }> = [
-    { value: 'today', label: t('today') },
-    { value: 'yesterday', label: t('yesterday') },
-    { value: 'last7Days', label: t('last7Days') },
-    { value: 'month', label: t('month') },
-    { value: 'custom', label: t('custom') },
-  ];
+  async function handleDeleteActivity(activity: MoneyReportActivity) {
+    if (!isOwner || !selectedClubId || !activity.id || activity.source === 'debt_payment') return;
+    if (!window.confirm(t('deleteEntryConfirm'))) return;
+
+    const table = activity.source === 'daily_cash' ? 'daily_cash_entries' : 'expenses';
+    const key = `${activity.source}:${activity.id}`;
+    setDeletingKey(key);
+    setError('');
+    setSuccess('');
+
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from(table)
+      .delete()
+      .eq('club_id', selectedClubId)
+      .eq('id', activity.id);
+
+    setDeletingKey(null);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setSuccess(t('entryDeleted'));
+    await loadReport();
+  }
+
+  function categoryLabel(activity: MoneyReportActivity): string {
+    if (activity.kind === 'income') return t('dailyClubIncome');
+    if (activity.kind === 'debt_payment') return t('debtPayment');
+    const category = activity.category ?? 'other';
+    return isKnownExpenseCategory(category) ? te(category) : category;
+  }
+
+  function paymentLabel(method: string | null): string {
+    if (!method) return t('mixedPayments');
+    if (method === 'playstation') return t('playstation');
+    if (method === 'cash' || method === 'terminal' || method === 'card') {
+      return tc(`paymentMethods.${method}`);
+    }
+    return method;
+  }
+
   const paymentCards = [
     {
       method: 'cash' as const,
@@ -256,47 +337,23 @@ export default function ReportsPage() {
     <div className="space-y-5">
       <PageHeader title={t('title')} description={t('description')} />
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-          {error}
+      {(error || success) && (
+        <div className={cn(
+          'rounded-lg border px-4 py-3 text-sm font-semibold',
+          error ? 'border-red-200 bg-red-50 text-red-600' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+        )}>
+          {error || success}
         </div>
       )}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap gap-2">
-          {periodOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={period === option.value}
-              onClick={() => setPeriod(option.value)}
-              className={cn(
-                'min-h-10 flex-1 rounded-lg px-3 text-sm font-semibold transition sm:flex-none',
-                period === option.value
-                  ? 'bg-primary-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 border-t border-gray-100 pt-4">
-          <DateRangePicker
-            from={range.from}
-            to={range.to}
-            fromLabel={t('from')}
-            toLabel={t('to')}
-            disabled={period !== 'custom'}
-            className="max-w-3xl"
-            onChange={(nextRange) => {
-              setCustomFrom(nextRange.from);
-              setCustomTo(nextRange.to);
-            }}
-          />
-        </div>
-      </section>
+      <DateRangePicker
+        from={range.from}
+        to={range.to}
+        fromLabel={t('from')}
+        toLabel={t('to')}
+        className="max-w-3xl"
+        onChange={setRange}
+      />
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard
@@ -363,33 +420,139 @@ export default function ReportsPage() {
           <div className="p-8 text-center text-sm font-semibold text-gray-500">{t('noData')}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[1120px] text-sm">
               <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="px-4 py-3 text-left sm:px-5">{t('date')}</th>
-                  <th className="px-4 py-3 text-right">{t('cash')}</th>
-                  <th className="px-4 py-3 text-right">{t('terminal')}</th>
-                  <th className="px-4 py-3 text-right">{t('card')}</th>
-                  <th className="px-4 py-3 text-right">{t('playstation')}</th>
-                  <th className="px-4 py-3 text-right sm:px-5">{t('totalLeft')}</th>
+                  <th className="w-44 px-4 py-3 text-left sm:px-5">{t('dateAndTime')}</th>
+                  <th className="w-32 px-4 py-3 text-left">{t('type')}</th>
+                  <th className="w-48 px-4 py-3 text-left">{t('category')}</th>
+                  <th className="w-44 px-4 py-3 text-right">{t('amount')}</th>
+                  <th className="w-56 px-4 py-3 text-left">{t('paymentMethod')}</th>
+                  <th className="min-w-[240px] px-4 py-3 text-left">{t('descriptionLabel')}</th>
+                  {isOwner && <th className="w-24 px-4 py-3 text-right sm:px-5">{t('actions')}</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {report.days.map((day) => (
-                  <tr key={day.date} className="hover:bg-gray-50/70">
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900 sm:px-5">
-                      {formatDateOnly(day.date, locale)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right"><Amount value={day.cash} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right"><Amount value={day.terminal} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right"><Amount value={day.card} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right"><Amount value={day.playstation} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-gray-950 sm:px-5">
-                      <Amount value={day.total} />
+              {report.days.map((day) => (
+                <tbody key={day.date} className="divide-y divide-gray-100 border-b border-blue-100 last:border-b-0">
+                  <tr className="bg-blue-50/80">
+                    <td colSpan={isOwner ? 7 : 6} className="px-4 py-3 sm:px-5">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-blue-700">{formatDateOnly(day.date, locale)}</span>
+                          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-2 text-xs font-bold text-blue-600 shadow-sm ring-1 ring-blue-100">
+                            {day.activities.length}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                            {t('income')}: {formatCurrency(day.income)} UZS
+                          </span>
+                          <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700 ring-1 ring-red-100">
+                            {t('expenses')}: {formatCurrency(day.expenses)} UZS
+                          </span>
+                          <span className={cn(
+                            'rounded-full px-3 py-1 text-xs font-bold ring-1',
+                            day.total < 0
+                              ? 'bg-rose-50 text-rose-700 ring-rose-100'
+                              : 'bg-blue-50 text-blue-700 ring-blue-100',
+                          )}>
+                            {t('totalLeft')}: {formatCurrency(day.total)} UZS
+                          </span>
+                        </div>
+                      </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
+
+                  {day.activities.map((activity, index) => {
+                    const category = activity.category ?? 'other';
+                    const deleteKey = activity.id ? `${activity.source}:${activity.id}` : null;
+                    const canDelete = isOwner && activity.source !== 'debt_payment' && Boolean(activity.id);
+
+                    return (
+                      <tr
+                        key={activity.id ?? `${day.date}-${activity.source}-${index}`}
+                        className={cn('border-l-4 transition-colors hover:brightness-[0.99]', activityRowStyle(activity))}
+                      >
+                        <td className="whitespace-nowrap px-4 py-4 align-top sm:px-5">
+                          <p className="font-bold text-gray-700">{formatDateOnly(day.date, locale)}</p>
+                          <p className="mt-1 text-xs font-medium text-gray-400">{formatTime(activity.createdAt, locale)}</p>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          <span className={cn(
+                            'inline-flex rounded-full border px-2.5 py-1 text-xs font-bold',
+                            activity.kind === 'income'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : activity.kind === 'debt_payment'
+                                ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
+                                : 'border-red-200 bg-red-50 text-red-700',
+                          )}>
+                            {activity.kind === 'income'
+                              ? t('income')
+                              : activity.kind === 'debt_payment'
+                                ? t('debtPayment')
+                                : t('expense')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          <span className={cn(
+                            'inline-flex rounded-full border px-2.5 py-1 text-xs font-bold',
+                            activity.kind === 'income'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : activity.kind === 'debt_payment'
+                                ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
+                                : expenseCategoryStyle(category),
+                          )}>
+                            {categoryLabel(activity)}
+                          </span>
+                        </td>
+                        <td className={cn(
+                          'whitespace-nowrap px-4 py-4 text-right align-top font-black tabular-nums',
+                          activity.amount < 0 ? 'text-red-600' : 'text-emerald-700',
+                        )}>
+                          {activity.amount > 0 ? '+' : ''}{formatCurrency(activity.amount)} UZS
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          {activity.paymentBreakdown ? (
+                            <div className="flex max-w-[260px] flex-wrap gap-1.5">
+                              {Object.entries(activity.paymentBreakdown)
+                                .filter(([, amount]) => amount !== 0)
+                                .map(([method, amount]) => (
+                                  <span key={method} className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-gray-600 ring-1 ring-gray-200">
+                                    {paymentLabel(method)} {formatCurrency(amount)}
+                                  </span>
+                                ))}
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-gray-600">{paymentLabel(activity.paymentMethod)}</span>
+                          )}
+                        </td>
+                        <td className="max-w-[320px] px-4 py-4 align-top text-sm leading-5 text-gray-600">
+                          {activity.comment || t('noDescription')}
+                        </td>
+                        {isOwner && (
+                          <td className="px-4 py-4 text-right align-top sm:px-5">
+                            {canDelete ? (
+                              <button
+                                type="button"
+                                disabled={deletingKey === deleteKey}
+                                onClick={() => handleDeleteActivity(activity)}
+                                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-gray-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {deletingKey === deleteKey
+                                  ? <LoaderCircle size={15} className="animate-spin" />
+                                  : <Trash2 size={15} />}
+                                {tc('delete')}
+                              </button>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              ))}
             </table>
           </div>
         )}

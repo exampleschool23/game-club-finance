@@ -127,10 +127,10 @@ export default function DailyReportPage() {
 
   useEffect(() => {
     fetchData(date).catch((fetchError) => {
-      setLoadError(fetchError instanceof Error ? fetchError.message : tc('error'));
+      setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
-  }, [date, fetchData, tc]);
+  }, [date, fetchData]);
 
   useEffect(() => {
     setDate(businessToday);

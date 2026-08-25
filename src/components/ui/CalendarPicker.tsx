@@ -211,8 +211,8 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
 
   function selectDate(date: string) {
     if (mode === 'single') {
-      setDraftFrom(date);
-      setDraftTo(date);
+      onApply(date, date);
+      onClose();
       return;
     }
 
@@ -223,17 +223,16 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
     }
 
     const range = clampRange(draftFrom, date);
-    setDraftFrom(range.from);
-    setDraftTo(range.to);
+    onApply(range.from, range.to);
+    onClose();
   }
 
   function selectPreset(presetFrom: string, presetTo: string) {
-    setDraftFrom(presetFrom);
-    setDraftTo(presetTo);
-    setViewMonth(startOfMonth(parseIsoDate(presetFrom)));
+    const range = clampRange(presetFrom, presetTo);
+    onApply(range.from, range.to);
+    onClose();
   }
 
-  const selectionComplete = Boolean(draftFrom && (mode === 'single' || draftTo));
   const secondMonth = addMonths(viewMonth, 1);
 
   return (
@@ -337,23 +336,9 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
             {formatDatePickerValue(draftFrom, locale)}
             {mode === 'range' && draftTo && ` → ${formatDatePickerValue(draftTo, locale)}`}
           </p>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn-secondary min-h-10 flex-1 sm:flex-none">
-              {t('cancel')}
-            </button>
-            <button
-              type="button"
-              disabled={!selectionComplete}
-              onClick={() => {
-                if (!selectionComplete) return;
-                onApply(draftFrom, mode === 'single' ? draftFrom : draftTo);
-                onClose();
-              }}
-              className="btn-primary min-h-10 flex-1 sm:flex-none"
-            >
-              {mode === 'range' ? t('applyRange') : t('applyDate')}
-            </button>
-          </div>
+          <button type="button" onClick={onClose} className="btn-secondary min-h-10 sm:flex-none">
+            {t('cancel')}
+          </button>
         </footer>
       </section>
     </div>

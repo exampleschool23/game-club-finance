@@ -84,9 +84,9 @@ export default function DebtsPage() {
 
   useEffect(() => {
     fetchDebts().catch((fetchError) => {
-      setLoadError(fetchError instanceof Error ? fetchError.message : tc('error'));
+      setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     });
-  }, [fetchDebts, tc]);
+  }, [fetchDebts]);
 
   async function loadPayments(debtId: string) {
     if (!selectedClubId) return;

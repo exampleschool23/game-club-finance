@@ -189,10 +189,10 @@ export default function MoneyTakenPage() {
 
   useEffect(() => {
     loadData().catch((loadError: unknown) => {
-      setError(loadError instanceof Error ? loadError.message : tc('error'));
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
       setLoading(false);
     });
-  }, [loadData, tc]);
+  }, [loadData]);
 
   const sourceAvailable = useMemo(() => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(form.month)) return 0;

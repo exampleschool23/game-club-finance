@@ -179,7 +179,7 @@ export default function DailyCashPage() {
       const { data, error: fetchError } = cashRes;
 
       if (fetchError || barRes.error) {
-        setError(fetchError?.message ?? barRes.error?.message ?? tc('error'));
+        setError(fetchError?.message ?? barRes.error?.message ?? 'Error');
         setEntry(null);
         setForm(emptyForm(date));
         setBarSummary({ sales: 0, profit: 0 });
@@ -215,7 +215,7 @@ export default function DailyCashPage() {
 
       setLoading(false);
     },
-    [selectedClubId, tc],
+    [selectedClubId],
   );
 
   useEffect(() => {
@@ -311,7 +311,7 @@ export default function DailyCashPage() {
   }
 
   async function handleDelete() {
-    if (!entry || locked || !selectedClubId) return;
+    if (!entry || currentRole !== 'owner' || !selectedClubId) return;
 
     const supabase = createClient();
     setSaving(true);
@@ -549,15 +549,17 @@ export default function DailyCashPage() {
                   <Edit3 size={16} />
                   {tc('edit')}
                 </button>
-                <button
-                  type="button"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-                  disabled={saving}
-                  onClick={handleDelete}
-                >
-                  <Trash2 size={16} />
-                  {tc('delete')}
-                </button>
+                {currentRole === 'owner' && (
+                  <button
+                    type="button"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                    disabled={saving}
+                    onClick={handleDelete}
+                  >
+                    <Trash2 size={16} />
+                    {tc('delete')}
+                  </button>
+                )}
               </div>
             )}
           </div>

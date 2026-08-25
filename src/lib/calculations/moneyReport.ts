@@ -12,6 +12,24 @@ export interface MoneyReportPaymentBreakdown {
   left: number;
 }
 
+export interface MoneyReportActivity {
+  id: string | null;
+  source: 'daily_cash' | 'debt_payment' | 'expense';
+  kind: 'income' | 'debt_payment' | 'expense';
+  category: string | null;
+  /** Positive values are collections; negative values are deductions. */
+  amount: number;
+  paymentMethod: string | null;
+  comment: string | null;
+  createdAt: string | null;
+  paymentBreakdown?: {
+    cash: number;
+    terminal: number;
+    card: number;
+    playstation: number;
+  };
+}
+
 export interface MoneyReportDay {
   date: string;
   cash: number;
@@ -19,6 +37,9 @@ export interface MoneyReportDay {
   card: number;
   playstation: number;
   total: number;
+  income: number;
+  expenses: number;
+  activities: MoneyReportActivity[];
 }
 
 export interface MoneyReport {
@@ -27,6 +48,17 @@ export interface MoneyReport {
   totalLeft: number;
   paymentMethods: Record<keyof MoneyLeftByPaymentMethod, MoneyReportPaymentBreakdown>;
   days: MoneyReportDay[];
+}
+
+export interface MoneyReportCashRow extends DailyCashRow {
+  id?: string;
+  comment?: string | null;
+}
+
+export interface MoneyReportDebtPaymentRow extends DebtPaymentValueRow {
+  id?: string;
+  comment?: string | null;
+  created_at?: string;
 }
 
 function paymentBucket(method: string | null | undefined): 'cash' | 'terminal' | 'card' {
@@ -79,10 +111,69 @@ function buildPaymentMethods(
   };
 }
 
-export function buildMoneyReport(
-  cashRows: DailyCashRow[],
+function buildDailyActivities(
+  cashRows: MoneyReportCashRow[],
   expenseRows: ExpenseRow[],
-  debtPaymentRows: DebtPaymentValueRow[] = [],
+  debtPaymentRows: MoneyReportDebtPaymentRow[],
+): MoneyReportActivity[] {
+  const activities: MoneyReportActivity[] = [];
+
+  cashRows.forEach((row) => {
+    const paymentBreakdown = {
+      cash: Number(row.cash_income ?? 0),
+      terminal: Number(row.terminal_income ?? 0),
+      card: Number(row.card_income ?? 0),
+      playstation: Number(row.playstation_income ?? 0),
+    };
+    activities.push({
+      id: row.id ?? null,
+      source: 'daily_cash',
+      kind: 'income',
+      category: null,
+      amount: Object.values(paymentBreakdown).reduce((sum, amount) => sum + amount, 0),
+      paymentMethod: null,
+      comment: row.comment ?? null,
+      createdAt: row.created_at ?? null,
+      paymentBreakdown,
+    });
+  });
+
+  debtPaymentRows.forEach((row) => {
+    activities.push({
+      id: row.id ?? null,
+      source: 'debt_payment',
+      kind: 'debt_payment',
+      category: null,
+      amount: Number(row.amount ?? 0),
+      paymentMethod: row.payment_method,
+      comment: row.comment ?? null,
+      createdAt: row.created_at ?? null,
+    });
+  });
+
+  expenseRows
+    .filter((row) => row.payment_source !== 'bar')
+    .sort((rowA, rowB) => rowA.created_at.localeCompare(rowB.created_at))
+    .forEach((row) => {
+      activities.push({
+        id: row.id,
+        source: 'expense',
+        kind: 'expense',
+        category: row.category || 'other',
+        amount: -Number(row.amount ?? 0),
+        paymentMethod: row.payment_method ?? null,
+        comment: row.comment,
+        createdAt: row.created_at,
+      });
+    });
+
+  return activities;
+}
+
+export function buildMoneyReport(
+  cashRows: MoneyReportCashRow[],
+  expenseRows: ExpenseRow[],
+  debtPaymentRows: MoneyReportDebtPaymentRow[] = [],
 ): MoneyReport {
   const paymentMethods = buildPaymentMethods(cashRows, expenseRows, debtPaymentRows);
   const totalCollected = Object.values(paymentMethods)
@@ -103,6 +194,11 @@ export function buildMoneyReport(
       expenseRows.filter((row) => row.date === date),
       debtPaymentRows.filter((row) => row.date === date),
     );
+    const activities = buildDailyActivities(
+      cashRows.filter((row) => row.date === date),
+      expenseRows.filter((row) => row.date === date),
+      debtPaymentRows.filter((row) => row.date === date),
+    );
     const day = {
       date,
       cash: dayMethods.cash.left,
@@ -110,6 +206,13 @@ export function buildMoneyReport(
       card: dayMethods.card.left,
       playstation: dayMethods.playstation.left,
       total: Object.values(dayMethods).reduce((sum, method) => sum + method.left, 0),
+      income: activities
+        .filter((activity) => activity.amount > 0)
+        .reduce((sum, activity) => sum + activity.amount, 0),
+      expenses: activities
+        .filter((activity) => activity.kind === 'expense')
+        .reduce((sum, activity) => sum + Math.abs(activity.amount), 0),
+      activities,
     };
 
     return day;

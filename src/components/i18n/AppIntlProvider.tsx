@@ -1,7 +1,7 @@
 'use client';
 
 import { NextIntlClientProvider } from 'next-intl';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import en from '@/messages/en.json';
 import ru from '@/messages/ru.json';
 import uz from '@/messages/uz.json';
@@ -32,19 +32,17 @@ export function AppIntlProvider({
 
   setFormatterLocale(locale);
 
+  const setLocale = useCallback((nextLocale: AppLocale) => {
+    setFormatterLocale(nextLocale);
+    setLocaleState(nextLocale);
+    document.documentElement.lang = nextLocale;
+    document.cookie = `locale=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
+    document.cookie = `NEXT_LOCALE=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
+  }, []);
+
   const value = useMemo<AppLocaleContextValue>(
-    () => ({
-      locale,
-      setLocale(nextLocale) {
-        setFormatterLocale(nextLocale);
-        setLocaleState(nextLocale);
-        document.documentElement.lang = nextLocale;
-        document.cookie = `locale=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
-        document.cookie = `NEXT_LOCALE=${nextLocale}; path=/; max-age=31536000; samesite=lax`;
-        window.dispatchEvent(new CustomEvent('app-locale-change', { detail: nextLocale }));
-      },
-    }),
-    [locale],
+    () => ({ locale, setLocale }),
+    [locale, setLocale],
   );
 
   return (

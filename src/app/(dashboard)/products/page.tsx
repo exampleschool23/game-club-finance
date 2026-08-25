@@ -127,9 +127,9 @@ export default function ProductsPage() {
   useEffect(() => {
     loadProducts().catch((loadError) => {
       setProducts([]);
-      setError(loadError instanceof Error ? loadError.message : tc('error'));
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
     });
-  }, [loadProducts, tc]);
+  }, [loadProducts]);
 
   const categoryOptions = useMemo(() => {
     return Array.from(new Set(products.map((product) => productCategory(product.category)).filter(Boolean)))
