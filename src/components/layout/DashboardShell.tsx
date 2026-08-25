@@ -3,13 +3,19 @@
 // Dashboard layout shell and shared club/date context.
 
 import { useCallback, useEffect, useMemo, useState, createContext, useContext } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Clock3, Gamepad2, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { DashboardContentLoading } from './DashboardContentLoading';
 import { createClient } from '@/lib/supabase/client';
 import type { Club, ClubMembership, UserRole } from '@/types';
+import {
+  canAccessPath,
+  defaultPathForAccess,
+  featureAccessForMembership,
+  type FeatureKey,
+} from '@/lib/permissions';
 import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
 
 interface DashboardShellProps {
@@ -30,6 +36,7 @@ interface DateContextValue {
 interface ClubOption {
   club: Club;
   role: UserRole;
+  featureAccess: FeatureKey[] | null;
 }
 
 interface ClubContextValue {
@@ -37,6 +44,7 @@ interface ClubContextValue {
   selectedClub: Club | null;
   memberships: ClubOption[];
   role: UserRole;
+  featureAccess: FeatureKey[];
   businessDayStartHour: number;
   loading: boolean;
   setSelectedClubId: (clubId: string) => void;
@@ -53,6 +61,7 @@ export const ClubContext = createContext<ClubContextValue>({
   selectedClub: null,
   memberships: [],
   role: 'viewer',
+  featureAccess: [],
   businessDayStartHour: 0,
   loading: true,
   setSelectedClubId: () => {},
@@ -131,6 +140,9 @@ function membershipOptions(rows: ClubMembership[]): ClubOption[] {
     .map((membership) => ({
       club: relatedClub(membership.clubs),
       role: isUserRole(membership.role) ? membership.role : 'viewer',
+      featureAccess: Array.isArray(membership.feature_access)
+        ? membership.feature_access as FeatureKey[]
+        : null,
     }))
     .filter((membership): membership is ClubOption => Boolean(membership.club?.is_active))
     .sort((a, b) => a.club.name.localeCompare(b.club.name));
@@ -145,6 +157,8 @@ export function DashboardShell({
   children,
 }: DashboardShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const tc = useTranslations('common');
   const initialMemberships = useMemo(() => membershipOptions(initialMembershipRows), [initialMembershipRows]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayIso);
@@ -157,12 +171,17 @@ export function DashboardShell({
       : initialMemberships[0]?.club.id ?? '',
   );
   const [clubLoading, setClubLoading] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState('');
 
   const selectedMembership = useMemo(
     () => memberships.find((membership) => membership.club.id === selectedClubId) ?? null,
     [memberships, selectedClubId],
   );
   const role = selectedMembership?.role ?? profileRole;
+  const featureAccess = useMemo(
+    () => featureAccessForMembership(role, selectedMembership?.featureAccess),
+    [role, selectedMembership?.featureAccess],
+  );
   const selectedClub = selectedMembership?.club ?? null;
   const businessDayStartHour = normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour);
 
@@ -189,7 +208,7 @@ export function DashboardShell({
         .maybeSingle(),
       supabase
         .from('club_memberships')
-        .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
+        .select('club_id, role, feature_access, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true }),
     ]);
@@ -255,9 +274,24 @@ export function DashboardShell({
     }
   }, [businessDayStartHour, selectedClubId]);
 
-  function handleNavigate() {
+  useEffect(() => {
+    setNavigatingTo('');
+  }, [pathname]);
+
+  function handleNavigate(href: string) {
+    if (href !== pathname) setNavigatingTo(href);
     setSidebarOpen(false);
   }
+
+  const navigationPending = Boolean(navigatingTo && navigatingTo !== pathname);
+  const pathAllowed = canAccessPath(role, selectedMembership?.featureAccess, pathname);
+  const fallbackPath = pathAllowed ? null : defaultPathForAccess(role, selectedMembership?.featureAccess);
+
+  useEffect(() => {
+    if (memberships.length === 0 || pathAllowed || !fallbackPath || fallbackPath === pathname) return;
+    setNavigatingTo(fallbackPath);
+    router.replace(fallbackPath);
+  }, [fallbackPath, memberships.length, pathAllowed, pathname, router]);
 
   const clubContextValue = useMemo(
     () => ({
@@ -265,12 +299,13 @@ export function DashboardShell({
       selectedClub,
       memberships,
       role,
+      featureAccess,
       businessDayStartHour,
       loading: clubLoading,
       setSelectedClubId,
       refreshClubs,
     }),
-    [businessDayStartHour, clubLoading, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
+    [businessDayStartHour, clubLoading, featureAccess, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
   );
 
   return (
@@ -282,6 +317,8 @@ export function DashboardShell({
           fullName={fullName}
           memberships={memberships}
           selectedClubId={selectedClubId}
+          activePathname={navigatingTo || pathname}
+          featureAccess={featureAccess}
           onSelectClub={setSelectedClubId}
           mobileOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -310,10 +347,16 @@ export function DashboardShell({
 
           <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="mx-auto w-full max-w-[1680px] px-3 pb-5 pt-16 sm:px-5 md:px-6 xl:px-8 xl:py-6 2xl:px-10">
-              {clubLoading ? (
+              {clubLoading || navigationPending || (!pathAllowed && Boolean(fallbackPath)) ? (
                 <DashboardContentLoading />
               ) : memberships.length === 0 ? (
                 <PendingApproval fullName={fullName} />
+              ) : !pathAllowed ? (
+                <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-white p-8 text-center shadow-sm">
+                  <ShieldCheck className="mx-auto text-amber-500" size={32} />
+                  <h1 className="mt-4 text-xl font-bold text-gray-950">{tc('accessDeniedTitle')}</h1>
+                  <p className="mt-2 text-sm text-gray-600">{tc('accessDeniedDescription')}</p>
+                </div>
               ) : (
                 children
               )}

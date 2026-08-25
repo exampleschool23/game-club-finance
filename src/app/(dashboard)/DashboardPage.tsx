@@ -236,6 +236,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const requestSequence = useRef(0);
+  const hasMountedRangeSync = useRef(false);
   const t = useTranslations('dashboard');
 
   const period = useMemo(
@@ -244,6 +245,11 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
+    if (!hasMountedRangeSync.current) {
+      hasMountedRangeSync.current = true;
+      return;
+    }
+
     const params = new URLSearchParams(searchParams.toString());
     params.delete('period');
     params.set('from', range.from);
@@ -271,7 +277,7 @@ export default function DashboardPage() {
     const previousRange = getDashboardComparisonRange(period, range);
     const lastMonthRange = getDashboardRange('lastMonth', businessToday);
     const inventoryComparisonRange = period === 'lastMonth' ? previousRange : lastMonthRange;
-    const inventorySnapshotRange = period === 'lastMonth'
+    const inventoryQueryRange = period === 'lastMonth'
       ? { from: previousRange.from, to: range.to }
       : lastMonthRange;
 
@@ -282,14 +288,16 @@ export default function DashboardPage() {
         p_range_to: range.to,
         p_previous_from: previousRange.from,
         p_previous_to: previousRange.to,
-        p_inventory_from: inventorySnapshotRange.from,
-        p_inventory_to: inventorySnapshotRange.to,
+        p_inventory_from: inventoryComparisonRange.from,
+        p_inventory_to: inventoryComparisonRange.to,
       });
 
       if (requestId !== requestSequence.current) return;
 
       if (!snapshotResult.error) {
-        const snapshot = snapshotResult.data as Omit<DashboardSnapshotPayload, 'inventoryRows'>;
+        const snapshot = snapshotResult.data as Omit<DashboardSnapshotPayload, 'inventoryRows'> & {
+          inventoryRows?: InventorySnapshotRow[];
+        };
         setData(buildDashboardDataFromSnapshot({
           period,
           range,
@@ -297,7 +305,7 @@ export default function DashboardPage() {
           inventoryComparisonRange,
           payload: {
             ...snapshot,
-            inventoryRows: snapshot.stockRows as unknown as InventorySnapshotRow[],
+            inventoryRows: snapshot.inventoryRows ?? snapshot.stockRows as unknown as InventorySnapshotRow[],
           },
         }));
         markPerformanceRpcAvailable();
@@ -401,8 +409,8 @@ export default function DashboardPage() {
           .from('daily_stock_counts')
           .select('product_id,date,closing_stock,cost_price,products(tracks_inventory)')
           .eq('club_id', selectedClubId)
-          .gte('date', inventorySnapshotRange.from)
-          .lte('date', inventorySnapshotRange.to)
+          .gte('date', inventoryQueryRange.from)
+          .lte('date', inventoryQueryRange.to)
           .order('date', { ascending: true })
           .order('product_id', { ascending: true }),
       ),

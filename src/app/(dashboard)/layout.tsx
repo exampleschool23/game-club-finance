@@ -29,7 +29,7 @@ export default async function DashboardLayout({
       .maybeSingle(),
     supabase
       .from('club_memberships')
-      .select('club_id,user_id,role,created_at,updated_at,clubs(id,name,address,business_day_start_hour,is_active,created_at,updated_at)')
+      .select('club_id,user_id,role,feature_access,created_at,updated_at,clubs(id,name,address,business_day_start_hour,is_active,created_at,updated_at)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true }),
   ]);

@@ -25,6 +25,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
+import { canAccessFeature, type FeatureKey } from '@/lib/permissions';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface SidebarClubOption {
@@ -39,6 +40,8 @@ interface SidebarProps {
   selectedClubId?: string;
   onSelectClub?: (clubId: string) => void;
   mobileOpen?: boolean;
+  activePathname?: string;
+  featureAccess?: FeatureKey[];
   onClose?: () => void;
   onNavigate?: (href: string) => void;
 }
@@ -75,6 +78,7 @@ function NavLink({
     <Link
       href={href}
       onClick={handleClick}
+      aria-current={active ? 'page' : undefined}
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
         active
@@ -95,11 +99,14 @@ export function Sidebar({
   selectedClubId = '',
   onSelectClub,
   mobileOpen,
+  activePathname,
+  featureAccess = [],
   onClose,
   onNavigate,
 }: SidebarProps) {
   const t = useTranslations('nav');
-  const pathname = usePathname();
+  const currentPathname = usePathname();
+  const pathname = activePathname ?? currentPathname;
   const router = useRouter();
   const selectedClub = memberships.find((membership) => membership.club.id === selectedClubId)?.club ?? null;
 
@@ -114,69 +121,69 @@ export function Sidebar({
       href: '/',
       icon: LayoutDashboard,
       label: t('dashboard'),
-      roles: ['owner', 'admin', 'viewer'],
+      feature: 'dashboard' as FeatureKey,
     },
     {
       href: '/daily-cash',
       icon: Wallet,
       label: t('dailyCash'),
-      roles: ['owner', 'admin'],
+      feature: 'daily_cash' as FeatureKey,
     },
     {
       href: '/closing-stock',
       icon: Archive,
       label: t('closingStock'),
-      roles: ['owner', 'admin'],
+      feature: 'closing_stock' as FeatureKey,
     },
     {
       href: '/stock-purchase',
       icon: ShoppingCart,
       label: t('stockPurchase'),
-      roles: ['owner', 'admin'],
+      feature: 'stock_purchase' as FeatureKey,
     },
     {
       href: '/expenses',
       icon: MinusCircle,
       label: t('expenses'),
-      roles: ['owner', 'admin'],
+      feature: 'expenses' as FeatureKey,
     },
     {
       href: '/reports',
       icon: BarChart3,
       label: t('reports'),
-      roles: ['owner', 'admin', 'viewer'],
+      feature: 'reports' as FeatureKey,
     },
     {
       href: '/money-taken',
       icon: CircleDollarSign,
       label: t('moneyTaken'),
-      roles: ['owner', 'admin', 'viewer'],
+      feature: 'owner_profit' as FeatureKey,
     },
     {
       href: '/debts',
       icon: Users,
       label: t('debts'),
-      roles: ['owner', 'admin', 'viewer'],
+      feature: 'debts' as FeatureKey,
     },
     {
       href: '/products',
       icon: Package,
       label: t('inventory'),
-      roles: ['owner', 'admin', 'viewer'],
+      feature: 'inventory' as FeatureKey,
     },
     {
       href: '/team',
       icon: Shield,
       label: t('team'),
-      roles: ['owner'],
+      feature: 'team' as FeatureKey,
     },
     {
       href: '/settings',
       icon: Settings,
       label: t('settings'),
-      roles: ['owner', 'admin', 'viewer'],
+      feature: 'settings' as FeatureKey,
     },
-  ].filter((l) => l.roles.includes(role));
+  ].filter((link) => canAccessFeature(role, featureAccess, link.feature));
 
   const initials = fullName
     .split(' ')

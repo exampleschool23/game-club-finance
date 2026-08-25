@@ -9,8 +9,15 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
-import { ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
+import { ChevronDown, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
 import type { Club, Profile, UserRole } from '@/types';
+import {
+  FEATURE_DEFINITIONS,
+  featureAccessForMembership,
+  normalizeFeatureAccess,
+  updateFeatureAccessSelection,
+  type FeatureKey,
+} from '@/lib/permissions';
 
 const ROLES: UserRole[] = ['owner', 'admin', 'viewer'];
 
@@ -18,6 +25,7 @@ interface TeamMembership {
   clubId: string;
   clubName: string;
   role: UserRole;
+  featureAccess: FeatureKey[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +60,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessDraft>>({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [expandedFeatureAccessId, setExpandedFeatureAccessId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -69,7 +78,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     const [membershipRes, profileRes, clubRes] = await Promise.all([
       supabase
         .from('club_memberships')
-        .select('club_id, user_id, role, created_at, updated_at')
+        .select('club_id, user_id, role, feature_access, created_at, updated_at')
         .order('created_at', { ascending: true }),
       supabase
         .from('profiles')
@@ -98,6 +107,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       club_id: string;
       user_id: string;
       role: string;
+      feature_access: string[] | null;
       created_at: string;
       updated_at: string;
     }>) {
@@ -109,6 +119,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         clubId: club.id,
         clubName: club.name,
         role: normalizeRole(membership.role),
+        featureAccess: normalizeFeatureAccess(membership.feature_access),
         createdAt: membership.created_at,
         updatedAt: membership.updated_at,
       });
@@ -356,6 +367,56 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     await loadProfiles();
   }
 
+  async function updateMembershipFeatureAccess(
+    profile: TeamMember,
+    membership: TeamMembership,
+    featureKey: FeatureKey,
+    enabled: boolean,
+  ) {
+    const definition = FEATURE_DEFINITIONS.find((feature) => feature.key === featureKey);
+    if (membership.role === 'owner' || (definition && 'ownerOnly' in definition && definition.ownerOnly)) return;
+
+    const currentAccess = featureAccessForMembership(membership.role, membership.featureAccess);
+    const nextAccess = updateFeatureAccessSelection(currentAccess, featureKey, enabled);
+    const membershipSavingId = `${profile.id}:${membership.clubId}:features`;
+
+    setSavingId(membershipSavingId);
+    setError('');
+    setMessage('');
+    setProfiles((current) => current.map((member) => member.id !== profile.id
+      ? member
+      : {
+          ...member,
+          memberships: member.memberships.map((item) => item.clubId === membership.clubId
+            ? { ...item, featureAccess: nextAccess }
+            : item),
+        }));
+
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from('club_memberships')
+      .update({ feature_access: nextAccess, updated_at: new Date().toISOString() })
+      .eq('club_id', membership.clubId)
+      .eq('user_id', profile.id);
+
+    setSavingId(null);
+    if (updateError) {
+      setProfiles((current) => current.map((member) => member.id !== profile.id
+        ? member
+        : {
+            ...member,
+            memberships: member.memberships.map((item) => item.clubId === membership.clubId
+              ? { ...item, featureAccess: membership.featureAccess }
+              : item),
+          }));
+      setError(updateError.message);
+      return;
+    }
+
+    setMessage(t('featureAccessSaved'));
+    if (profile.id === currentUserId) await refreshClubs();
+  }
+
   function renderAccessControls(profile: TeamMember, buttonLabel: string) {
     const availableClubs = availableClubsForProfile(profile);
     const draft = draftForProfile(profile);
@@ -411,41 +472,98 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
     return (
       <div className="flex flex-col gap-2">
-        {profile.memberships.map((membership) => (
+        {profile.memberships.map((membership) => {
+          const membershipId = `${profile.id}:${membership.clubId}`;
+          const featureAccess = featureAccessForMembership(membership.role, membership.featureAccess);
+          const expanded = expandedFeatureAccessId === membershipId;
+          const savingFeatures = savingId === `${membershipId}:features`;
+
+          return (
           <div
             key={membership.clubId}
-            className="flex max-w-full flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center"
+            className="max-w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
           >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-gray-900">{membership.clubName}</p>
-              <p className="text-xs text-gray-400">{formatDateTime(membership.createdAt, locale)}</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-gray-900">{membership.clubName}</p>
+                <p className="text-xs text-gray-400">{formatDateTime(membership.createdAt, locale)}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="input-field h-9 w-32"
+                  value={membership.role}
+                  disabled={isSavingProfile(profile.id)}
+                  onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
+                >
+                  {ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {t(`roles.${role}`)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition ${expanded ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-200'}`}
+                  onClick={() => setExpandedFeatureAccessId(expanded ? null : membershipId)}
+                  aria-expanded={expanded}
+                >
+                  <ShieldCheck size={15} />
+                  {t('featureAccess')}
+                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">{featureAccess.length}</span>
+                  <ChevronDown size={14} className={expanded ? 'rotate-180' : ''} />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger-100 text-danger-600 transition hover:bg-danger-50 disabled:opacity-40"
+                  disabled={isSavingProfile(profile.id) || profile.id === currentUserId}
+                  onClick={() => removeClubAccess(profile, membership)}
+                  aria-label={t('removeClubAccess', { club: membership.clubName })}
+                  title={t('removeClubAccess', { club: membership.clubName })}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                className="input-field h-9 w-32"
-                value={membership.role}
-                disabled={isSavingProfile(profile.id)}
-                onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
-              >
-                {ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {t(`roles.${role}`)}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger-100 text-danger-600 transition hover:bg-danger-50 disabled:opacity-40"
-                disabled={isSavingProfile(profile.id) || profile.id === currentUserId}
-                onClick={() => removeClubAccess(profile, membership)}
-                aria-label={t('removeClubAccess', { club: membership.clubName })}
-                title={t('removeClubAccess', { club: membership.clubName })}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
+
+            {expanded ? (
+              <div className="mt-3 border-t border-gray-200 pt-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-600">{t('featureAccess')}</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
+                </p>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {FEATURE_DEFINITIONS.map((feature) => {
+                    const ownerOnly = 'ownerOnly' in feature && feature.ownerOnly;
+                    const disabled = savingFeatures || membership.role === 'owner' || ownerOnly;
+                    const checked = membership.role === 'owner'
+                      ? true
+                      : !ownerOnly && featureAccess.includes(feature.key);
+
+                    return (
+                      <label
+                        key={feature.key}
+                        className={`flex gap-2 rounded-lg border p-3 transition ${checked ? 'border-primary-200 bg-primary-50/60' : 'border-gray-200 bg-white'} ${disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:border-primary-200'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 accent-primary-600"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={(event) => updateMembershipFeatureAccess(profile, membership, feature.key, event.target.checked)}
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold text-gray-900">{t(`features.${feature.labelKey}`)}</span>
+                          <span className="mt-0.5 block text-xs leading-4 text-gray-500">{t(`features.${feature.descriptionKey}`)}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
