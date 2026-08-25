@@ -27,6 +27,7 @@ import {
   type MoneyReportPaymentBreakdown,
 } from '@/lib/calculations/moneyReport';
 import {
+  getDashboardRange,
   type ExpenseRow,
 } from '@/lib/calculations/dashboardMetrics';
 import { formatCurrency, formatDateOnly, formatTime } from '@/lib/formatters';
@@ -181,7 +182,7 @@ export default function ReportsPage() {
   const { locale } = useAppLocale();
   const { selectedClubId, businessDayStartHour, role } = useClub();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [range, setRange] = useState(() => ({ from: businessToday, to: businessToday }));
+  const [range, setRange] = useState(() => getDashboardRange('month', businessToday));
   const [report, setReport] = useState(emptyReport);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -255,7 +256,7 @@ export default function ReportsPage() {
   }, [loadReport]);
 
   useEffect(() => {
-    setRange({ from: businessToday, to: businessToday });
+    setRange(getDashboardRange('month', businessToday));
   }, [businessToday, selectedClubId]);
 
   async function handleDeleteActivity(activity: MoneyReportActivity) {

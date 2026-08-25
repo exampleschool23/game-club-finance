@@ -2,7 +2,7 @@
 
 // Route: /expenses
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -19,6 +19,8 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CreditCard,
   LoaderCircle,
   MinusCircle,
@@ -35,6 +37,7 @@ const CATEGORIES = [
 ];
 const CUSTOM_CATEGORY_VALUE = '__custom__';
 const PAYMENT_SOURCES = ['game_club', 'bar'] as const;
+const EXPENSES_PAGE_SIZE = 10;
 
 function normalizeCustomCategory(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
@@ -47,7 +50,11 @@ export default function ExpensesPage() {
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [todaySummary, setTodaySummary] = useState({ count: 0, total: 0 });
+  const [expensePage, setExpensePage] = useState(1);
+  const [expenseCount, setExpenseCount] = useState(0);
+  const [expensesLoading, setExpensesLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
@@ -62,21 +69,18 @@ export default function ExpensesPage() {
     comment: '',
   });
   const isOwner = currentRole === 'owner';
+  const pageLoadSequence = useRef(0);
+  const metadataLoadSequence = useRef(0);
 
   useEffect(() => {
     setForm((prev) => ({ ...prev, date: businessToday }));
+    setExpensePage(1);
+    setExpenses([]);
+    setExpenseCount(0);
+    setCustomCategories([]);
+    setTodaySummary({ count: 0, total: 0 });
+    setExpensesLoading(true);
   }, [businessToday, selectedClubId]);
-
-  const customCategories = useMemo(() => {
-    const known = new Set(CATEGORIES);
-    return Array.from(
-      new Set(
-        expenses
-          .map((expense) => expense.category)
-          .filter((category) => category && !known.has(category)),
-      ),
-    ).sort((a, b) => a.localeCompare(b));
-  }, [expenses]);
 
   function categoryLabel(category: string): string {
     if (CATEGORIES.includes(category)) {
@@ -85,22 +89,63 @@ export default function ExpensesPage() {
     return category;
   }
 
-  const loadExpenses = useCallback(async () => {
+  const loadExpensePage = useCallback(async (pageNumber: number) => {
+    const requestId = ++pageLoadSequence.current;
+
     if (!selectedClubId) {
       setExpenses([]);
+      setExpenseCount(0);
+      setExpensesLoading(false);
+      return;
+    }
+
+    setExpensesLoading(true);
+    setError('');
+    const from = (pageNumber - 1) * EXPENSES_PAGE_SIZE;
+    const to = from + EXPENSES_PAGE_SIZE - 1;
+    const supabase = createClient();
+    const recentResult = await supabase
+      .from('expenses')
+      .select('*', { count: 'exact' })
+      .eq('club_id', selectedClubId)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to);
+
+    if (requestId !== pageLoadSequence.current) return;
+
+    if (recentResult.error) {
+      setExpenses([]);
+      setError(recentResult.error.message);
+      setExpensesLoading(false);
+      return;
+    }
+
+    const totalCount = recentResult.count ?? 0;
+    const pageCount = Math.max(1, Math.ceil(totalCount / EXPENSES_PAGE_SIZE));
+    if (pageNumber > pageCount) {
+      setExpensePage(pageCount);
+      return;
+    }
+
+    setExpenses(recentResult.data ?? []);
+    setExpenseCount(totalCount);
+    setExpensesLoading(false);
+  }, [selectedClubId]);
+
+  const loadExpenseMetadata = useCallback(async () => {
+    const requestId = ++metadataLoadSequence.current;
+
+    if (!selectedClubId) {
+      setCustomCategories([]);
       setTodaySummary({ count: 0, total: 0 });
       return;
     }
 
     const supabase = createClient();
-    const [recentResult, todayResult] = await Promise.all([
-      supabase
-        .from('expenses')
-        .select('*')
-        .eq('club_id', selectedClubId)
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(50),
+    setError('');
+    const [todayResult, categoriesResult] = await Promise.all([
       fetchAllRows<Pick<Expense, 'amount'>>(() =>
         supabase
           .from('expenses')
@@ -108,16 +153,29 @@ export default function ExpensesPage() {
           .eq('club_id', selectedClubId)
           .eq('date', businessToday),
       ),
+      fetchAllRows<Pick<Expense, 'category'>>(() =>
+        supabase
+          .from('expenses')
+          .select('category')
+          .eq('club_id', selectedClubId),
+      ),
     ]);
-    const loadError = recentResult.error ?? todayResult.error;
+
+    if (requestId !== metadataLoadSequence.current) return;
+
+    const loadError = todayResult.error ?? categoriesResult.error;
     if (loadError) {
-      setExpenses([]);
       setTodaySummary({ count: 0, total: 0 });
       setError(loadError.message);
       return;
     }
-    setError('');
-    setExpenses(recentResult.data ?? []);
+
+    const knownCategories = new Set(CATEGORIES);
+    setCustomCategories(Array.from(new Set(
+      (categoriesResult.data ?? [])
+        .map((expense) => expense.category)
+        .filter((category) => category && !knownCategories.has(category)),
+    )).sort((a, b) => a.localeCompare(b)));
     setTodaySummary({
       count: todayResult.data?.length ?? 0,
       total: (todayResult.data ?? []).reduce((total, expense) => total + Number(expense.amount), 0),
@@ -125,11 +183,18 @@ export default function ExpensesPage() {
   }, [businessToday, selectedClubId]);
 
   useEffect(() => {
-    loadExpenses().catch((loadError) => {
+    loadExpensePage(expensePage).catch((loadError) => {
       setExpenses([]);
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      setExpensesLoading(false);
     });
-  }, [loadExpenses]);
+  }, [expensePage, loadExpensePage]);
+
+  useEffect(() => {
+    loadExpenseMetadata().catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    });
+  }, [loadExpenseMetadata]);
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -181,7 +246,12 @@ export default function ExpensesPage() {
     } else {
       setSuccess(t('success'));
       setForm({ date: businessToday, amount: '', category: 'other', custom_category: '', payment_method: 'cash', payment_source: 'game_club', comment: '' });
-      await loadExpenses();
+      if (expensePage === 1) {
+        await Promise.all([loadExpensePage(1), loadExpenseMetadata()]);
+      } else {
+        setExpensePage(1);
+        await loadExpenseMetadata();
+      }
     }
   }
 
@@ -207,8 +277,18 @@ export default function ExpensesPage() {
     }
 
     setSuccess(t('deleteSuccess'));
-    await loadExpenses();
+    const nextPage = expenses.length === 1 && expensePage > 1 ? expensePage - 1 : expensePage;
+    if (nextPage === expensePage) {
+      await Promise.all([loadExpensePage(nextPage), loadExpenseMetadata()]);
+    } else {
+      setExpensePage(nextPage);
+      await loadExpenseMetadata();
+    }
   }
+
+  const expensePageCount = Math.max(1, Math.ceil(expenseCount / EXPENSES_PAGE_SIZE));
+  const expenseRangeFrom = expenseCount === 0 ? 0 : (expensePage - 1) * EXPENSES_PAGE_SIZE + 1;
+  const expenseRangeTo = Math.min(expensePage * EXPENSES_PAGE_SIZE, expenseCount);
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -405,14 +485,21 @@ export default function ExpensesPage() {
             <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-4 py-4 sm:px-5">
               <div>
                 <h2 className="font-bold text-gray-950">{t('recentExpenses')}</h2>
-                <p className="mt-0.5 text-xs text-gray-500">{t('latestCount', { count: expenses.length })}</p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {t('paginationShowing', { from: expenseRangeFrom, to: expenseRangeTo, total: expenseCount })}
+                </p>
               </div>
               <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-gray-100 px-2.5 text-xs font-bold text-gray-600">
-                {expenses.length}
+                {expenseCount}
               </span>
             </div>
 
-            {expenses.length === 0 ? (
+            {expensesLoading ? (
+              <div className="flex min-h-36 items-center justify-center gap-2 p-5 text-sm font-semibold text-gray-500">
+                <LoaderCircle size={18} className="animate-spin" />
+                {tc('loading')}
+              </div>
+            ) : expenses.length === 0 ? (
               <div className="p-5">
                 <EmptyState icon={MinusCircle} title={tc('noData')} />
               </div>
@@ -510,6 +597,35 @@ export default function ExpensesPage() {
                       )}
                     </article>
                   ))}
+                </div>
+
+                <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                  <p className="text-sm font-medium text-gray-600">
+                    {t('paginationShowing', { from: expenseRangeFrom, to: expenseRangeTo, total: expenseCount })}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary flex min-h-10 flex-1 items-center justify-center gap-2 border border-gray-200 bg-white px-3 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                      disabled={expensePage <= 1 || expensesLoading}
+                      onClick={() => setExpensePage((page) => Math.max(1, page - 1))}
+                    >
+                      <ChevronLeft size={16} />
+                      {t('previousPage')}
+                    </button>
+                    <span className="min-w-20 text-center text-sm font-bold text-gray-700">
+                      {t('paginationPage', { page: expensePage, total: expensePageCount })}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-secondary flex min-h-10 flex-1 items-center justify-center gap-2 border border-gray-200 bg-white px-3 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                      disabled={expensePage >= expensePageCount || expensesLoading}
+                      onClick={() => setExpensePage((page) => Math.min(expensePageCount, page + 1))}
+                    >
+                      {t('nextPage')}
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
               </>
             )}

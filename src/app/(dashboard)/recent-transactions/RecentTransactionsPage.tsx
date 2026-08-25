@@ -4,20 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
+import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import {
   RecentTransactionsTable,
   type RecentTransactionRow,
 } from '@/components/dashboard/RecentTransactionsTable';
 import { createClient } from '@/lib/supabase/client';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
-import { useClub, useDashboardDate } from '@/components/layout/DashboardShell';
+import { useClub } from '@/components/layout/DashboardShell';
 import { formatDateOnly, formatTime } from '@/lib/formatters';
 import { todayIso } from '@/lib/utils';
 import {
   getDashboardRange,
   type DailyCashRow,
-  type DashboardPeriod,
   type ExpenseRow,
   type StockCountRow,
 } from '@/lib/calculations/dashboardMetrics';
@@ -131,25 +130,16 @@ export default function RecentTransactionsPage() {
   const t = useTranslations('dashboard');
   const te = useTranslations('expenses');
   const { locale } = useAppLocale();
-  const { selectedDate } = useDashboardDate();
   const { selectedClubId, businessDayStartHour } = useClub();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [period, setPeriod] = useState<DashboardPeriod>('month');
-  const [customFrom, setCustomFrom] = useState(() => businessToday);
-  const [customTo, setCustomTo] = useState(() => businessToday);
+  const [range, setRange] = useState(() => getDashboardRange('month', businessToday));
   const [rows, setRows] = useState<RawTransactionRow[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const range = useMemo(
-    () => getDashboardRange(period, selectedDate || businessToday, { from: customFrom, to: customTo }),
-    [businessToday, customFrom, customTo, period, selectedDate],
-  );
-
   useEffect(() => {
-    setCustomFrom(businessToday);
-    setCustomTo(businessToday);
+    setRange(getDashboardRange('month', businessToday));
   }, [businessToday, selectedClubId]);
 
   useEffect(() => {
@@ -374,16 +364,14 @@ export default function RecentTransactionsPage() {
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader title={t('recentTransactions')} description={t('recentTransactionsDescription')} />
 
-      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <PeriodTabs
-          value={period}
-          onChange={setPeriod}
-          customFrom={customFrom}
-          customTo={customTo}
-          onCustomFromChange={setCustomFrom}
-          onCustomToChange={setCustomTo}
-        />
-      </section>
+      <DateRangePicker
+        from={range.from}
+        to={range.to}
+        fromLabel={t('from')}
+        toLabel={t('to')}
+        className="mb-5 max-w-3xl"
+        onChange={setRange}
+      />
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
