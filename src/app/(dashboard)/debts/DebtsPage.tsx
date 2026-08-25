@@ -9,12 +9,13 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatCurrencyInput, formatDate, formatDatePickerValue, parseCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencyInput, formatDate, parseCurrencyInput } from '@/lib/formatters';
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
 import { validateDebtPayment } from '@/lib/validation';
-import { Calendar, ChevronDown, Plus, X, Users } from 'lucide-react';
+import { Plus, X, Users } from 'lucide-react';
 import { PAYMENT_METHODS, type NewDebt, type DebtPayment } from '@/types';
 
 type DebtStatusVariant = 'danger' | 'warning' | 'success';
@@ -332,20 +333,11 @@ export default function DebtsPage() {
               </div>
               <div>
                 <label className="label">{t('date')}</label>
-                <label className="relative block h-10 w-full cursor-pointer">
-                  <input
-                    type="date"
-                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    value={addForm.date}
-                    onClick={(event) => event.currentTarget.showPicker?.()}
-                    onChange={(e) => setAddForm((p) => ({ ...p, date: e.target.value }))}
-                  />
-                  <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                    <Calendar size={16} className="shrink-0 text-gray-500" />
-                    <span className="font-semibold text-gray-950">{formatDatePickerValue(addForm.date, locale)}</span>
-                    <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
-                  </span>
-                </label>
+                <DatePicker
+                  value={addForm.date}
+                  onChange={(value) => setAddForm((previous) => ({ ...previous, date: value }))}
+                  buttonClassName="h-10"
+                />
               </div>
               <div>
                 <label className="label">{t('comment')}</label>
@@ -439,20 +431,11 @@ export default function DebtsPage() {
               </div>
               <div>
                 <label className="label">{t('date')}</label>
-                <label className="relative block h-10 w-full cursor-pointer">
-                  <input
-                    type="date"
-                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    value={payForm.date}
-                    onClick={(event) => event.currentTarget.showPicker?.()}
-                    onChange={(e) => setPayForm((p) => ({ ...p, date: e.target.value }))}
-                  />
-                  <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                    <Calendar size={16} className="shrink-0 text-gray-500" />
-                    <span className="font-semibold text-gray-950">{formatDatePickerValue(payForm.date, locale)}</span>
-                    <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
-                  </span>
-                </label>
+                <DatePicker
+                  value={payForm.date}
+                  onChange={(value) => setPayForm((previous) => ({ ...previous, date: value }))}
+                  buttonClassName="h-10"
+                />
               </div>
               <div>
                 <label className="label">{t('comment')}</label>

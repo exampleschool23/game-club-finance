@@ -12,12 +12,10 @@ import {
   formatCurrency,
   formatCurrencyInput,
   formatDateOnly,
-  formatDatePickerValue,
   parseCurrencyInput,
 } from '@/lib/formatters';
 import { calculateWeightedAverageCost } from '@/lib/calculations/stock';
 import {
-  Calendar,
   Check,
   CheckCircle,
   ChevronDown,
@@ -36,6 +34,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { PAYMENT_METHODS, type Product, type StockPurchase } from '@/types';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 
 const PURCHASES_PAGE_SIZE = 10;
 
@@ -380,20 +379,7 @@ export default function StockPurchasePage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">{t('date')} <span className="text-danger-500">*</span></label>
-              <label className="relative block h-11 w-full cursor-pointer">
-                <input
-                  type="date"
-                  className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                  value={form.date}
-                  onClick={(event) => event.currentTarget.showPicker?.()}
-                  onChange={(event) => set('date', event.target.value)}
-                />
-                <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                  <Calendar size={17} className="shrink-0 text-primary-600" />
-                  <span className="font-semibold text-gray-950">{formatDatePickerValue(form.date, locale)}</span>
-                  <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
-                </span>
-              </label>
+              <DatePicker value={form.date} onChange={(value) => set('date', value)} />
             </div>
 
             <div>

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { todayIso } from '@/lib/utils';
 import { Toast, useToast } from '@/components/ui/Toast';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { PAYMENT_METHODS, type EntryPaymentMethod, type IncomeCategory } from '@/types';
 
@@ -138,12 +139,10 @@ export default function IncomePage() {
         {/* Date */}
         <div>
           <label className="label">{t('date')}</label>
-          <input
-            type="date"
+          <DatePicker
             name="transaction_date"
             value={form.transaction_date}
-            onChange={handleChange}
-            className="input-field"
+            onChange={(value) => setForm((previous) => ({ ...previous, transaction_date: value }))}
           />
         </div>
 

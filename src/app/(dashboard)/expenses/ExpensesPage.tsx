@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { fetchAllRows } from '@/lib/supabase/pagination';
@@ -18,7 +19,6 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
-  ChevronDown,
   CreditCard,
   LoaderCircle,
   MinusCircle,
@@ -266,22 +266,8 @@ export default function ExpensesPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               <div>
-                <label className="label" htmlFor="expense-date">{t('date')}</label>
-                <label className="relative block h-11 w-full cursor-pointer" htmlFor="expense-date">
-                  <input
-                    id="expense-date"
-                    type="date"
-                    className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    value={form.date}
-                    onClick={(event) => event.currentTarget.showPicker?.()}
-                    onChange={(e) => set('date', e.target.value)}
-                  />
-                  <span className="pointer-events-none flex h-full items-center gap-2.5 rounded-lg border border-gray-200 bg-white px-3 text-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                    <Calendar size={16} className="shrink-0 text-gray-400" />
-                    <span className="min-w-0 flex-1 truncate font-semibold text-gray-800">{formatDatePickerValue(form.date, locale)}</span>
-                    <ChevronDown size={15} className="shrink-0 text-gray-400" />
-                  </span>
-                </label>
+                <label className="label">{t('date')}</label>
+                <DatePicker value={form.date} onChange={(value) => set('date', value)} />
               </div>
               <div>
                 <label className="label" htmlFor="expense-category">{t('category')}</label>

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { MonthPicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { currentYearMonth, monthRange } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/formatters';
@@ -188,12 +189,7 @@ export default function MonthlyReportPage() {
 
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <label className="label mb-0">{t('selectMonth')}</label>
-        <input
-          type="month"
-          className="input-field w-full sm:w-auto"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-        />
+        <MonthPicker value={month} onChange={setMonth} className="w-full sm:w-72" />
       </div>
 
       {loading ? (

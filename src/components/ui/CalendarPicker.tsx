@@ -1,0 +1,567 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDays,
+  addMonths,
+  endOfMonth,
+  endOfWeek,
+  startOfMonth,
+  startOfWeek,
+  subDays,
+  subMonths,
+} from 'date-fns';
+import { CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { formatDatePickerValue, formatYearMonth } from '@/lib/formatters';
+import { cn } from '@/lib/utils';
+
+function parseIsoDate(value: string): Date {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date();
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function dateToIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function dateToMonth(date: Date): string {
+  return dateToIso(date).slice(0, 7);
+}
+
+function clampRange(from: string, to: string) {
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+const weekDayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+
+interface CalendarDialogProps {
+  open: boolean;
+  mode: 'single' | 'range';
+  from: string;
+  to?: string;
+  min?: string;
+  max?: string;
+  onClose: () => void;
+  onApply: (from: string, to: string) => void;
+}
+
+function CalendarMonth({
+  month,
+  draftFrom,
+  draftTo,
+  mode,
+  min,
+  max,
+  onSelect,
+  onPrevious,
+  onNext,
+  previousClassName,
+  nextClassName,
+}: {
+  month: Date;
+  draftFrom: string;
+  draftTo: string;
+  mode: 'single' | 'range';
+  min?: string;
+  max?: string;
+  onSelect: (date: string) => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  previousClassName?: string;
+  nextClassName?: string;
+}) {
+  const t = useTranslations('calendar');
+  const { locale } = useAppLocale();
+  const firstGridDay = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+  const days = Array.from({ length: 42 }, (_, index) => addDays(firstGridDay, index));
+  const monthValue = dateToMonth(month);
+  const today = dateToIso(new Date());
+
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="mb-4 flex h-9 items-center justify-between">
+        {onPrevious ? (
+          <button
+            type="button"
+            onClick={onPrevious}
+            className={cn('flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900', previousClassName)}
+            aria-label={t('previousMonth')}
+          >
+            <ChevronLeft size={18} />
+          </button>
+        ) : <span className="h-9 w-9" />}
+        <h3 className="text-sm font-extrabold capitalize text-gray-950">
+          {formatYearMonth(monthValue, locale)}
+        </h3>
+        {onNext ? (
+          <button
+            type="button"
+            onClick={onNext}
+            className={cn('flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900', nextClassName)}
+            aria-label={t('nextMonth')}
+          >
+            <ChevronRight size={18} />
+          </button>
+        ) : <span className="h-9 w-9" />}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {weekDayKeys.map((key) => (
+          <div key={key} className="flex h-8 items-center justify-center text-[11px] font-bold uppercase text-gray-400">
+            {t(`weekdays.${key}`)}
+          </div>
+        ))}
+        {days.map((day) => {
+          const iso = dateToIso(day);
+          const outsideMonth = dateToMonth(day) !== monthValue;
+          const disabled = Boolean((min && iso < min) || (max && iso > max));
+          const endpoint = iso === draftFrom || (mode === 'range' && Boolean(draftTo) && iso === draftTo);
+          const inRange = mode === 'range' && Boolean(draftFrom && draftTo) && iso > draftFrom && iso < draftTo;
+
+          return (
+            <button
+              key={iso}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect(iso)}
+              className={cn(
+                'relative flex h-10 items-center justify-center rounded-xl text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
+                outsideMonth ? 'text-gray-300' : 'text-gray-700 hover:bg-primary-50 hover:text-primary-700',
+                inRange && 'rounded-none bg-primary-50 text-primary-700 hover:bg-primary-100',
+                endpoint && 'bg-primary-600 text-white shadow-sm hover:bg-primary-700 hover:text-white',
+                iso === today && !endpoint && 'ring-1 ring-inset ring-primary-300',
+                disabled && 'cursor-not-allowed text-gray-200 hover:bg-transparent hover:text-gray-200',
+              )}
+              aria-label={formatDatePickerValue(iso, locale)}
+              aria-pressed={endpoint || inRange}
+            >
+              {day.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply }: CalendarDialogProps) {
+  const t = useTranslations('calendar');
+  const { locale } = useAppLocale();
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(mode === 'single' ? from : to);
+  const [viewMonth, setViewMonth] = useState(() => startOfMonth(parseIsoDate(from)));
+
+  useEffect(() => {
+    if (!open) return;
+    setDraftFrom(from);
+    setDraftTo(mode === 'single' ? from : to);
+    setViewMonth(startOfMonth(parseIsoDate(from || to)));
+  }, [from, mode, open, to]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
+  const presets = useMemo(() => {
+    const todayDate = new Date();
+    const today = dateToIso(todayDate);
+    const yesterday = dateToIso(subDays(todayDate, 1));
+    const thisWeekFrom = dateToIso(startOfWeek(todayDate, { weekStartsOn: 1 }));
+    const thisWeekTo = dateToIso(endOfWeek(todayDate, { weekStartsOn: 1 }));
+    const lastWeekDate = subDays(startOfWeek(todayDate, { weekStartsOn: 1 }), 1);
+    const nextWeekDate = addDays(endOfWeek(todayDate, { weekStartsOn: 1 }), 1);
+    const currentMonth = startOfMonth(todayDate);
+    const previousMonth = subMonths(currentMonth, 1);
+    const followingMonth = addMonths(currentMonth, 1);
+
+    return [
+      { key: 'today', from: today, to: today },
+      { key: 'yesterday', from: yesterday, to: yesterday },
+      { key: 'last7Days', from: dateToIso(subDays(todayDate, 6)), to: today },
+      {
+        key: 'lastWeek',
+        from: dateToIso(startOfWeek(lastWeekDate, { weekStartsOn: 1 })),
+        to: dateToIso(endOfWeek(lastWeekDate, { weekStartsOn: 1 })),
+      },
+      { key: 'thisWeek', from: thisWeekFrom, to: thisWeekTo },
+      { key: 'thisMonth', from: dateToIso(currentMonth), to: dateToIso(endOfMonth(currentMonth)) },
+      { key: 'lastMonth', from: dateToIso(previousMonth), to: dateToIso(endOfMonth(previousMonth)) },
+      {
+        key: 'nextWeek',
+        from: dateToIso(startOfWeek(nextWeekDate, { weekStartsOn: 1 })),
+        to: dateToIso(endOfWeek(nextWeekDate, { weekStartsOn: 1 })),
+      },
+      { key: 'nextMonth', from: dateToIso(followingMonth), to: dateToIso(endOfMonth(followingMonth)) },
+    ];
+  }, []);
+
+  if (!open) return null;
+
+  function selectDate(date: string) {
+    if (mode === 'single') {
+      setDraftFrom(date);
+      setDraftTo(date);
+      return;
+    }
+
+    if (!draftFrom || draftTo) {
+      setDraftFrom(date);
+      setDraftTo('');
+      return;
+    }
+
+    const range = clampRange(draftFrom, date);
+    setDraftFrom(range.from);
+    setDraftTo(range.to);
+  }
+
+  function selectPreset(presetFrom: string, presetTo: string) {
+    setDraftFrom(presetFrom);
+    setDraftTo(presetTo);
+    setViewMonth(startOfMonth(parseIsoDate(presetFrom)));
+  }
+
+  const selectionComplete = Boolean(draftFrom && (mode === 'single' || draftTo));
+  const secondMonth = addMonths(viewMonth, 1);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === 'range' ? t('selectRange') : t('selectDate')}
+        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:rounded-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="shrink-0 border-b border-gray-100 px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+              {mode === 'range' ? <CalendarRange size={20} /> : <CalendarDays size={20} />}
+            </span>
+            <div>
+              <h2 className="text-base font-extrabold text-gray-950 sm:text-lg">
+                {mode === 'range' ? t('selectRange') : t('selectDate')}
+              </h2>
+              <p className="mt-0.5 text-xs font-medium text-gray-500 sm:text-sm">{t('description')}</p>
+            </div>
+          </div>
+
+          <div className={cn('mt-4 grid gap-2', mode === 'range' ? 'sm:grid-cols-[1fr_auto_1fr]' : 'sm:max-w-md')}>
+            <div className="rounded-xl border border-gray-200 px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                {mode === 'range' ? t('from') : t('date')}
+              </p>
+              <p className="mt-1 text-sm font-extrabold text-gray-900">{formatDatePickerValue(draftFrom, locale)}</p>
+            </div>
+            {mode === 'range' && (
+              <>
+                <span className="hidden items-center text-gray-400 sm:flex">→</span>
+                <div className="rounded-xl border border-gray-200 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('to')}</p>
+                  <p className="mt-1 text-sm font-extrabold text-gray-900">
+                    {draftTo ? formatDatePickerValue(draftTo, locale) : t('chooseEndDate')}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </header>
+
+        <div className={cn('grid min-h-0 flex-1 overflow-y-auto', mode === 'range' ? 'lg:grid-cols-[1fr_190px]' : 'grid-cols-1')}>
+          <div className="flex gap-6 p-4 sm:p-5">
+            <CalendarMonth
+              month={viewMonth}
+              draftFrom={draftFrom}
+              draftTo={draftTo}
+              mode={mode}
+              min={min}
+              max={max}
+              onSelect={selectDate}
+              onPrevious={() => setViewMonth((current) => subMonths(current, 1))}
+              onNext={() => setViewMonth((current) => addMonths(current, 1))}
+              nextClassName="md:hidden"
+            />
+            <div className="hidden min-w-0 flex-1 border-l border-gray-100 pl-6 md:block">
+              <CalendarMonth
+                month={secondMonth}
+                draftFrom={draftFrom}
+                draftTo={draftTo}
+                mode={mode}
+                min={min}
+                max={max}
+                onSelect={selectDate}
+                onNext={() => setViewMonth((current) => addMonths(current, 1))}
+              />
+            </div>
+          </div>
+
+          {mode === 'range' && (
+            <aside className="border-t border-gray-100 p-4 lg:border-l lg:border-t-0">
+              <h3 className="text-[11px] font-extrabold uppercase tracking-widest text-gray-400">{t('presetRanges')}</h3>
+              <div className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1">
+                {presets.map((preset) => {
+                  const active = preset.from === draftFrom && preset.to === draftTo;
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => selectPreset(preset.from, preset.to)}
+                      className={cn(
+                        'rounded-lg px-3 py-2 text-left text-xs font-bold transition',
+                        active ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                      )}
+                    >
+                      {t(`presets.${preset.key}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+          )}
+        </div>
+
+        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-gray-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <p className="text-xs font-semibold text-gray-500">
+            {formatDatePickerValue(draftFrom, locale)}
+            {mode === 'range' && draftTo && ` → ${formatDatePickerValue(draftTo, locale)}`}
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary min-h-10 flex-1 sm:flex-none">
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={!selectionComplete}
+              onClick={() => {
+                if (!selectionComplete) return;
+                onApply(draftFrom, mode === 'single' ? draftFrom : draftTo);
+                onClose();
+              }}
+              className="btn-primary min-h-10 flex-1 sm:flex-none"
+            >
+              {mode === 'range' ? t('applyRange') : t('applyDate')}
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+interface DatePickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  disabled?: boolean;
+  name?: string;
+  className?: string;
+  buttonClassName?: string;
+  ariaLabel?: string;
+}
+
+export function DatePicker({
+  value,
+  onChange,
+  min,
+  max,
+  disabled = false,
+  name,
+  className,
+  buttonClassName,
+  ariaLabel,
+}: DatePickerProps) {
+  const { locale } = useAppLocale();
+  const t = useTranslations('calendar');
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={cn('min-w-0', className)}>
+      {name && <input type="hidden" name={name} value={value} />}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        aria-label={ariaLabel ?? t('selectDate')}
+        className={cn(
+          'flex h-11 w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-left text-sm shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400',
+          buttonClassName,
+        )}
+      >
+        <CalendarDays size={17} className="shrink-0 text-primary-600" />
+        <span className="min-w-0 flex-1 truncate font-bold text-gray-950">{formatDatePickerValue(value, locale)}</span>
+        <ChevronDown size={16} className="shrink-0 text-gray-400" />
+      </button>
+      <CalendarDialog
+        open={open}
+        mode="single"
+        from={value}
+        min={min}
+        max={max}
+        onClose={() => setOpen(false)}
+        onApply={(nextValue) => onChange(nextValue)}
+      />
+    </div>
+  );
+}
+
+interface DateRangePickerProps {
+  from: string;
+  to: string;
+  onChange: (range: { from: string; to: string }) => void;
+  fromLabel?: string;
+  toLabel?: string;
+  min?: string;
+  max?: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function DateRangePicker({
+  from,
+  to,
+  onChange,
+  fromLabel,
+  toLabel,
+  min,
+  max,
+  disabled = false,
+  className,
+}: DateRangePickerProps) {
+  const t = useTranslations('calendar');
+  const { locale } = useAppLocale();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={cn('min-w-0', className)}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        className="grid min-h-14 w-full grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50"
+      >
+        <span className="min-w-0">
+          <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400">{fromLabel ?? t('from')}</span>
+          <span className="mt-0.5 block truncate text-sm font-bold text-gray-950">{formatDatePickerValue(from, locale)}</span>
+        </span>
+        <span className="text-gray-300">→</span>
+        <span className="min-w-0">
+          <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400">{toLabel ?? t('to')}</span>
+          <span className="mt-0.5 block truncate text-sm font-bold text-gray-950">{formatDatePickerValue(to, locale)}</span>
+        </span>
+        <CalendarRange size={18} className="shrink-0 text-primary-600" />
+      </button>
+      <CalendarDialog
+        open={open}
+        mode="range"
+        from={from}
+        to={to}
+        min={min}
+        max={max}
+        onClose={() => setOpen(false)}
+        onApply={(nextFrom, nextTo) => onChange(clampRange(nextFrom, nextTo))}
+      />
+    </div>
+  );
+}
+
+interface MonthPickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function MonthPicker({ value, onChange, min, max, disabled = false, className }: MonthPickerProps) {
+  const t = useTranslations('calendar');
+  const { locale } = useAppLocale();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [year, setYear] = useState(() => Number(value.slice(0, 4)) || new Date().getFullYear());
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft(value);
+    setYear(Number(value.slice(0, 4)) || new Date().getFullYear());
+  }, [open, value]);
+
+  return (
+    <div className={cn('min-w-0', className)}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        className="flex h-11 w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-left text-sm shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50"
+      >
+        <CalendarDays size={17} className="shrink-0 text-primary-600" />
+        <span className="min-w-0 flex-1 truncate font-bold capitalize text-gray-950">{formatYearMonth(value, locale)}</span>
+        <ChevronDown size={16} className="shrink-0 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={() => setOpen(false)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('selectMonth')}
+            className="w-full max-w-xl rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:rounded-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600"><CalendarDays size={20} /></span>
+              <div>
+                <h2 className="text-lg font-extrabold text-gray-950">{t('selectMonth')}</h2>
+                <p className="text-sm font-medium text-gray-500">{t('monthDescription')}</p>
+              </div>
+            </header>
+            <div className="p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => setYear((current) => current - 1)} className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label={t('previousYear')}><ChevronLeft size={19} /></button>
+                <p className="font-extrabold text-gray-950">{year}</p>
+                <button type="button" onClick={() => setYear((current) => current + 1)} className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label={t('nextYear')}><ChevronRight size={19} /></button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`).map((month) => {
+                  const unavailable = Boolean((min && month < min) || (max && month > max));
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      disabled={unavailable}
+                      onClick={() => setDraft(month)}
+                      className={cn(
+                        'min-h-12 rounded-xl px-3 text-sm font-bold capitalize transition',
+                        draft === month ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-primary-50 hover:text-primary-700',
+                        unavailable && 'cursor-not-allowed bg-gray-50 text-gray-300 hover:bg-gray-50 hover:text-gray-300',
+                      )}
+                    >
+                      {formatYearMonth(month, locale)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <footer className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
+              <button type="button" onClick={() => setOpen(false)} className="btn-secondary min-h-10">{t('cancel')}</button>
+              <button type="button" onClick={() => { onChange(draft); setOpen(false); }} className="btn-primary min-h-10">{t('applyMonth')}</button>
+            </footer>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}

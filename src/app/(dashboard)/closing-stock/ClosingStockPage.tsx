@@ -12,9 +12,9 @@ import {
   shouldTryPerformanceRpc,
 } from '@/lib/supabase/performanceRpc';
 import { useClub } from '@/components/layout/DashboardShell';
-import { useAppLocale } from '@/components/i18n/AppLocaleContext';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
-import { formatCurrency, formatDatePickerValue } from '@/lib/formatters';
+import { formatCurrency } from '@/lib/formatters';
 import {
   calculateClosingStockFromSold,
   calculateDirectSalesSummary,
@@ -35,8 +35,6 @@ import {
 } from '@/lib/closingStock';
 import {
   Box,
-  Calendar,
-  ChevronDown,
   Coins,
   FileBox,
   Info,
@@ -303,7 +301,6 @@ export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
   const { selectedClubId, selectedClub, role: currentRole, businessDayStartHour } = useClub();
-  const { locale } = useAppLocale();
   const today = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [date, setDate] = useState(() => today);
   const [rows, setRows] = useState<RowData[]>([]);
@@ -720,25 +717,16 @@ export default function ClosingStockPage() {
         </div>
 
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap xl:w-auto xl:flex-nowrap">
-          <label className="relative block h-11 w-full cursor-pointer sm:w-[260px]">
-            <input
-              type="date"
-              max={today}
-              className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-              value={date}
-              onClick={(event) => event.currentTarget.showPicker?.()}
-              onChange={(event) => {
-                setDate(event.target.value);
-                setSuccess('');
-                setError('');
-              }}
-            />
-            <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-              <Calendar size={17} className="shrink-0 text-gray-500" />
-              <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(date, locale)}</span>
-              <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
-            </span>
-          </label>
+          <DatePicker
+            value={date}
+            max={today}
+            className="w-full sm:w-[260px]"
+            onChange={(value) => {
+              setDate(value);
+              setSuccess('');
+              setError('');
+            }}
+          />
           <button
             type="button"
             onClick={handleSaveDraft}

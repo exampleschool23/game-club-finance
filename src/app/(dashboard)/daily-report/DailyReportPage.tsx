@@ -9,6 +9,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatters';
 import {
@@ -160,12 +161,7 @@ export default function DailyReportPage() {
 
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <label className="label mb-0">{t('date')}</label>
-        <input
-          type="date"
-          className="input-field w-full sm:w-auto"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <DatePicker value={date} onChange={setDate} className="w-full sm:w-64" />
       </div>
 
       {loading ? (

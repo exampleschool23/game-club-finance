@@ -7,8 +7,6 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
   Banknote,
-  Calendar,
-  ChevronDown,
   Clock3,
   CreditCard,
   Edit3,
@@ -24,9 +22,10 @@ import { createClient } from '@/lib/supabase/client';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
 import { useClub } from '@/components/layout/DashboardShell';
+import { DatePicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatCurrencyInput, formatDatePickerValue, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencyInput, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
 import type { DailyCashEntry } from '@/types';
 
 interface CashFormData {
@@ -368,21 +367,11 @@ export default function DailyCashPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full sm:max-w-[300px]">
             <label className="mb-2 block text-sm font-semibold text-gray-700">{t('date')}</label>
-            <label className="relative block h-11 w-full cursor-pointer">
-              <input
-                type="date"
-                className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                value={form.date}
-                max={businessToday}
-                onClick={(event) => event.currentTarget.showPicker?.()}
-                onChange={(event) => setField('date', event.target.value)}
-              />
-              <span className="pointer-events-none flex h-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-                <Calendar size={17} className="shrink-0 text-gray-500" />
-                <span className="font-bold tabular-nums text-gray-950">{formatDatePickerValue(form.date, locale)}</span>
-                <ChevronDown size={16} className="ml-auto shrink-0 text-gray-400" />
-              </span>
-            </label>
+            <DatePicker
+              value={form.date}
+              max={businessToday}
+              onChange={(value) => setField('date', value)}
+            />
           </div>
 
           {entry && deadline && editable && (

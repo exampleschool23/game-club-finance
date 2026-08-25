@@ -13,6 +13,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { MonthPicker } from '@/components/ui/CalendarPicker';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
@@ -343,15 +344,10 @@ export default function MoneyTakenPage() {
 
               <div>
                 <label className="label">{t('month')}</label>
-                <input
-                  type="month"
-                  max={currentMonth}
+                <MonthPicker
                   value={form.month}
-                  onChange={(event) => {
-                    if (event.target.value) setField('month', event.target.value);
-                  }}
-                  className="input-field h-11 w-full cursor-pointer font-semibold text-gray-950"
-                  required
+                  max={currentMonth}
+                  onChange={(value) => setField('month', value)}
                 />
               </div>
 

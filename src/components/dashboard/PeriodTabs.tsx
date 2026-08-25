@@ -1,10 +1,9 @@
 'use client';
 
-import { Calendar, CalendarDays, CalendarRange, ChevronDown } from 'lucide-react';
+import { Calendar, CalendarDays, CalendarRange } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
-import { useAppLocale } from '@/components/i18n/AppLocaleContext';
-import { formatDatePickerValue } from '@/lib/formatters';
+import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import type { DashboardPeriod } from '@/lib/calculations/dashboardMetrics';
 
 interface PeriodTabsProps {
@@ -14,38 +13,6 @@ interface PeriodTabsProps {
   customTo: string;
   onCustomFromChange: (value: string) => void;
   onCustomToChange: (value: string) => void;
-}
-
-function RangeDateInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const { locale } = useAppLocale();
-
-  return (
-    <label className="min-w-0 flex-1">
-      <span className="mb-1 block text-xs font-semibold text-gray-500">{label}</span>
-      <span className="relative block h-10 cursor-pointer">
-        <input
-          type="date"
-          className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-          value={value}
-          onClick={(event) => event.currentTarget.showPicker?.()}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <span className="pointer-events-none flex h-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition peer-focus:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-100">
-          <CalendarDays size={15} className="shrink-0 text-gray-500" />
-          <span className="truncate font-semibold text-gray-950">{formatDatePickerValue(value, locale)}</span>
-          <ChevronDown size={15} className="ml-auto shrink-0 text-gray-400" />
-        </span>
-      </span>
-    </label>
-  );
 }
 
 export function PeriodTabs({
@@ -92,9 +59,17 @@ export function PeriodTabs({
       </div>
 
       {value === 'custom' && (
-        <div className="grid gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 sm:grid-cols-2 xl:max-w-xl">
-          <RangeDateInput label={t('from')} value={customFrom} onChange={onCustomFromChange} />
-          <RangeDateInput label={t('to')} value={customTo} onChange={onCustomToChange} />
+        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 xl:max-w-3xl">
+          <DateRangePicker
+            from={customFrom}
+            to={customTo}
+            fromLabel={t('from')}
+            toLabel={t('to')}
+            onChange={(range) => {
+              onCustomFromChange(range.from);
+              onCustomToChange(range.to);
+            }}
+          />
         </div>
       )}
     </div>
