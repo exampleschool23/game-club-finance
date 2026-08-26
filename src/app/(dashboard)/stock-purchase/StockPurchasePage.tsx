@@ -5,6 +5,7 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { runWithJwtTimingRetry } from '@/lib/supabase/authRetry';
 import { useClub } from '@/components/layout/DashboardShell';
 import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -141,7 +142,10 @@ export default function StockPurchasePage() {
     }
 
     const supabase = createClient();
-    const productsRes = await fetchActiveProductsOrdered(supabase, selectedClubId);
+    const productsRes = await runWithJwtTimingRetry(
+      supabase,
+      async () => fetchActiveProductsOrdered(supabase, selectedClubId),
+    );
 
     if (productsRes.error) {
       setError(productsRes.error.message);
@@ -163,22 +167,26 @@ export default function StockPurchasePage() {
     const from = (page - 1) * PURCHASES_PAGE_SIZE;
     const to = from + PURCHASES_PAGE_SIZE - 1;
     const supabase = createClient();
-    let purchasesQuery = supabase
-      .from('stock_purchases')
-      .select('*, products(name, sale_price)', { count: 'exact' })
-      .eq('club_id', selectedClubId);
-
     const paymentSearch = sanitizePurchaseSearch(purchaseSearch);
     const filters: string[] = [];
     if (paymentSearch) filters.push(`payment_method.ilike.%${paymentSearch}%`);
     if (matchingProductIds?.length) filters.push(`product_id.in.(${matchingProductIds.join(',')})`);
-    if (filters.length > 0) {
-      purchasesQuery = purchasesQuery.or(filters.join(','));
-    }
 
-    const { data, error: purchasesError, count } = await purchasesQuery
-      .order('created_at', { ascending: false })
-      .range(from, to);
+    const { data, error: purchasesError, count } = await runWithJwtTimingRetry(
+      supabase,
+      async () => {
+        let query = supabase
+          .from('stock_purchases')
+          .select('*, products(name, sale_price)', { count: 'exact' })
+          .eq('club_id', selectedClubId);
+
+        if (filters.length > 0) query = query.or(filters.join(','));
+
+        return query
+          .order('created_at', { ascending: false })
+          .range(from, to);
+      },
+    );
 
     setPurchasesLoading(false);
 
