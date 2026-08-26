@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ClubMembership, UserRole } from '@/types';
+import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 
 const SELECTED_CLUB_COOKIE = 'game-club-finance-selected-club-id';
 
@@ -36,7 +37,17 @@ export default async function DashboardLayout({
 
   initialFullName = profileRes.data?.full_name ?? initialEmail;
   initialRole = (profileRes.data?.role as UserRole | null) ?? 'viewer';
-  initialMemberships = (membershipRes.data as ClubMembership[] | null) ?? [];
+  if (isMissingDatabaseColumn(membershipRes.error, 'feature_access')) {
+    const fallbackMembershipRes = await supabase
+      .from('club_memberships')
+      .select('club_id,user_id,role,created_at,updated_at,clubs(id,name,address,business_day_start_hour,is_active,created_at,updated_at)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+
+    initialMemberships = (fallbackMembershipRes.data as ClubMembership[] | null) ?? [];
+  } else {
+    initialMemberships = (membershipRes.data as ClubMembership[] | null) ?? [];
+  }
 
   const cookieStore = await cookies();
   const preferredClubId = cookieStore.get(SELECTED_CLUB_COOKIE)?.value ?? '';

@@ -9,6 +9,7 @@ import { Clock3, Gamepad2, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { DashboardContentLoading } from './DashboardContentLoading';
 import { createClient } from '@/lib/supabase/client';
+import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import type { Club, ClubMembership, UserRole } from '@/types';
 import {
   canAccessPath,
@@ -216,7 +217,17 @@ export function DashboardShell({
     setFullName(profileRes.data?.full_name ?? session.user.email ?? initialEmail);
     setProfileRole(isUserRole(profileRes.data?.role) ? profileRes.data.role : 'viewer');
 
-    const nextMemberships = membershipOptions((membershipRes.data as ClubMembership[] | null) ?? []);
+    let membershipRows = (membershipRes.data as ClubMembership[] | null) ?? [];
+    if (isMissingDatabaseColumn(membershipRes.error, 'feature_access')) {
+      const fallbackMembershipRes = await supabase
+        .from('club_memberships')
+        .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true });
+      membershipRows = (fallbackMembershipRes.data as ClubMembership[] | null) ?? [];
+    }
+
+    const nextMemberships = membershipOptions(membershipRows);
 
     setMemberships(nextMemberships);
     setSelectedClubIdState((currentClubId) => {

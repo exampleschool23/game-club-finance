@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
+import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import { ChevronDown, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
 import type { Club, Profile, UserRole } from '@/types';
 import {
@@ -61,6 +62,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expandedFeatureAccessId, setExpandedFeatureAccessId] = useState<string | null>(null);
+  const [featureAccessAvailable, setFeatureAccessAvailable] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -91,8 +93,30 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         .order('name', { ascending: true }),
     ]);
 
-    if (membershipRes.error || profileRes.error || clubRes.error) {
-      setError(membershipRes.error?.message ?? profileRes.error?.message ?? clubRes.error?.message ?? 'Error');
+    let membershipRows = (membershipRes.data ?? []) as Array<{
+      club_id: string;
+      user_id: string;
+      role: string;
+      feature_access?: string[] | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    let membershipError = membershipRes.error;
+
+    if (isMissingDatabaseColumn(membershipRes.error, 'feature_access')) {
+      const fallbackMembershipRes = await supabase
+        .from('club_memberships')
+        .select('club_id, user_id, role, created_at, updated_at')
+        .order('created_at', { ascending: true });
+      membershipRows = (fallbackMembershipRes.data ?? []) as typeof membershipRows;
+      membershipError = fallbackMembershipRes.error;
+      setFeatureAccessAvailable(false);
+    } else {
+      setFeatureAccessAvailable(true);
+    }
+
+    if (membershipError || profileRes.error || clubRes.error) {
+      setError(membershipError?.message ?? profileRes.error?.message ?? clubRes.error?.message ?? 'Error');
       setProfiles([]);
       setClubs([]);
       setLoading(false);
@@ -103,14 +127,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     const clubById = new Map(clubRows.map((club) => [club.id, club]));
     const membershipsByUser = new Map<string, TeamMembership[]>();
 
-    for (const membership of (membershipRes.data ?? []) as Array<{
-      club_id: string;
-      user_id: string;
-      role: string;
-      feature_access: string[] | null;
-      created_at: string;
-      updated_at: string;
-    }>) {
+    for (const membership of membershipRows) {
       const club = clubById.get(membership.club_id);
       if (!club) continue;
 
@@ -501,7 +518,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                     </option>
                   ))}
                 </select>
-                <button
+                {featureAccessAvailable ? <button
                   type="button"
                   className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition ${expanded ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-200'}`}
                   onClick={() => setExpandedFeatureAccessId(expanded ? null : membershipId)}
@@ -511,7 +528,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                   {t('featureAccess')}
                   <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">{featureAccess.length}</span>
                   <ChevronDown size={14} className={expanded ? 'rotate-180' : ''} />
-                </button>
+                </button> : null}
                 <button
                   type="button"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger-100 text-danger-600 transition hover:bg-danger-50 disabled:opacity-40"
@@ -525,7 +542,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
               </div>
             </div>
 
-            {expanded ? (
+            {featureAccessAvailable && expanded ? (
               <div className="mt-3 border-t border-gray-200 pt-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-600">{t('featureAccess')}</p>
                 <p className="mt-1 text-xs text-gray-500">
