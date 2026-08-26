@@ -6,11 +6,19 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
+import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
 import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
-import { ChevronDown, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react';
+import {
+  Building2,
+  ChevronDown,
+  Search,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import type { Club, Profile, UserRole } from '@/types';
 import {
   FEATURE_DEFINITIONS,
@@ -48,6 +56,15 @@ function normalizeRole(role: string | null | undefined): UserRole {
   return role === 'owner' || role === 'admin' || role === 'viewer' ? role : 'viewer';
 }
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || '?';
+}
+
 export default function TeamPageClient({ currentUserId: initialCurrentUserId }: TeamPageClientProps) {
   const router = useRouter();
   const t = useTranslations('team');
@@ -62,6 +79,9 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [expandedFeatureAccessId, setExpandedFeatureAccessId] = useState<string | null>(null);
+  const [expandedAddAccessId, setExpandedAddAccessId] = useState<string | null>(null);
+  const [membershipSelection, setMembershipSelection] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   const [featureAccessAvailable, setFeatureAccessAvailable] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -229,10 +249,16 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     [profiles],
   );
 
-  const selectedClubMembers = useMemo(
-    () => profiles.filter((profile) => profile.memberships.some((membership) => membership.clubId === selectedClubId)),
-    [profiles, selectedClubId],
-  );
+  const filteredActiveProfiles = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase(locale);
+    if (!query) return activeProfiles;
+
+    return activeProfiles.filter((profile) =>
+      profile.full_name.toLocaleLowerCase(locale).includes(query)
+      || profile.email?.toLocaleLowerCase(locale).includes(query)
+      || profile.memberships.some((membership) => membership.clubName.toLocaleLowerCase(locale).includes(query)),
+    );
+  }, [activeProfiles, locale, searchQuery]);
 
   function ownerCountForClub(clubId: string) {
     return profiles.filter((profile) =>
@@ -260,6 +286,13 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       clubId,
       role: currentDraft?.role ?? 'viewer',
     };
+  }
+
+  function selectedMembershipForProfile(profile: TeamMember): TeamMembership | undefined {
+    const preferredClubId = membershipSelection[profile.id];
+    return profile.memberships.find((membership) => membership.clubId === preferredClubId)
+      ?? profile.memberships.find((membership) => membership.clubId === selectedClubId)
+      ?? profile.memberships[0];
   }
 
   function updateAccessDraft(profileId: string, patch: Partial<AccessDraft>) {
@@ -440,25 +473,33 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     const saving = isSavingProfile(profile.id);
 
     if (availableClubs.length === 0) {
-      return <p className="text-xs font-medium text-gray-400">{t('allClubsAdded')}</p>;
+      return (
+        <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-500">
+          <ShieldCheck size={16} className="text-success-500" />
+          {t('allClubsAdded')}
+        </div>
+      );
     }
 
     return (
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
+        <div className="relative">
+          <Building2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <select
+            className="input-field h-11 pl-9"
+            value={draft.clubId}
+            disabled={saving}
+            onChange={(event) => updateAccessDraft(profile.id, { clubId: event.target.value })}
+          >
+            {availableClubs.map((club) => (
+              <option key={club.id} value={club.id}>
+                {club.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <select
-          className="input-field h-10 w-full sm:w-44"
-          value={draft.clubId}
-          disabled={saving}
-          onChange={(event) => updateAccessDraft(profile.id, { clubId: event.target.value })}
-        >
-          {availableClubs.map((club) => (
-            <option key={club.id} value={club.id}>
-              {club.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="input-field h-10 w-full sm:w-32"
+          className="input-field h-11"
           value={draft.role}
           disabled={saving}
           onChange={(event) => updateAccessDraft(profile.id, { role: event.target.value as UserRole })}
@@ -471,7 +512,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         </select>
         <button
           type="button"
-          className="btn-primary h-10 whitespace-nowrap"
+          className="btn-primary h-11 whitespace-nowrap px-5"
           disabled={saving || !draft.clubId}
           onClick={() => addClubAccess(profile)}
         >
@@ -482,105 +523,64 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     );
   }
 
-  function renderMemberships(profile: TeamMember) {
-    if (profile.memberships.length === 0) {
-      return <span className="text-xs font-medium text-gray-400">{t('noClubAccess')}</span>;
-    }
+  function renderFeatureAccessPanel(profile: TeamMember, membership: TeamMembership) {
+    const membershipId = `${profile.id}:${membership.clubId}`;
+    const featureAccess = featureAccessForMembership(membership.role, membership.featureAccess);
+    const savingFeatures = savingId === `${membershipId}:features`;
 
     return (
-      <div className="flex flex-col gap-2">
-        {profile.memberships.map((membership) => {
-          const membershipId = `${profile.id}:${membership.clubId}`;
-          const featureAccess = featureAccessForMembership(membership.role, membership.featureAccess);
-          const expanded = expandedFeatureAccessId === membershipId;
-          const savingFeatures = savingId === `${membershipId}:features`;
-
-          return (
-          <div
-            key={membership.clubId}
-            className="max-w-full rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-gray-900">{membership.clubName}</p>
-                <p className="text-xs text-gray-400">{formatDateTime(membership.createdAt, locale)}</p>
+      <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-5 sm:px-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-gray-600">
+                <ShieldCheck size={16} className="text-primary-600" />
+                {t('featureAccess')}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  className="input-field h-9 w-32"
-                  value={membership.role}
-                  disabled={isSavingProfile(profile.id)}
-                  onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
-                >
-                  {ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {t(`roles.${role}`)}
-                    </option>
-                  ))}
-                </select>
-                {featureAccessAvailable ? <button
-                  type="button"
-                  className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition ${expanded ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-200'}`}
-                  onClick={() => setExpandedFeatureAccessId(expanded ? null : membershipId)}
-                  aria-expanded={expanded}
-                >
-                  <ShieldCheck size={15} />
-                  {t('featureAccess')}
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">{featureAccess.length}</span>
-                  <ChevronDown size={14} className={expanded ? 'rotate-180' : ''} />
-                </button> : null}
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger-100 text-danger-600 transition hover:bg-danger-50 disabled:opacity-40"
-                  disabled={isSavingProfile(profile.id) || profile.id === currentUserId}
-                  onClick={() => removeClubAccess(profile, membership)}
-                  aria-label={t('removeClubAccess', { club: membership.clubName })}
-                  title={t('removeClubAccess', { club: membership.clubName })}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
+              <p className="mt-1 text-sm text-gray-500">
+                {membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
+              </p>
             </div>
-
-            {featureAccessAvailable && expanded ? (
-              <div className="mt-3 border-t border-gray-200 pt-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-600">{t('featureAccess')}</p>
-                <p className="mt-1 text-xs text-gray-500">
-                  {membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
-                </p>
-                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {FEATURE_DEFINITIONS.map((feature) => {
-                    const ownerOnly = 'ownerOnly' in feature && feature.ownerOnly;
-                    const disabled = savingFeatures || membership.role === 'owner' || ownerOnly;
-                    const checked = membership.role === 'owner'
-                      ? true
-                      : !ownerOnly && featureAccess.includes(feature.key);
-
-                    return (
-                      <label
-                        key={feature.key}
-                        className={`flex gap-2 rounded-lg border p-3 transition ${checked ? 'border-primary-200 bg-primary-50/60' : 'border-gray-200 bg-white'} ${disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:border-primary-200'}`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 accent-primary-600"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={(event) => updateMembershipFeatureAccess(profile, membership, feature.key, event.target.checked)}
-                        />
-                        <span className="min-w-0">
-                          <span className="block text-sm font-bold text-gray-900">{t(`features.${feature.labelKey}`)}</span>
-                          <span className="mt-0.5 block text-xs leading-4 text-gray-500">{t(`features.${feature.descriptionKey}`)}</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-bold text-gray-600">
+              <Building2 size={13} />
+              {membership.clubName}
+            </span>
           </div>
-          );
-        })}
+
+          <div className="mt-4">
+            <p className="text-sm font-bold text-gray-800">{t('pageAccess')}</p>
+            <p className="mt-0.5 text-xs text-gray-400">{t('pageAccessHelp')}</p>
+          </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {FEATURE_DEFINITIONS.map((feature) => {
+              const ownerOnly = 'ownerOnly' in feature && feature.ownerOnly;
+              const disabled = savingFeatures || membership.role === 'owner' || ownerOnly;
+              const checked = membership.role === 'owner'
+                ? true
+                : !ownerOnly && featureAccess.includes(feature.key);
+
+              return (
+                <label
+                  key={feature.key}
+                  className={`flex min-h-[64px] gap-2.5 rounded-xl border p-3 transition ${checked ? 'border-primary-300 bg-primary-50/50' : 'border-gray-200 bg-white'} ${disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:border-primary-300'}`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 flex-none accent-primary-600"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={(event) => updateMembershipFeatureAccess(profile, membership, feature.key, event.target.checked)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-gray-900">{t(`features.${feature.labelKey}`)}</span>
+                    <span className="mt-0.5 block text-xs leading-4 text-gray-400">{t(`features.${feature.descriptionKey}`)}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
@@ -602,55 +602,47 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         }
       />
 
-      {loading ? (
-        <MetricGridSkeleton count={3} className="mb-4 sm:grid-cols-3 xl:grid-cols-3" />
-      ) : (
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        {ROLES.map((role) => (
-          <div key={role} className="card flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {t(`roles.${role}`)}
-              </p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">
-                {
-                  selectedClubMembers.filter((profile) =>
-                    profile.memberships.some(
-                      (membership) => membership.clubId === selectedClubId && membership.role === role,
-                    ),
-                  ).length
-                }
-              </p>
-            </div>
-            <ShieldCheck className="text-primary-500" size={22} />
-          </div>
-        ))}
-      </div>
+      {error && (
+        <div className="mb-4 rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-600">
+          {error}
+        </div>
       )}
-
-      {error && <p className="mb-3 text-sm text-danger-500">{error}</p>}
-      {message && <p className="mb-3 text-sm text-success-600">{message}</p>}
+      {message && (
+        <div className="mb-4 rounded-xl border border-success-100 bg-success-50 px-4 py-3 text-sm font-medium text-success-600">
+          {message}
+        </div>
+      )}
 
       {loading ? (
         <TableSkeleton rows={7} columns={4} />
       ) : (
         <div className="space-y-6">
           {pendingProfiles.length > 0 && (
-            <section className="rounded-xl border border-amber-100 bg-amber-50/40 p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <UserPlus size={18} className="text-amber-600" />
-                <h2 className="text-sm font-bold uppercase tracking-wide text-amber-900">{t('pendingApproval')}</h2>
+            <section className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/40">
+              <div className="flex items-center justify-between px-4 py-3 sm:px-5">
+                <div className="flex items-center gap-2.5">
+                  <UserPlus size={17} className="text-amber-600" />
+                  <h2 className="text-sm font-bold text-amber-950">{t('pendingApproval')}</h2>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-700">
+                  {pendingProfiles.length}
+                </span>
               </div>
-              <div className="space-y-2">
+              <div className="divide-y divide-amber-100">
                 {pendingProfiles.map((profile) => (
                   <div
                     key={profile.id}
-                    className="flex flex-col gap-3 rounded-lg border border-amber-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="grid gap-4 bg-white p-4 sm:px-5 lg:grid-cols-[minmax(240px,1fr)_minmax(440px,1.5fr)] lg:items-center"
                   >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-gray-900">{profile.full_name}</p>
-                      {profile.email && <p className="text-xs text-gray-500">{profile.email}</p>}
-                      <p className="text-xs text-gray-500">{formatDateTime(profile.created_at, locale)}</p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white">
+                        {initials(profile.full_name)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-gray-950">{profile.full_name}</p>
+                        {profile.email && <p className="truncate text-xs text-gray-500">{profile.email}</p>}
+                        <p className="mt-0.5 text-xs text-gray-400">{formatDateTime(profile.created_at, locale)}</p>
+                      </div>
                     </div>
                     {renderAccessControls(profile, t('approve'))}
                   </div>
@@ -662,46 +654,168 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
           {activeProfiles.length === 0 ? (
             <div className="card py-12 text-center text-gray-500">{tc('noData')}</div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
-              <table className="w-full min-w-[1080px] text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                      {t('member')}
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                      {t('gameClubs')}
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                      {t('addAccess')}
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                      {t('joined')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {activeProfiles.map((profile) => (
-                    <tr key={profile.id} className="hover:bg-gray-50">
-                      <td className="w-[260px] px-4 py-3 align-top">
-                        <p className="font-medium text-gray-900">{profile.full_name}</p>
-                        {profile.email && <p className="text-xs text-gray-500">{profile.email}</p>}
-                        {profile.id === currentUserId && (
-                          <p className="text-xs text-gray-400">{t('you')}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-top">{renderMemberships(profile)}</td>
-                      <td className="w-[420px] px-4 py-3 align-top">
-                        {renderAccessControls(profile, t('addAccess'))}
-                      </td>
-                      <td className="px-4 py-3 align-top text-gray-500">
-                        {formatDateTime(profile.created_at, locale)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <section>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-400">{t('membersCount', { count: activeProfiles.length })}</p>
+                </div>
+                <div className="relative w-full sm:w-80">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
+                  <input
+                    type="search"
+                    className="input-field h-11 rounded-xl pl-10"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={t('searchPlaceholder')}
+                    aria-label={t('searchPlaceholder')}
+                  />
+                </div>
+              </div>
+
+              {filteredActiveProfiles.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-white py-12 text-center text-sm text-gray-500">
+                  {t('noSearchResults')}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="hidden min-h-12 grid-cols-[56px_minmax(240px,1.2fr)_120px_minmax(500px,2fr)] items-center border-b border-gray-100 bg-gray-50/80 px-5 text-xs font-bold uppercase tracking-wider text-gray-500 xl:grid">
+                    <span>#</span>
+                    <span>{t('member')}</span>
+                    <span>{t('status')}</span>
+                    <span>{t('actions')}</span>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {filteredActiveProfiles.map((profile, index) => {
+                      const membership = selectedMembershipForProfile(profile);
+                      if (!membership) return null;
+                      const membershipId = `${profile.id}:${membership.clubId}`;
+                      const featureAccess = featureAccessForMembership(membership.role, membership.featureAccess);
+                      const featuresExpanded = expandedFeatureAccessId === membershipId;
+                      const addAccessExpanded = expandedAddAccessId === profile.id;
+                      const hasAvailableClubs = availableClubsForProfile(profile).length > 0;
+
+                      return (
+                        <article key={profile.id} className="bg-white">
+                          <div className="grid gap-4 px-4 py-4 sm:px-5 xl:grid-cols-[56px_minmax(240px,1.2fr)_120px_minmax(500px,2fr)] xl:items-center">
+                            <div className="hidden xl:block">
+                              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-sm font-bold text-gray-500">
+                                {index + 1}
+                              </span>
+                            </div>
+
+                            <div className="flex min-w-0 items-center gap-3">
+                              <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white">
+                                {initials(profile.full_name)}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="truncate font-bold text-gray-950">{profile.full_name}</p>
+                                  {profile.id === currentUserId && (
+                                    <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700">{t('you')}</span>
+                                  )}
+                                </div>
+                                {profile.email && <p className="truncate text-xs text-gray-400">{profile.email}</p>}
+                                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">{t(`roles.${membership.role}`)}</p>
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="inline-flex items-center rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-xs font-bold text-success-600">
+                                {t('active')}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                className="input-field h-11 min-w-40 flex-1 font-semibold lg:max-w-48"
+                                value={membership.clubId}
+                                disabled={isSavingProfile(profile.id)}
+                                onChange={(event) => {
+                                  setMembershipSelection((current) => ({ ...current, [profile.id]: event.target.value }));
+                                  setExpandedFeatureAccessId(null);
+                                }}
+                                aria-label={t('gameClubs')}
+                              >
+                                {profile.memberships.map((item) => (
+                                  <option key={item.clubId} value={item.clubId}>{item.clubName}</option>
+                                ))}
+                              </select>
+
+                              <select
+                                className="input-field h-11 w-32 font-semibold"
+                                value={membership.role}
+                                disabled={isSavingProfile(profile.id)}
+                                onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
+                                aria-label={t('changeAccess')}
+                              >
+                                {ROLES.map((role) => (
+                                  <option key={role} value={role}>{t(`roles.${role}`)}</option>
+                                ))}
+                              </select>
+
+                              {featureAccessAvailable ? (
+                                <button
+                                  type="button"
+                                  className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${featuresExpanded ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-200 hover:text-primary-700'}`}
+                                  onClick={() => {
+                                    setExpandedFeatureAccessId(featuresExpanded ? null : membershipId);
+                                    setExpandedAddAccessId(null);
+                                  }}
+                                  aria-expanded={featuresExpanded}
+                                >
+                                  <ShieldCheck size={16} />
+                                  {t('featureAccess')}
+                                  <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{featureAccess.length}</span>
+                                  <ChevronDown size={14} className={`transition ${featuresExpanded ? 'rotate-180' : ''}`} />
+                                </button>
+                              ) : null}
+
+                              {hasAvailableClubs ? (
+                                <button
+                                  type="button"
+                                  className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${addAccessExpanded ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}
+                                  onClick={() => {
+                                    setExpandedAddAccessId(addAccessExpanded ? null : profile.id);
+                                    setExpandedFeatureAccessId(null);
+                                  }}
+                                  aria-expanded={addAccessExpanded}
+                                >
+                                  <UserPlus size={16} />
+                                  <span className="hidden xl:inline">{t('addAccess')}</span>
+                                </button>
+                              ) : null}
+
+                              <button
+                                type="button"
+                                className="inline-flex h-11 items-center gap-2 rounded-xl border border-danger-100 bg-danger-50 px-3 text-sm font-bold text-danger-600 transition hover:bg-danger-100 disabled:opacity-40"
+                                disabled={isSavingProfile(profile.id) || profile.id === currentUserId}
+                                onClick={() => removeClubAccess(profile, membership)}
+                                aria-label={t('removeClubAccess', { club: membership.clubName })}
+                              >
+                                <Trash2 size={16} />
+                                <span className="hidden xl:inline">{t('removeAccess')}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {addAccessExpanded ? (
+                            <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-4 sm:px-6">
+                              <div className="ml-auto max-w-2xl rounded-xl border border-gray-200 bg-white p-4">
+                                <p className="mb-3 text-sm font-bold text-gray-900">{t('addAccessHelp')}</p>
+                                {renderAccessControls(profile, t('addAccess'))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {featuresExpanded ? renderFeatureAccessPanel(profile, membership) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
           )}
         </div>
       )}

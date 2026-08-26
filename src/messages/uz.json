@@ -513,6 +513,18 @@
     "title": "Jamoa",
     "description": "Moliya, amallar va hisobotlarga kirish huquqlarini boshqaring.",
     "refresh": "Yangilash",
+    "members": "Jamoa a'zolari",
+    "membersCount": "Klubga kirish huquqi bor: {count} a'zo",
+    "searchPlaceholder": "A'zo yoki klubni qidiring...",
+    "noSearchResults": "Qidiruv bo'yicha a'zolar topilmadi.",
+    "hideAccess": "Tafsilotlarni yopish",
+    "clubsCount": "{count} ta klub",
+    "addAccessHelp": "A'zoni boshqa klubga biriktiring.",
+    "status": "Holat",
+    "actions": "Amallar",
+    "active": "Faol",
+    "pageAccess": "Bo'limlarga kirish",
+    "pageAccessHelp": "A'zo ochishi va ko'rishi mumkin bo'lgan ish bo'limlari.",
     "member": "A'zo",
     "currentAccess": "Joriy huquq",
     "changeAccess": "Huquqni o'zgartirish",
@@ -565,9 +577,9 @@
       "settingsDescription": "Klub sozlamalarini boshqarish"
     },
     "roles": {
-      "owner": "Owner",
-      "admin": "Admin",
-      "viewer": "Viewer"
+      "owner": "Klub egasi",
+      "admin": "Administrator",
+      "viewer": "Kuzatuvchi"
     }
   },
   "approval": {
