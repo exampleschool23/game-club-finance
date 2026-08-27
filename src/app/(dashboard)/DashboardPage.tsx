@@ -38,13 +38,16 @@ import {
   getLatestRowDateInRange,
   percentChange,
   type DailyCashRow,
-  type DashboardPeriod,
   type DebtPaymentValueRow,
   type ExpenseRow,
   type InventorySnapshotRow,
   type StockCountRow,
   type StockPurchaseCostRow,
 } from '@/lib/calculations/dashboardMetrics';
+import {
+  dashboardPeriodForRange,
+  initialDashboardRange,
+} from '@/lib/calculations/dashboardRangeState';
 import {
   buildDashboardDataFromSnapshot,
   emptyDashboardData,
@@ -101,47 +104,6 @@ interface DebtRow {
   amount: number;
   remaining_amount: number;
   status: string;
-}
-
-const dashboardPresetPeriods = ['today', 'yesterday', 'last7Days', 'week', 'lastWeek', 'month', 'lastMonth'] as const;
-
-function dashboardPeriodFromQuery(value: string | null): DashboardPeriod {
-  return [...dashboardPresetPeriods, 'custom'].includes(value as DashboardPeriod)
-    ? value as DashboardPeriod
-    : 'month';
-}
-
-function validQueryDate(value: string | null): value is string {
-  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
-}
-
-function initialDashboardRange(
-  query: { get: (name: string) => string | null },
-  businessToday: string,
-): { from: string; to: string } {
-  const queryFrom = query.get('from');
-  const queryTo = query.get('to');
-
-  if (validQueryDate(queryFrom) && validQueryDate(queryTo)) {
-    return queryFrom <= queryTo
-      ? { from: queryFrom, to: queryTo }
-      : { from: queryTo, to: queryFrom };
-  }
-
-  return getDashboardRange(dashboardPeriodFromQuery(query.get('period')), businessToday, {
-    from: businessToday,
-    to: businessToday,
-  });
-}
-
-function dashboardPeriodForRange(
-  range: { from: string; to: string },
-  businessToday: string,
-): DashboardPeriod {
-  return dashboardPresetPeriods.find((preset) => {
-    const presetRange = getDashboardRange(preset, businessToday);
-    return presetRange.from === range.from && presetRange.to === range.to;
-  }) ?? 'custom';
 }
 
 function isMissingSortOrder(error: { message?: string } | null | undefined) {
@@ -224,7 +186,17 @@ function MetricSection({
   );
 }
 
-export default function DashboardPage() {
+export interface InitialDashboardSnapshot {
+  clubId: string;
+  data: DashboardData;
+  range: { from: string; to: string };
+}
+
+export default function DashboardPage({
+  initialSnapshot = null,
+}: {
+  initialSnapshot?: InitialDashboardSnapshot | null;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -232,10 +204,20 @@ export default function DashboardPage() {
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [range, setRange] = useState(() => initialDashboardRange(searchParams, businessToday));
-  const [data, setData] = useState<DashboardData>(emptyDashboardData);
-  const [loading, setLoading] = useState(true);
+  const initialSnapshotMatches = initialSnapshot?.clubId === selectedClubId
+    && initialSnapshot.range.from === range.from
+    && initialSnapshot.range.to === range.to;
+  const [data, setData] = useState<DashboardData>(() => (
+    initialSnapshotMatches ? initialSnapshot.data : emptyDashboardData
+  ));
+  const [loading, setLoading] = useState(!initialSnapshotMatches);
   const [error, setError] = useState('');
+  const [renderCharts, setRenderCharts] = useState(false);
   const requestSequence = useRef(0);
+  const chartsAnchorRef = useRef<HTMLDivElement>(null);
+  const loadedRequestKey = useRef(initialSnapshotMatches
+    ? `${selectedClubId}:${range.from}:${range.to}`
+    : '');
   const hasMountedRangeSync = useRef(false);
   const t = useTranslations('dashboard');
 
@@ -257,9 +239,9 @@ export default function DashboardPage() {
 
     const nextQuery = params.toString();
     if (nextQuery !== searchParams.toString()) {
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+      window.history.replaceState(null, '', nextQuery ? `${pathname}?${nextQuery}` : pathname);
     }
-  }, [pathname, range.from, range.to, router, searchParams]);
+  }, [pathname, range.from, range.to, searchParams]);
 
   const fetchDashboard = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -525,11 +507,32 @@ export default function DashboardPage() {
   }, [businessToday, period, range, selectedClubId]);
 
   useEffect(() => {
+    const requestKey = `${selectedClubId}:${range.from}:${range.to}`;
+    if (loadedRequestKey.current === requestKey) return;
+    loadedRequestKey.current = requestKey;
+
     fetchDashboard().catch((fetchError) => {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
-  }, [fetchDashboard]);
+  }, [fetchDashboard, range.from, range.to, selectedClubId]);
+
+  useEffect(() => {
+    if (loading || renderCharts) return;
+    const anchor = chartsAnchorRef.current;
+    if (!anchor || typeof IntersectionObserver === 'undefined') {
+      setRenderCharts(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setRenderCharts(true);
+      observer.disconnect();
+    }, { rootMargin: '600px 0px' });
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [loading, renderCharts]);
 
   const { totals, previousTotals } = data;
 
@@ -763,8 +766,13 @@ export default function DashboardPage() {
         />
       </MetricSection>
 
-      {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3" role="status" aria-label={t('loading')}>
+      {loading || !renderCharts ? (
+        <div
+          ref={chartsAnchorRef}
+          className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3"
+          role="status"
+          aria-label={t('loading')}
+        >
           {Array.from({ length: 6 }).map((_, index) => <ChartLoading key={index} />)}
         </div>
       ) : (
