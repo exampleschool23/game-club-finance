@@ -112,7 +112,13 @@ function getBrowserStorage(): StorageLike | null {
   return typeof window === 'undefined' ? null : window.localStorage;
 }
 
-function applyBrowserDraft(date: string, clubId: string, rows: RowData[], businessDayStartHour: number): RowData[] {
+function applyBrowserDraft(
+  date: string,
+  clubId: string,
+  rows: RowData[],
+  businessDayStartHour: number,
+  entryMode: 'closingStock' | 'soldQuantity',
+): RowData[] {
   const draft = readClosingStockDraft(getBrowserStorage(), date, clubId);
   if (draft?.savedAt) {
     const savedAt = new Date(draft.savedAt);
@@ -124,7 +130,7 @@ function applyBrowserDraft(date: string, clubId: string, rows: RowData[], busine
     }
   }
 
-  return applyClosingStockDraft(rows, draft);
+  return applyClosingStockDraft(rows, draft, entryMode);
 }
 
 
@@ -364,7 +370,13 @@ export default function ClosingStockPage() {
             previousClosingsRes.data ?? {},
             false,
         );
-        setRows(canUseDraft ? applyBrowserDraft(selectedDate, selectedClubId, editableRows, businessDayStartHour) : editableRows);
+        setRows(canUseDraft ? applyBrowserDraft(
+          selectedDate,
+          selectedClubId,
+          editableRows,
+          businessDayStartHour,
+          usesSoldEntry ? 'soldQuantity' : 'closingStock',
+        ) : editableRows);
         setLoading(false);
         return;
       }
@@ -450,9 +462,15 @@ export default function ClosingStockPage() {
         previousClosingsRes.data ?? {},
         selectedDate === today,
     );
-    setRows(canUseDraft && existingCounts.length === 0 ? applyBrowserDraft(selectedDate, selectedClubId, editableRows, businessDayStartHour) : editableRows);
+    setRows(canUseDraft && existingCounts.length === 0 ? applyBrowserDraft(
+      selectedDate,
+      selectedClubId,
+      editableRows,
+      businessDayStartHour,
+      usesSoldEntry ? 'soldQuantity' : 'closingStock',
+    ) : editableRows);
     setLoading(false);
-  }, [buildEditableRows, businessDayStartHour, currentRole, selectedClubId, today]);
+  }, [buildEditableRows, businessDayStartHour, currentRole, selectedClubId, today, usesSoldEntry]);
 
   useEffect(() => {
     setDate(today);

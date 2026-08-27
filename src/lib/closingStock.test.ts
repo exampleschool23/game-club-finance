@@ -605,6 +605,72 @@ describe('closing stock drafts', () => {
     });
   });
 
+  it('rebases a sold-entry draft onto a corrected previous-day closing', () => {
+    const storage = new MemoryStorage();
+    const date = '2026-08-27';
+    const productRow = product({ id: 'cola-bottle', name: 'Cola bottle' });
+
+    saveClosingStockDraft(storage, date, [
+      row({
+        product: productRow,
+        previousStock: '85',
+        addedToday: '0',
+        closingStock: '83',
+        soldQuantity: '2',
+      }),
+    ]);
+
+    const appliedRows = applyClosingStockDraft([
+      row({
+        product: productRow,
+        previousStock: '102',
+        addedToday: '0',
+        closingStock: '102',
+        soldQuantity: '0',
+      }),
+    ], readClosingStockDraft(storage, date), 'soldQuantity');
+
+    expect(appliedRows[0]).toMatchObject({
+      previousStock: '102',
+      addedToday: '0',
+      soldQuantity: '2',
+      closingStock: '100',
+    });
+  });
+
+  it('rebases a closing-entry draft and recalculates sold quantity', () => {
+    const storage = new MemoryStorage();
+    const date = '2026-08-27';
+    const productRow = product({ id: 'water', name: 'Water' });
+
+    saveClosingStockDraft(storage, date, [
+      row({
+        product: productRow,
+        previousStock: '85',
+        addedToday: '0',
+        closingStock: '83',
+        soldQuantity: '2',
+      }),
+    ]);
+
+    const appliedRows = applyClosingStockDraft([
+      row({
+        product: productRow,
+        previousStock: '102',
+        addedToday: '0',
+        closingStock: '102',
+        soldQuantity: '0',
+      }),
+    ], readClosingStockDraft(storage, date), 'closingStock');
+
+    expect(appliedRows[0]).toMatchObject({
+      previousStock: '102',
+      addedToday: '0',
+      closingStock: '83',
+      soldQuantity: '19',
+    });
+  });
+
   it('ignores corrupted drafts or drafts for another date', () => {
     const storage = new MemoryStorage();
     storage.setItem(closingStockDraftKey('2026-06-28'), '{bad json');

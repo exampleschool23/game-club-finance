@@ -399,6 +399,7 @@ export function clearClosingStockDraft(storage: StorageLike | null | undefined, 
 export function applyClosingStockDraft(
   rows: ClosingStockRowData[],
   draft: ClosingStockDraft | null,
+  entryMode: ClosingStockImportMode = 'soldQuantity',
 ): ClosingStockRowData[] {
   if (!draft) return rows;
 
@@ -406,20 +407,59 @@ export function applyClosingStockDraft(
   return rows.map((row) => {
     const draftRow = draftByProduct.get(row.product.id);
     if (!draftRow) return row;
-    const draftedRow = {
+    const adjustmentQuantity = String(draftRow.adjustmentQuantity ?? row.adjustmentQuantity ?? '0');
+    const adjustmentReason = String(draftRow.adjustmentReason ?? row.adjustmentReason ?? '');
+
+    if (row.product.tracks_inventory === false) {
+      return {
+        ...row,
+        previousStock: '0',
+        addedToday: '0',
+        adjustmentQuantity: '0',
+        adjustmentReason: '',
+        closingStock: '0',
+        soldQuantity: formatEditableStockValue(draftRow.soldQuantity),
+      };
+    }
+
+    const draftedRow: ClosingStockRowData = {
       ...row,
-      previousStock: formatEditableStockValue(draftRow.previousStock),
-      addedToday: formatEditableStockValue(draftRow.addedToday),
-      adjustmentQuantity: String(draftRow.adjustmentQuantity ?? row.adjustmentQuantity ?? '0'),
-      adjustmentReason: String(draftRow.adjustmentReason ?? row.adjustmentReason ?? ''),
-      closingStock: formatEditableStockValue(draftRow.closingStock),
-      soldQuantity: formatEditableStockValue(draftRow.soldQuantity),
+      // Opening stock and purchases are authoritative derived values. A draft
+      // must never restore stale copies after an earlier day or purchase is
+      // corrected.
+      previousStock: row.previousStock,
+      addedToday: row.addedToday,
+      adjustmentQuantity,
+      adjustmentReason,
     };
 
-    const freshPurchasedToday = normalizeStockCount(row.addedToday);
-    return freshPurchasedToday > 0
-      ? refreshRowPurchasedToday(draftedRow, freshPurchasedToday)
-      : draftedRow;
+    if (entryMode === 'soldQuantity') {
+      const soldQuantity = formatEditableStockValue(draftRow.soldQuantity);
+      return {
+        ...draftedRow,
+        soldQuantity,
+        closingStock: formatStockValue(calculateClosingStockFromSold(
+          normalizeStockCount(row.previousStock),
+          normalizeStockCount(row.addedToday),
+          normalizeStockCount(soldQuantity),
+          normalizeStockAdjustment(adjustmentQuantity),
+        )),
+      };
+    }
+
+    const closingStock = formatEditableStockValue(draftRow.closingStock);
+    return {
+      ...draftedRow,
+      closingStock,
+      soldQuantity: formatStockValue(calculateStockCountSummary({
+        previousStock: normalizeStockCount(row.previousStock),
+        addedToday: normalizeStockCount(row.addedToday),
+        adjustmentQuantity: normalizeStockAdjustment(adjustmentQuantity),
+        closingStock: normalizeStockCount(closingStock),
+        salePrice: row.product.sale_price,
+        costPrice: row.product.cost_price,
+      }).soldQuantity),
+    };
   });
 }
 
