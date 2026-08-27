@@ -2,7 +2,7 @@
 
 // Route: /daily-report
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -13,12 +13,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatters';
-import {
-  calculateTotalIncome,
-  calculateNetProfit,
-} from '@/lib/calculations/dailyReport';
+import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
-import { calculateBarMoney } from '@/lib/calculations/barMoney';
+import { fetchAllRows } from '@/lib/supabase/pagination';
 import { FileText, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
 import type { DailyCashEntry, DailyStockCount, Expense, StockPurchase } from '@/types';
 
@@ -45,8 +42,11 @@ export default function DailyReportPage() {
   const [debtIncome, setDebtIncome] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const requestSequence = useRef(0);
 
   const fetchData = useCallback(async (selectedDate: string) => {
+    const requestId = ++requestSequence.current;
+
     if (!selectedClubId) {
       setCashEntry(null);
       setStockCounts([]);
@@ -58,6 +58,7 @@ export default function DailyReportPage() {
     }
 
     setLoading(true);
+    setLoadError('');
     const supabase = createClient();
 
     const [cashRes, initialStockRes, purchaseRes, expRes, debtRes] = await Promise.all([
@@ -67,41 +68,53 @@ export default function DailyReportPage() {
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
         .maybeSingle(),
-      supabase
+      fetchAllRows<ProductRow>(() => supabase
         .from('daily_stock_counts')
         .select('*, products(name, sort_order)')
         .eq('club_id', selectedClubId)
-        .eq('date', selectedDate),
-      supabase
+        .eq('date', selectedDate)
+        .order('product_id', { ascending: true })),
+      fetchAllRows<StockPurchase>(() => supabase
         .from('stock_purchases')
         .select('*')
         .eq('club_id', selectedClubId)
-        .eq('date', selectedDate),
-      supabase
+        .eq('date', selectedDate)
+        .order('id', { ascending: true })),
+      fetchAllRows<Expense>(() => supabase
         .from('expenses')
         .select('*')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
-        .order('created_at'),
-      supabase
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })),
+      fetchAllRows<{ amount: number | null }>(() => supabase
         .from('new_debts')
         .select('amount')
         .eq('club_id', selectedClubId)
-        .eq('date', selectedDate),
+        .eq('date', selectedDate)
+        .order('id', { ascending: true })),
     ]);
 
     let stockRes = initialStockRes;
     if (isMissingSortOrder(stockRes.error)) {
-      stockRes = await supabase
+      stockRes = await fetchAllRows<ProductRow>(() => supabase
         .from('daily_stock_counts')
         .select('*, products(name)')
         .eq('club_id', selectedClubId)
-        .eq('date', selectedDate);
+        .eq('date', selectedDate)
+        .order('product_id', { ascending: true }));
     }
+
+    if (requestId !== requestSequence.current) return;
 
     const firstError = [cashRes, stockRes, purchaseRes, expRes, debtRes]
       .find((result) => result.error)?.error;
     if (firstError) {
+      setCashEntry(null);
+      setStockCounts([]);
+      setStockPurchases([]);
+      setExpenses([]);
+      setDebtIncome(0);
       setLoadError(firstError.message);
       setLoading(false);
       return;
@@ -127,10 +140,20 @@ export default function DailyReportPage() {
   }, [selectedClubId]);
 
   useEffect(() => {
+    let cancelled = false;
     fetchData(date).catch((fetchError) => {
+      if (cancelled) return;
+      setCashEntry(null);
+      setStockCounts([]);
+      setStockPurchases([]);
+      setExpenses([]);
+      setDebtIncome(0);
       setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [date, fetchData]);
 
   useEffect(() => {
@@ -146,16 +169,19 @@ export default function DailyReportPage() {
       })
     : 0;
 
-  const barIncome = calculateBarMoney(stockCounts, stockPurchases).barMoney;
-  const totalIncome = calculateTotalIncome(manualIncome, barIncome, debtIncome);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const netProfit = calculateNetProfit(totalIncome, totalExpenses);
+  const reportTotals = calculateFinancialReportTotals({
+    manualIncome,
+    debtIncome,
+    stockRows: stockCounts,
+    purchaseRows: stockPurchases,
+    expenseRows: expenses,
+  });
 
   const hasData = cashEntry !== null || stockCounts.length > 0 || stockPurchases.length > 0 || expenses.length > 0 || debtIncome > 0;
   const currency = tc('currency');
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full max-w-6xl">
       <PageHeader title={t('title')} />
 
       {loadError && <p className="mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{loadError}</p>}
@@ -167,15 +193,15 @@ export default function DailyReportPage() {
 
       {loading ? (
         <div className="space-y-6">
-          <MetricGridSkeleton count={5} className="lg:grid-cols-5" />
-          <TableSkeleton rows={4} columns={4} />
+          <MetricGridSkeleton count={10} className="xl:grid-cols-5" />
+          <TableSkeleton rows={4} columns={5} />
         </div>
       ) : !hasData ? (
         <EmptyState icon={FileText} title={t('noData')} />
       ) : (
         <div className="space-y-6">
           {/* KPIs */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <MetricCard
               label={t('manualIncome')}
               value={`${formatCurrency(manualIncome)} ${currency}`}
@@ -183,8 +209,8 @@ export default function DailyReportPage() {
               valueClassName="text-success-600"
             />
             <MetricCard
-              label={t('barIncome')}
-              value={`${formatCurrency(barIncome)} ${currency}`}
+              label={t('barSales')}
+              value={`${formatCurrency(reportTotals.barSales)} ${currency}`}
               icon={TrendingUp}
               valueClassName="text-success-600"
             />
@@ -195,18 +221,49 @@ export default function DailyReportPage() {
               valueClassName="text-danger-600"
             />
             <MetricCard
-              label={t('totalExpenses')}
-              value={`${formatCurrency(totalExpenses)} ${currency}`}
+              label={t('totalIncome')}
+              value={`${formatCurrency(reportTotals.totalIncome)} ${currency}`}
+              icon={TrendingUp}
+              valueClassName="text-success-600"
+            />
+            <MetricCard
+              label={t('costOfGoodsSold')}
+              value={`${formatCurrency(reportTotals.barCost)} ${currency}`}
               icon={TrendingDown}
               valueClassName="text-danger-500"
             />
             <MetricCard
-              label={t('netProfit')}
-              value={`${formatCurrency(netProfit)} ${currency}`}
+              label={t('totalExpenses')}
+              value={`${formatCurrency(reportTotals.totalExpenses)} ${currency}`}
+              icon={TrendingDown}
+              valueClassName="text-danger-500"
+            />
+            <MetricCard
+              label={t('inventoryPurchases')}
+              value={`${formatCurrency(reportTotals.stockPurchaseCost)} ${currency}`}
+              icon={TrendingDown}
+              valueClassName="text-danger-500"
+            />
+            <MetricCard
+              label={t('barExpenses')}
+              value={`${formatCurrency(reportTotals.barExpenses)} ${currency}`}
+              icon={TrendingDown}
+              valueClassName="text-danger-500"
+            />
+            <MetricCard
+              label={t('barCashLeft')}
+              value={`${formatCurrency(reportTotals.barCashLeft)} ${currency}`}
               icon={DollarSign}
-              valueClassName={netProfit >= 0 ? 'text-success-600' : 'text-danger-500'}
+              valueClassName={reportTotals.barCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}
+            />
+            <MetricCard
+              label={t('accountingNetProfit')}
+              value={`${formatCurrency(reportTotals.accountingNetProfit)} ${currency}`}
+              icon={DollarSign}
+              valueClassName={reportTotals.accountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'}
             />
           </div>
+          <p className="text-xs text-gray-500">{t('barCashFormula')}</p>
 
           {/* Cash Entry */}
           {cashEntry && (
@@ -253,13 +310,14 @@ export default function DailyReportPage() {
                 {t('stockSummary')}
               </h2>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
+                <table className="w-full min-w-[680px] text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
                       <th className="text-left py-2 text-gray-500 font-medium">{t('product')}</th>
                       <th className="text-right py-2 text-gray-500 font-medium">{t('sold')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">{t('barIncome')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">{t('profit')}</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">{t('barSales')}</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">{t('costOfGoodsSold')}</th>
+                      <th className="text-right py-2 text-gray-500 font-medium">{t('grossProfit')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -269,6 +327,9 @@ export default function DailyReportPage() {
                         <td className="py-2 text-right">{sc.sold_quantity}</td>
                         <td className="py-2 text-right text-success-600">
                           {formatCurrency(sc.bar_income)}
+                        </td>
+                        <td className="py-2 text-right text-danger-500">
+                          {formatCurrency(sc.bar_cost)}
                         </td>
                         <td className="py-2 text-right font-medium">
                           <span className={sc.bar_profit >= 0 ? 'text-success-600' : 'text-danger-500'}>
@@ -281,7 +342,10 @@ export default function DailyReportPage() {
                       <td className="py-2">{tc('total')}</td>
                       <td />
                       <td className="py-2 text-right text-success-600">
-                        {formatCurrency(barIncome)}
+                        {formatCurrency(reportTotals.barSales)}
+                      </td>
+                      <td className="py-2 text-right text-danger-500">
+                        {formatCurrency(reportTotals.barCost)}
                       </td>
                       <td className="py-2 text-right">
                         {formatCurrency(stockCounts.reduce((s, r) => s + r.bar_profit, 0))}
@@ -311,7 +375,7 @@ export default function DailyReportPage() {
                 ))}
                 <div className="flex flex-col gap-1 border-t border-gray-100 pt-2 text-sm font-semibold sm:flex-row sm:justify-between">
                   <span>{tc('total')}</span>
-                  <span className="text-danger-500">{formatCurrency(totalExpenses)}</span>
+                  <span className="text-danger-500">{formatCurrency(reportTotals.totalExpenses)}</span>
                 </div>
               </div>
             </div>

@@ -19,7 +19,6 @@ import { formatCurrency } from '@/lib/formatters';
 import {
   calculateClosingStockFromSold,
   calculateDirectSalesSummary,
-  recalculateFutureStockCounts,
   calculateStockCountSummary,
 } from '@/lib/calculations/stock';
 import {
@@ -28,10 +27,13 @@ import {
   buildClosingStockUpserts,
   clearClosingStockDraft,
   normalizeStockCount,
+  normalizeStockAdjustment,
   readClosingStockDraft,
   saveClosingStockDraft,
+  validateClosingStockRows,
   type ClosingStockExistingCount,
   type ClosingStockRowData,
+  type ClosingStockUpsert,
   type StorageLike,
 } from '@/lib/closingStock';
 import {
@@ -58,20 +60,12 @@ interface PreviousClosing {
   closing_stock: number;
 }
 
-interface FutureStockCountRow {
-  id: string;
-  product_id: string;
-  date: string;
-  added_today: number;
-  closing_stock: number;
-  sale_price: number;
-  cost_price: number;
-}
-
 interface StockCountRow {
   product_id: string;
   previous_stock: number;
   added_today: number;
+  adjustment_quantity: number;
+  adjustment_reason: string | null;
   closing_stock: number;
   sold_quantity: number;
   sale_price: number;
@@ -88,12 +82,26 @@ function parseNum(value: string): number {
   return normalizeStockCount(value);
 }
 
+function parseAdjustment(value: string | undefined): number {
+  return normalizeStockAdjustment(value);
+}
+
 function isWholeNumberInput(value: string): boolean {
   return value === '' || /^\d+$/.test(value);
 }
 
+function isSignedWholeNumberInput(value: string): boolean {
+  return value === '' || value === '-' || /^-?\d+$/.test(value);
+}
+
 function preventNonIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
   if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) {
+    event.preventDefault();
+  }
+}
+
+function preventNonSignedIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
+  if (['.', ',', 'e', 'E', '+'].includes(event.key)) {
     event.preventDefault();
   }
 }
@@ -236,68 +244,6 @@ async function fetchPreviousClosings(supabase: ReturnType<typeof createClient>, 
   return { data: previousClosings, error: null };
 }
 
-async function recalculateSavedFutureRows(
-  supabase: ReturnType<typeof createClient>,
-  selectedDate: string,
-  savedClosings: Record<string, number>,
-  clubId: string,
-) {
-  const productIds = Object.keys(savedClosings);
-  if (productIds.length === 0) return null;
-
-  const { data, error } = await supabase
-    .from('daily_stock_counts')
-    .select('id,product_id,date,added_today,closing_stock,sale_price,cost_price')
-    .eq('club_id', clubId)
-    .in('product_id', productIds)
-    .gt('date', selectedDate)
-    .order('date', { ascending: true });
-
-  if (error) return error;
-
-  const rowsByProduct = ((data as FutureStockCountRow[]) ?? []).reduce<Record<string, FutureStockCountRow[]>>(
-    (acc, row) => {
-      acc[row.product_id] = [...(acc[row.product_id] ?? []), row];
-      return acc;
-    },
-    {},
-  );
-
-  const updates = Object.entries(rowsByProduct).flatMap(([productId, futureRows]) =>
-    recalculateFutureStockCounts(savedClosings[productId], futureRows).map((row) => {
-      const original = futureRows.find((candidate) => candidate.date === row.date);
-      return {
-        id: original?.id,
-        previous_stock: row.previous_stock,
-        sold_quantity: row.sold_quantity,
-        bar_income: row.bar_income,
-        bar_cost: row.bar_cost,
-        bar_profit: row.bar_profit,
-        updated_at: new Date().toISOString(),
-      };
-    }),
-  ).filter((row): row is { id: string; previous_stock: number; sold_quantity: number; bar_income: number; bar_cost: number; bar_profit: number; updated_at: string } => Boolean(row.id));
-
-  const results = await Promise.all(
-    updates.map((row) =>
-      supabase
-        .from('daily_stock_counts')
-        .update({
-          previous_stock: row.previous_stock,
-          sold_quantity: row.sold_quantity,
-          bar_income: row.bar_income,
-          bar_cost: row.bar_cost,
-          bar_profit: row.bar_profit,
-          updated_at: row.updated_at,
-        })
-        .eq('club_id', clubId)
-        .eq('id', row.id),
-    ),
-  );
-
-  return results.find((result) => result.error)?.error ?? null;
-}
-
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
@@ -357,7 +303,7 @@ export default function ClosingStockPage() {
     if (readOnlyDate) {
       const countsWithOrder = await supabase
         .from('daily_stock_counts')
-        .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,tracks_inventory,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
+        .select('product_id,previous_stock,added_today,adjustment_quantity,adjustment_reason,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,tracks_inventory,low_stock_threshold,sort_order,is_active,is_deleted,created_at,updated_at)')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
@@ -368,7 +314,7 @@ export default function ClosingStockPage() {
       if (isMissingSortOrder(countsWithOrder.error)) {
         const countsWithoutOrder = await supabase
           .from('daily_stock_counts')
-          .select('product_id,previous_stock,added_today,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,tracks_inventory,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
+          .select('product_id,previous_stock,added_today,adjustment_quantity,adjustment_reason,closing_stock,sold_quantity,sale_price,cost_price,products(id,club_id,name,category,current_stock,tracks_inventory,low_stock_threshold,is_active,is_deleted,created_at,updated_at)')
           .eq('club_id', selectedClubId)
           .eq('date', selectedDate)
           .order('updated_at', { ascending: false });
@@ -523,11 +469,40 @@ export default function ClosingStockPage() {
       nextRow.soldQuantity = String(calculateStockCountSummary({
         previousStock: parseNum(nextRow.previousStock),
         addedToday: parseNum(nextRow.addedToday),
+        adjustmentQuantity: parseAdjustment(nextRow.adjustmentQuantity),
         closingStock: parseNum(nextRow.closingStock),
         salePrice: nextRow.product.sale_price,
         costPrice: nextRow.product.cost_price,
       }).soldQuantity);
       copy[index] = nextRow;
+      return copy;
+    });
+  }
+
+  function updateAdjustment(index: number, value: string) {
+    setRows((prev) => {
+      if (!isSignedWholeNumberInput(value)) return prev;
+
+      const copy = [...prev];
+      const current = copy[index];
+      const nextRow = { ...current, adjustmentQuantity: value };
+      nextRow.soldQuantity = String(calculateStockCountSummary({
+        previousStock: parseNum(nextRow.previousStock),
+        addedToday: parseNum(nextRow.addedToday),
+        adjustmentQuantity: parseAdjustment(value),
+        closingStock: parseNum(nextRow.closingStock),
+        salePrice: nextRow.product.sale_price,
+        costPrice: nextRow.product.cost_price,
+      }).soldQuantity);
+      copy[index] = nextRow;
+      return copy;
+    });
+  }
+
+  function updateAdjustmentReason(index: number, value: string) {
+    setRows((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], adjustmentReason: value };
       return copy;
     });
   }
@@ -557,6 +532,7 @@ export default function ClosingStockPage() {
         parseNum(current.previousStock),
         parseNum(current.addedToday),
         parseNum(value),
+        parseAdjustment(current.adjustmentQuantity),
       );
       copy[index] = {
         ...current,
@@ -584,6 +560,7 @@ export default function ClosingStockPage() {
     return calculateStockCountSummary({
       previousStock: parseNum(row.previousStock),
       addedToday: parseNum(row.addedToday),
+      adjustmentQuantity: parseAdjustment(row.adjustmentQuantity),
       closingStock: parseNum(row.closingStock),
       salePrice: row.product.sale_price,
       costPrice: row.product.cost_price,
@@ -660,21 +637,44 @@ export default function ClosingStockPage() {
       return;
     }
 
+    const validationError = validateClosingStockRows(rows);
+    if (validationError) {
+      const validationMessages = {
+        adjustment_reason_required: t('adjustmentReasonRequired', { product: validationError.productName }),
+        closing_exceeds_available: t('closingExceedsAvailable', {
+          product: validationError.productName,
+          available: validationError.availableStock,
+        }),
+        negative_available_stock: t('negativeAvailableStock', { product: validationError.productName }),
+        sold_quantity_mismatch: t('soldQuantityMismatch', { product: validationError.productName }),
+      };
+      setError(validationMessages[validationError.code]);
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    const { upserts, savedClosings } = buildClosingStockUpserts({
-      date,
-      rows,
-      createdBy: session?.user?.id ?? null,
-    });
-    const clubUpserts = upserts.map((row) => ({ ...row, club_id: selectedClubId }));
+    let upserts: ClosingStockUpsert[];
+    try {
+      ({ upserts } = buildClosingStockUpserts({
+        date,
+        rows,
+        createdBy: session?.user?.id ?? null,
+      }));
+    } catch (buildError) {
+      setSaving(false);
+      setError(buildError instanceof Error ? buildError.message : tc('error'));
+      return;
+    }
 
-    const { error: err } = await supabase
-      .from('daily_stock_counts')
-      .upsert(clubUpserts, { onConflict: 'club_id,date,product_id' });
+    const { error: err } = await supabase.rpc('save_closing_stock_counts', {
+      p_club_id: selectedClubId,
+      p_date: date,
+      p_counts: upserts,
+    });
 
     if (err) {
       setSaving(false);
@@ -682,14 +682,7 @@ export default function ClosingStockPage() {
       return;
     }
 
-    const cascadeError = await recalculateSavedFutureRows(supabase, date, savedClosings, selectedClubId);
-
     setSaving(false);
-
-    if (cascadeError) {
-      setError(cascadeError.message);
-      return;
-    }
 
     clearClosingStockDraft(getBrowserStorage(), date, selectedClubId);
     await loadData(date);
@@ -845,7 +838,7 @@ export default function ClosingStockPage() {
             <div className="p-8 text-gray-500">{tc('noData')}</div>
           ) : (
             <div className="max-h-[calc(100vh-14rem)] overflow-auto">
-              <table className="w-full min-w-[1240px] text-sm">
+              <table className="w-full min-w-[1460px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     <th className={`${stickyHeaderCellClass} w-12 px-5 text-left`}>#</th>
@@ -854,6 +847,11 @@ export default function ClosingStockPage() {
                     <th className={`${stickyHeaderCellClass} text-right`}>{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className={`${stickyHeaderCellClass} text-center`}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className={`${addedTodayHeaderCellClass} text-center`}>{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className={`${stickyHeaderCellClass} min-w-[190px] text-center`}>
+                      {t('adjustment')}
+                      <br />
+                      <span className="font-normal normal-case">({t('pcs')})</span>
+                    </th>
                     <th className={`${stickyHeaderCellClass} text-center`}>
                       {t('closingStock')}
                       <br />
@@ -915,6 +913,41 @@ export default function ClosingStockPage() {
                         </td>
                         <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">
                           {row.product.tracks_inventory === false ? '—' : parseNum(row.addedToday)}
+                        </td>
+                        <td className="px-4 py-4">
+                          {row.product.tracks_inventory === false ? (
+                            <p className="text-center font-semibold text-gray-400">—</p>
+                          ) : isOwner && canSave ? (
+                            <div className="mx-auto w-44 space-y-2">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                className="input-field h-10 w-full text-center font-semibold"
+                                value={row.adjustmentQuantity ?? '0'}
+                                aria-label={t('adjustment')}
+                                onKeyDown={preventNonSignedIntegerNumberInput}
+                                onWheel={(event) => event.currentTarget.blur()}
+                                onChange={(event) => updateAdjustment(originalIndex, event.target.value)}
+                              />
+                              {parseAdjustment(row.adjustmentQuantity) !== 0 && (
+                                <input
+                                  type="text"
+                                  className="input-field h-9 w-full text-xs"
+                                  value={row.adjustmentReason ?? ''}
+                                  placeholder={t('adjustmentReason')}
+                                  aria-label={t('adjustmentReason')}
+                                  onChange={(event) => updateAdjustmentReason(originalIndex, event.target.value)}
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <p className="font-semibold text-gray-900">{parseAdjustment(row.adjustmentQuantity)}</p>
+                              {row.adjustmentReason && (
+                                <p className="mt-1 text-xs text-gray-500">{row.adjustmentReason}</p>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-4">
                           {row.product.tracks_inventory === false ? (
@@ -1000,6 +1033,7 @@ export default function ClosingStockPage() {
                     <td className="px-4 py-4 text-right">{formatCurrency(totals.stockValue)}</td>
                     <td className="px-4 py-4 text-center">{totals.previous}</td>
                     <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{totals.added}</td>
+                    <td className="px-4 py-4 text-center">—</td>
                     <td className="px-4 py-4 text-center">—</td>
                     <td className="px-4 py-4 text-center">{totals.sold}</td>
                     <td className="px-4 py-4 text-right text-success-600">{formatCurrency(totals.income)}</td>

@@ -25,8 +25,15 @@ export function validateDate(value: unknown): ValidationResult {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return fail('Date must be in YYYY-MM-DD format.');
   }
-  const d = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return fail('Invalid date.');
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    return fail('Invalid date.');
+  }
   return ok();
 }
 
@@ -58,6 +65,20 @@ export function validateDebtPayment(opts: {
     );
   }
   return ok();
+}
+
+export type DebtDateIssue = 'invalid' | 'future' | 'before_debt' | null;
+
+/** Debt ledger dates must be valid business dates and payments cannot predate the debt. */
+export function getDebtDateIssue(opts: {
+  date: string;
+  businessDate: string;
+  debtDate?: string;
+}): DebtDateIssue {
+  if (!validateDate(opts.date).valid || !validateDate(opts.businessDate).valid) return 'invalid';
+  if (opts.date > opts.businessDate) return 'future';
+  if (opts.debtDate && (!validateDate(opts.debtDate).valid || opts.date < opts.debtDate)) return 'before_debt';
+  return null;
 }
 
 /** Entry must be within edit window (or role is owner). Viewers can never edit. */

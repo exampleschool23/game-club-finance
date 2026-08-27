@@ -12,6 +12,7 @@ import {
   readClosingStockDraft,
   saveClosingStockDraft,
   selectClosingStockImportRows,
+  validateClosingStockRows,
   type ClosingStockImportSheet,
   type ClosingStockRowData,
   type StorageLike,
@@ -73,6 +74,8 @@ function row(overrides: Partial<ClosingStockRowData>): ClosingStockRowData {
     addedToday: overrides.addedToday ?? '5',
     closingStock: overrides.closingStock ?? '12',
     soldQuantity: overrides.soldQuantity ?? '3',
+    adjustmentQuantity: overrides.adjustmentQuantity ?? '0',
+    adjustmentReason: overrides.adjustmentReason ?? '',
   };
 }
 
@@ -441,6 +444,8 @@ describe('closing stock drafts', () => {
           productId: 'cola',
           previousStock: '10',
           addedToday: '5',
+          adjustmentQuantity: '0',
+          adjustmentReason: '',
           closingStock: '8',
           soldQuantity: '7',
         },
@@ -537,6 +542,8 @@ describe('closing stock save payloads', () => {
     expect(upserts[0]).toMatchObject({
       previous_stock: 0,
       added_today: 0,
+      adjustment_quantity: 0,
+      adjustment_reason: null,
       closing_stock: 0,
       sold_quantity: 4,
       bar_income: 100_000,
@@ -562,6 +569,7 @@ describe('closing stock save payloads', () => {
           previousStock: '10',
           addedToday: '5',
           closingStock: '8',
+          soldQuantity: '7',
         }),
       ],
     });
@@ -572,6 +580,8 @@ describe('closing stock save payloads', () => {
         product_id: 'cola',
         previous_stock: 10,
         added_today: 5,
+        adjustment_quantity: 0,
+        adjustment_reason: null,
         closing_stock: 8,
         sold_quantity: 7,
         sale_price: 15000,
@@ -586,29 +596,57 @@ describe('closing stock save payloads', () => {
     expect(savedClosings).toEqual({ cola: 8 });
   });
 
-  it('uses zero for invalid numeric inputs before saving stock counts', () => {
-    const { upserts } = buildClosingStockUpserts({
+  it('rejects closing stock above available inventory without an adjustment', () => {
+    const invalidRow = row({
+      product: product({ id: 'cola', sale_price: 15000, cost_price: 9000 }),
+      previousStock: '',
+      addedToday: 'bad',
+      closingStock: '1,000',
+      soldQuantity: '0',
+    });
+
+    expect(validateClosingStockRows([invalidRow])?.code).toBe('closing_exceeds_available');
+    expect(() => buildClosingStockUpserts({
       date: '2026-06-28',
       createdBy: null,
       updatedAt: '2026-06-28T18:00:00.000Z',
-      rows: [
-        row({
-          product: product({ id: 'cola', sale_price: 15000, cost_price: 9000 }),
-          previousStock: '',
-          addedToday: 'bad',
-          closingStock: '1,000',
-        }),
-      ],
+      rows: [invalidRow],
+    })).toThrow(/explicit adjustment/i);
+  });
+
+  it('saves an explicit, explained inventory adjustment', () => {
+    const { upserts } = buildClosingStockUpserts({
+      date: '2026-06-28',
+      createdBy: 'owner-1',
+      updatedAt: '2026-06-28T18:00:00.000Z',
+      rows: [row({
+        previousStock: '10',
+        addedToday: '0',
+        adjustmentQuantity: '5',
+        adjustmentReason: 'Physical count correction',
+        closingStock: '13',
+        soldQuantity: '2',
+      })],
     });
 
     expect(upserts[0]).toMatchObject({
-      previous_stock: 0,
+      previous_stock: 10,
       added_today: 0,
-      closing_stock: 1000,
-      sold_quantity: 0,
-      bar_income: 0,
-      bar_profit: 0,
+      adjustment_quantity: 5,
+      adjustment_reason: 'Physical count correction',
+      closing_stock: 13,
+      sold_quantity: 2,
     });
+  });
+
+  it('requires a reason for every non-zero inventory adjustment', () => {
+    const invalidRow = row({
+      adjustmentQuantity: '2',
+      adjustmentReason: ' ',
+      closingStock: '14',
+      soldQuantity: '3',
+    });
+    expect(validateClosingStockRows([invalidRow])?.code).toBe('adjustment_reason_required');
   });
 
   it('saves stock count quantities as integers', () => {
@@ -622,6 +660,7 @@ describe('closing stock save payloads', () => {
           previousStock: '0',
           addedToday: '21',
           closingStock: '20.2',
+          soldQuantity: '1',
         }),
       ],
     });
@@ -629,6 +668,8 @@ describe('closing stock save payloads', () => {
     expect(upserts[0]).toMatchObject({
       previous_stock: 0,
       added_today: 21,
+      adjustment_quantity: 0,
+      adjustment_reason: null,
       closing_stock: 20,
       sold_quantity: 1,
       bar_income: 10000,

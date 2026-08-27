@@ -10,6 +10,9 @@ import {
   applyPurchaseDeltaToStockCount,
   calculateWeightedAverageCost,
   calculateClosingStockDefaults,
+  calculateAvailableStock,
+  validateStockAvailability,
+  isWholePositiveStockQuantity,
   recalculateFutureStockCounts,
 } from './stock';
 
@@ -25,6 +28,45 @@ describe('calculateSoldQuantity', () => {
   it('returns 0 when nothing was sold', () => {
     expect(calculateSoldQuantity(50, 10, 60)).toBe(0);
   });
+
+  it('includes an explicit signed inventory adjustment', () => {
+    expect(calculateSoldQuantity(10, 0, 13, 5)).toBe(2);
+    expect(calculateSoldQuantity(10, 5, 8, -2)).toBe(5);
+  });
+});
+
+describe('stock availability validation', () => {
+  it('identifies unexplained inventory increases', () => {
+    expect(validateStockAvailability(10, 0, 13)).toEqual({
+      availableStock: 10,
+      excessClosingStock: 3,
+      isValid: false,
+    });
+  });
+
+  it('accepts a closing count covered by an explicit adjustment', () => {
+    expect(calculateAvailableStock(10, 0, 5)).toBe(15);
+    expect(validateStockAvailability(10, 0, 13, 5)).toEqual({
+      availableStock: 15,
+      excessClosingStock: 0,
+      isValid: true,
+    });
+  });
+
+  it('rejects an adjustment that makes available stock negative', () => {
+    expect(validateStockAvailability(2, 0, 0, -3).isValid).toBe(false);
+  });
+});
+
+describe('stock purchase quantity validation', () => {
+  it('accepts only positive whole units', () => {
+    expect(isWholePositiveStockQuantity(1)).toBe(true);
+    expect(isWholePositiveStockQuantity(306)).toBe(true);
+    expect(isWholePositiveStockQuantity(0)).toBe(false);
+    expect(isWholePositiveStockQuantity(-1)).toBe(false);
+    expect(isWholePositiveStockQuantity(0.01)).toBe(false);
+    expect(isWholePositiveStockQuantity(305.99)).toBe(false);
+  });
 });
 
 describe('calculateClosingStockFromSold', () => {
@@ -35,6 +77,10 @@ describe('calculateClosingStockFromSold', () => {
 
   it('does not allow ending stock to become negative', () => {
     expect(calculateClosingStockFromSold(20, 50, 80)).toBe(0);
+  });
+
+  it('includes an inventory adjustment when deriving closing stock', () => {
+    expect(calculateClosingStockFromSold(10, 0, 2, 5)).toBe(13);
   });
 });
 
@@ -116,6 +162,22 @@ describe('calculateStockCountSummary', () => {
     expect(result.barIncome).toBe(0);
     expect(result.barCost).toBe(0);
     expect(result.barProfit).toBe(0);
+  });
+
+  it('calculates sales after an explicit positive adjustment', () => {
+    expect(calculateStockCountSummary({
+      previousStock: 10,
+      addedToday: 0,
+      adjustmentQuantity: 5,
+      closingStock: 13,
+      salePrice: 10_000,
+      costPrice: 6_000,
+    })).toEqual({
+      soldQuantity: 2,
+      barIncome: 20_000,
+      barCost: 12_000,
+      barProfit: 8_000,
+    });
   });
 });
 
@@ -254,6 +316,7 @@ describe('recalculateFutureStockCounts', () => {
       {
         date: '2026-06-03',
         added_today: 10,
+        adjustment_quantity: 2,
         closing_stock: 70,
         sale_price: 15000,
         cost_price: 10000,
@@ -282,13 +345,14 @@ describe('recalculateFutureStockCounts', () => {
         date: '2026-06-03',
         previous_stock: 60,
         added_today: 10,
+        adjustment_quantity: 2,
         closing_stock: 70,
-        sold_quantity: 0,
+        sold_quantity: 2,
         sale_price: 15000,
         cost_price: 10000,
-        bar_income: 0,
-        bar_cost: 0,
-        bar_profit: 0,
+        bar_income: 30000,
+        bar_cost: 20000,
+        bar_profit: 10000,
       },
     ]);
   });

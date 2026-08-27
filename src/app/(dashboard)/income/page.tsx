@@ -1,3 +1,5 @@
-import IncomePage from './IncomePage';
+import { redirect } from 'next/navigation';
 
-export default IncomePage;
+export default function LegacyIncomeRedirect() {
+  redirect('/daily-cash');
+}

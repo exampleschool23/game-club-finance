@@ -2,7 +2,7 @@
 
 // Route: /monthly-report
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -13,22 +13,23 @@ import { MonthPicker } from '@/components/ui/CalendarPicker';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { currentYearMonth, monthRange } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/formatters';
-import {
-  calculateTotalIncome,
-  calculateNetProfit,
-} from '@/lib/calculations/dailyReport';
+import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
-import { calculateBarMoney } from '@/lib/calculations/barMoney';
+import { fetchAllRows } from '@/lib/supabase/pagination';
 import { BarChart2 } from 'lucide-react';
 
 interface DayRow {
   date: string;
   manualIncome: number;
-  barIncome: number;
+  barSales: number;
   debtIncome: number;
   totalIncome: number;
+  barCost: number;
+  stockPurchaseCost: number;
+  barExpenses: number;
   expenses: number;
-  profit: number;
+  barCashLeft: number;
+  accountingNetProfit: number;
 }
 
 interface MonthlyCashRow {
@@ -47,12 +48,17 @@ interface MonthlyAmountRow {
 interface MonthlyStockRow {
   date: string;
   bar_income: number;
+  bar_cost: number;
 }
 
 interface MonthlyPurchaseRow {
   date: string;
   quantity: number;
   cost_price: number;
+}
+
+interface MonthlyExpenseRow extends MonthlyAmountRow {
+  payment_source: 'game_club' | 'bar' | null;
 }
 
 export default function MonthlyReportPage() {
@@ -65,8 +71,11 @@ export default function MonthlyReportPage() {
   const [rows, setRows] = useState<DayRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const requestSequence = useRef(0);
 
   const fetchData = useCallback(async (selectedMonth: string) => {
+    const requestId = ++requestSequence.current;
+
     if (!selectedClubId) {
       setRows([]);
       setLoading(false);
@@ -74,41 +83,53 @@ export default function MonthlyReportPage() {
     }
 
     setLoading(true);
+    setLoadError('');
     const supabase = createClient();
     const { from, to } = monthRange(selectedMonth);
 
     const [cashRes, stockRes, purchaseRes, expRes, debtRes] = await Promise.all([
-      supabase
+      fetchAllRows<MonthlyCashRow>(() => supabase
         .from('daily_cash_entries')
         .select('date,cash_income,terminal_income,card_income,playstation_income')
         .eq('club_id', selectedClubId)
         .gte('date', from)
-        .lte('date', to),
-      supabase
+        .lte('date', to)
+        .order('date', { ascending: true })),
+      fetchAllRows<MonthlyStockRow>(() => supabase
         .from('daily_stock_counts')
-        .select('date,bar_income')
+        .select('date,bar_income,bar_cost')
         .eq('club_id', selectedClubId)
         .gte('date', from)
-        .lte('date', to),
-      supabase
+        .lte('date', to)
+        .order('date', { ascending: true })
+        .order('product_id', { ascending: true })),
+      fetchAllRows<MonthlyPurchaseRow>(() => supabase
         .from('stock_purchases')
         .select('date,quantity,cost_price')
         .eq('club_id', selectedClubId)
         .gte('date', from)
-        .lte('date', to),
-      supabase
+        .lte('date', to)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true })),
+      fetchAllRows<MonthlyExpenseRow>(() => supabase
         .from('expenses')
-        .select('date,amount')
+        .select('date,amount,payment_source')
         .eq('club_id', selectedClubId)
         .gte('date', from)
-        .lte('date', to),
-      supabase
+        .lte('date', to)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true })),
+      fetchAllRows<MonthlyAmountRow>(() => supabase
         .from('new_debts')
         .select('date,amount')
         .eq('club_id', selectedClubId)
         .gte('date', from)
-        .lte('date', to),
+        .lte('date', to)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true })),
     ]);
+
+    if (requestId !== requestSequence.current) return;
 
     const firstError = [cashRes, stockRes, purchaseRes, expRes, debtRes]
       .find((result) => result.error)?.error;
@@ -122,7 +143,7 @@ export default function MonthlyReportPage() {
     const cashEntries = (cashRes.data ?? []) as MonthlyCashRow[];
     const stockCounts = (stockRes.data ?? []) as MonthlyStockRow[];
     const stockPurchases = (purchaseRes.data ?? []) as MonthlyPurchaseRow[];
-    const expenses = (expRes.data ?? []) as MonthlyAmountRow[];
+    const expenses = (expRes.data ?? []) as MonthlyExpenseRow[];
     const debts = (debtRes.data ?? []) as MonthlyAmountRow[];
 
     // Collect all unique dates
@@ -145,19 +166,29 @@ export default function MonthlyReportPage() {
             playstationIncome: cashEntry.playstation_income ?? 0,
           })
         : 0;
-      const barIncome = calculateBarMoney(
-        stockCounts.filter((r) => r.date === date),
-        stockPurchases.filter((r) => r.date === date),
-      ).barMoney;
       const debtIncome = debts
         .filter((r) => r.date === date)
         .reduce((sum, debt) => sum + Number(debt.amount ?? 0), 0);
-      const totalIncome = calculateTotalIncome(manualIncome, barIncome, debtIncome);
-      const dayExpenses = expenses
-        .filter((r) => r.date === date)
-        .reduce((s, r) => s + (r.amount ?? 0), 0);
-      const profit = calculateNetProfit(totalIncome, dayExpenses);
-      return { date, manualIncome, barIncome, debtIncome, totalIncome, expenses: dayExpenses, profit };
+      const totals = calculateFinancialReportTotals({
+        manualIncome,
+        debtIncome,
+        stockRows: stockCounts.filter((r) => r.date === date),
+        purchaseRows: stockPurchases.filter((r) => r.date === date),
+        expenseRows: expenses.filter((r) => r.date === date),
+      });
+      return {
+        date,
+        manualIncome,
+        barSales: totals.barSales,
+        debtIncome,
+        totalIncome: totals.totalIncome,
+        barCost: totals.barCost,
+        stockPurchaseCost: totals.stockPurchaseCost,
+        barExpenses: totals.barExpenses,
+        expenses: totals.totalExpenses,
+        barCashLeft: totals.barCashLeft,
+        accountingNetProfit: totals.accountingNetProfit,
+      };
     });
 
     setRows(dayRows);
@@ -166,11 +197,16 @@ export default function MonthlyReportPage() {
   }, [selectedClubId]);
 
   useEffect(() => {
+    let cancelled = false;
     fetchData(month).catch((fetchError) => {
+      if (cancelled) return;
       setRows([]);
       setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [month, fetchData]);
 
   useEffect(() => {
@@ -178,12 +214,16 @@ export default function MonthlyReportPage() {
   }, [businessYearMonth, selectedClubId]);
 
   const totalIncome = rows.reduce((s, r) => s + r.totalIncome, 0);
+  const totalBarCost = rows.reduce((s, r) => s + r.barCost, 0);
+  const totalStockPurchaseCost = rows.reduce((s, r) => s + r.stockPurchaseCost, 0);
+  const totalBarExpenses = rows.reduce((s, r) => s + r.barExpenses, 0);
   const totalExpenses = rows.reduce((s, r) => s + r.expenses, 0);
-  const totalProfit = rows.reduce((s, r) => s + r.profit, 0);
+  const totalBarCashLeft = rows.reduce((s, r) => s + r.barCashLeft, 0);
+  const totalAccountingNetProfit = rows.reduce((s, r) => s + r.accountingNetProfit, 0);
   const currency = tc('currency');
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="mx-auto w-full max-w-7xl">
       <PageHeader title={t('title')} />
 
       {loadError && <p className="mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{loadError}</p>}
@@ -195,19 +235,43 @@ export default function MonthlyReportPage() {
 
       {loading ? (
         <div className="space-y-4">
-          <MetricGridSkeleton count={3} className="xl:grid-cols-3" />
-          <TableSkeleton rows={8} columns={7} />
+          <MetricGridSkeleton count={7} className="lg:grid-cols-4" />
+          <TableSkeleton rows={8} columns={11} />
         </div>
       ) : rows.length === 0 ? (
         <EmptyState icon={BarChart2} title={t('noData')} />
       ) : (
         <div className="space-y-4">
           {/* Summary row */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="card text-center">
               <p className="text-sm text-gray-500">{t('totalIncome')}</p>
               <p className="text-xl font-bold text-success-600">
                 {formatCurrency(totalIncome)} {currency}
+              </p>
+            </div>
+            <div className="card text-center">
+              <p className="text-sm text-gray-500">{t('inventoryPurchases')}</p>
+              <p className="text-xl font-bold text-danger-500">
+                {formatCurrency(totalStockPurchaseCost)} {currency}
+              </p>
+            </div>
+            <div className="card text-center">
+              <p className="text-sm text-gray-500">{t('barExpenses')}</p>
+              <p className="text-xl font-bold text-danger-500">
+                {formatCurrency(totalBarExpenses)} {currency}
+              </p>
+            </div>
+            <div className="card text-center">
+              <p className="text-sm text-gray-500">{t('barCashLeft')}</p>
+              <p className={`text-xl font-bold ${totalBarCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}`}>
+                {formatCurrency(totalBarCashLeft)} {currency}
+              </p>
+            </div>
+            <div className="card text-center">
+              <p className="text-sm text-gray-500">{t('costOfGoodsSold')}</p>
+              <p className="text-xl font-bold text-danger-500">
+                {formatCurrency(totalBarCost)} {currency}
               </p>
             </div>
             <div className="card text-center">
@@ -217,30 +281,31 @@ export default function MonthlyReportPage() {
               </p>
             </div>
             <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('profit')}</p>
+              <p className="text-sm text-gray-500">{t('accountingNetProfit')}</p>
               <p
                 className={`text-xl font-bold ${
-                  totalProfit >= 0 ? 'text-success-600' : 'text-danger-500'
+                  totalAccountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'
                 }`}
               >
-                {formatCurrency(totalProfit)} {currency}
+                {formatCurrency(totalAccountingNetProfit)} {currency}
               </p>
             </div>
           </div>
+          <p className="text-xs text-gray-500">{t('barCashFormula')}</p>
 
           {/* Day-by-day table */}
           <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[1460px] text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
                     {t('date')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('income')}
+                    {t('gameClubIncome')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('barIncome')}
+                    {t('barSales')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
                     {t('debtIncome')}
@@ -249,10 +314,22 @@ export default function MonthlyReportPage() {
                     {t('totalIncome')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
+                    {t('costOfGoodsSold')}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
+                    {t('inventoryPurchases')}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
+                    {t('barExpenses')}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
                     {t('expenses')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('profit')}
+                    {t('barCashLeft')}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
+                    {t('accountingNetProfit')}
                   </th>
                 </tr>
               </thead>
@@ -264,7 +341,7 @@ export default function MonthlyReportPage() {
                       {formatCurrency(row.manualIncome)}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600">
-                      {formatCurrency(row.barIncome)}
+                      {formatCurrency(row.barSales)}
                     </td>
                     <td className="px-4 py-3 text-right text-danger-600">
                       {formatCurrency(row.debtIncome)}
@@ -273,11 +350,25 @@ export default function MonthlyReportPage() {
                       {formatCurrency(row.totalIncome)}
                     </td>
                     <td className="px-4 py-3 text-right text-danger-500">
+                      {formatCurrency(row.barCost)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-danger-500">
+                      {formatCurrency(row.stockPurchaseCost)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-danger-500">
+                      {formatCurrency(row.barExpenses)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-danger-500">
                       {formatCurrency(row.expenses)}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold">
-                      <span className={row.profit >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                        {formatCurrency(row.profit)}
+                      <span className={row.barCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}>
+                        {formatCurrency(row.barCashLeft)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold">
+                      <span className={row.accountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'}>
+                        {formatCurrency(row.accountingNetProfit)}
                       </span>
                     </td>
                   </tr>
@@ -289,7 +380,7 @@ export default function MonthlyReportPage() {
                     {formatCurrency(rows.reduce((s, r) => s + r.manualIncome, 0))}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {formatCurrency(rows.reduce((s, r) => s + r.barIncome, 0))}
+                    {formatCurrency(rows.reduce((s, r) => s + r.barSales, 0))}
                   </td>
                   <td className="px-4 py-3 text-right text-danger-600">
                     {formatCurrency(rows.reduce((s, r) => s + r.debtIncome, 0))}
@@ -298,11 +389,25 @@ export default function MonthlyReportPage() {
                     {formatCurrency(totalIncome)}
                   </td>
                   <td className="px-4 py-3 text-right text-danger-500">
+                    {formatCurrency(totalBarCost)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-danger-500">
+                    {formatCurrency(totalStockPurchaseCost)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-danger-500">
+                    {formatCurrency(totalBarExpenses)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-danger-500">
                     {formatCurrency(totalExpenses)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className={totalProfit >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                      {formatCurrency(totalProfit)}
+                    <span className={totalBarCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}>
+                      {formatCurrency(totalBarCashLeft)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className={totalAccountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'}>
+                      {formatCurrency(totalAccountingNetProfit)}
                     </span>
                   </td>
                 </tr>

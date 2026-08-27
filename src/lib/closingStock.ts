@@ -1,15 +1,19 @@
 import type { Product } from '../types';
 import {
+  calculateAvailableStock,
   calculateClosingStockDefaults,
   calculateClosingStockFromSold,
   calculateDirectSalesSummary,
   calculateStockCountSummary,
+  validateStockAvailability,
 } from './calculations/stock';
 
 export interface ClosingStockRowData {
   product: Product;
   previousStock: string;
   addedToday: string;
+  adjustmentQuantity?: string;
+  adjustmentReason?: string;
   closingStock: string;
   soldQuantity: string;
 }
@@ -23,6 +27,8 @@ export interface ClosingStockDraft {
     productId: string;
     previousStock: string;
     addedToday: string;
+    adjustmentQuantity?: string;
+    adjustmentReason?: string;
     closingStock: string;
     soldQuantity: string;
   }>;
@@ -69,6 +75,8 @@ export interface ClosingStockUpsert {
   product_id: string;
   previous_stock: number;
   added_today: number;
+  adjustment_quantity: number;
+  adjustment_reason: string | null;
   closing_stock: number;
   sold_quantity: number;
   sale_price: number;
@@ -84,6 +92,8 @@ export interface ClosingStockExistingCount {
   product_id: string;
   previous_stock?: number | string | null;
   added_today?: number | string | null;
+  adjustment_quantity?: number | string | null;
+  adjustment_reason?: string | null;
   closing_stock?: number | string | null;
   sold_quantity?: number | string | null;
 }
@@ -265,6 +275,11 @@ export function normalizeStockCount(value: unknown): number {
   return parsed === null ? 0 : Math.max(0, Math.trunc(parsed));
 }
 
+export function normalizeStockAdjustment(value: unknown): number {
+  const parsed = parseClosingStockNumber(value);
+  return parsed === null ? 0 : Math.trunc(parsed);
+}
+
 function formatStockValue(value: unknown): string {
   return String(normalizeStockCount(value));
 }
@@ -282,6 +297,7 @@ function refreshRowPurchasedToday(row: ClosingStockRowData, purchasedToday: numb
   const summary = calculateStockCountSummary({
     previousStock: normalizeStockCount(row.previousStock),
     addedToday,
+    adjustmentQuantity: normalizeStockAdjustment(row.adjustmentQuantity),
     closingStock,
     salePrice: row.product.sale_price,
     costPrice: row.product.cost_price,
@@ -314,6 +330,8 @@ export function createClosingStockDraft(
       productId: row.product.id,
       previousStock: row.previousStock,
       addedToday: row.addedToday,
+      adjustmentQuantity: row.adjustmentQuantity,
+      adjustmentReason: row.adjustmentReason,
       closingStock: row.closingStock,
       soldQuantity: row.soldQuantity,
     })),
@@ -376,6 +394,8 @@ export function applyClosingStockDraft(
       ...row,
       previousStock: formatEditableStockValue(draftRow.previousStock),
       addedToday: formatEditableStockValue(draftRow.addedToday),
+      adjustmentQuantity: String(draftRow.adjustmentQuantity ?? row.adjustmentQuantity ?? '0'),
+      adjustmentReason: String(draftRow.adjustmentReason ?? row.adjustmentReason ?? ''),
       closingStock: formatEditableStockValue(draftRow.closingStock),
       soldQuantity: formatEditableStockValue(draftRow.soldQuantity),
     };
@@ -475,12 +495,18 @@ function applyImportToRow(
 
   const previousStock = normalizeStockCount(next.previousStock);
   const addedToday = normalizeStockCount(next.addedToday);
+  const adjustmentQuantity = normalizeStockAdjustment(next.adjustmentQuantity);
 
   if (mode === 'soldQuantity') {
     if (imported.soldQuantity !== undefined) {
       const soldQuantity = normalizeStockCount(imported.soldQuantity);
       next.soldQuantity = formatStockValue(soldQuantity);
-      next.closingStock = formatStockValue(calculateClosingStockFromSold(previousStock, addedToday, soldQuantity));
+      next.closingStock = formatStockValue(calculateClosingStockFromSold(
+        previousStock,
+        addedToday,
+        soldQuantity,
+        adjustmentQuantity,
+      ));
       return next;
     }
 
@@ -490,6 +516,7 @@ function applyImportToRow(
       next.soldQuantity = formatStockValue(calculateStockCountSummary({
         previousStock,
         addedToday,
+        adjustmentQuantity,
         closingStock,
         salePrice: row.product.sale_price,
         costPrice: row.product.cost_price,
@@ -505,6 +532,7 @@ function applyImportToRow(
     next.soldQuantity = formatStockValue(calculateStockCountSummary({
       previousStock,
       addedToday,
+      adjustmentQuantity,
       closingStock,
       salePrice: row.product.sale_price,
       costPrice: row.product.cost_price,
@@ -515,7 +543,12 @@ function applyImportToRow(
   if (imported.soldQuantity !== undefined) {
     const soldQuantity = normalizeStockCount(imported.soldQuantity);
     next.soldQuantity = formatStockValue(soldQuantity);
-    next.closingStock = formatStockValue(calculateClosingStockFromSold(previousStock, addedToday, soldQuantity));
+    next.closingStock = formatStockValue(calculateClosingStockFromSold(
+      previousStock,
+      addedToday,
+      soldQuantity,
+      adjustmentQuantity,
+    ));
   }
 
   return next;
@@ -617,6 +650,8 @@ export function buildEditableClosingStockRows({
         product,
         previousStock: '0',
         addedToday: '0',
+        adjustmentQuantity: '0',
+        adjustmentReason: '',
         closingStock: '0',
         soldQuantity: formatStockValue(existing?.sold_quantity ?? 0),
       };
@@ -639,6 +674,8 @@ export function buildEditableClosingStockRows({
         product,
         previousStock: formatStockValue(existing.previous_stock),
         addedToday: formatStockValue(existing.added_today),
+        adjustmentQuantity: String(normalizeStockAdjustment(existing.adjustment_quantity)),
+        adjustmentReason: String(existing.adjustment_reason ?? ''),
         closingStock: formatStockValue(existing.closing_stock),
         soldQuantity: formatStockValue(existing.sold_quantity),
       }, purchasedToday);
@@ -648,10 +685,99 @@ export function buildEditableClosingStockRows({
       product,
       previousStock: formatStockValue(previousStock),
       addedToday: formatStockValue(defaults.addedToday),
+      adjustmentQuantity: '0',
+      adjustmentReason: '',
       closingStock: formatStockValue(closingStock),
       soldQuantity: '0',
     };
   });
+}
+
+export type ClosingStockValidationCode =
+  | 'adjustment_reason_required'
+  | 'closing_exceeds_available'
+  | 'negative_available_stock'
+  | 'sold_quantity_mismatch';
+
+export class ClosingStockValidationError extends Error {
+  constructor(
+    public readonly code: ClosingStockValidationCode,
+    public readonly productId: string,
+    public readonly productName: string,
+    public readonly availableStock: number,
+  ) {
+    super(
+      code === 'adjustment_reason_required'
+        ? `${productName}: an inventory adjustment requires a reason.`
+        : code === 'negative_available_stock'
+          ? `${productName}: the adjustment makes available stock negative.`
+          : code === 'sold_quantity_mismatch'
+            ? `${productName}: sold quantity does not match the stock movement.`
+            : `${productName}: closing stock cannot exceed the ${availableStock} units available without an explicit adjustment.`,
+    );
+    this.name = 'ClosingStockValidationError';
+  }
+}
+
+export function validateClosingStockRows(rows: ClosingStockRowData[]): ClosingStockValidationError | null {
+  for (const row of rows) {
+    if (row.product.tracks_inventory === false) continue;
+
+    const previousStock = normalizeStockCount(row.previousStock);
+    const addedToday = normalizeStockCount(row.addedToday);
+    const adjustmentQuantity = normalizeStockAdjustment(row.adjustmentQuantity);
+    const closingStock = normalizeStockCount(row.closingStock);
+    const requestedSoldQuantity = normalizeStockCount(row.soldQuantity);
+    const availability = validateStockAvailability(
+      previousStock,
+      addedToday,
+      closingStock,
+      adjustmentQuantity,
+    );
+
+    if (adjustmentQuantity !== 0 && !String(row.adjustmentReason ?? '').trim()) {
+      return new ClosingStockValidationError(
+        'adjustment_reason_required',
+        row.product.id,
+        row.product.name,
+        availability.availableStock,
+      );
+    }
+
+    if (availability.availableStock < 0) {
+      return new ClosingStockValidationError(
+        'negative_available_stock',
+        row.product.id,
+        row.product.name,
+        availability.availableStock,
+      );
+    }
+
+    if (!availability.isValid) {
+      return new ClosingStockValidationError(
+        'closing_exceeds_available',
+        row.product.id,
+        row.product.name,
+        availability.availableStock,
+      );
+    }
+
+    const expectedSoldQuantity = calculateAvailableStock(
+      previousStock,
+      addedToday,
+      adjustmentQuantity,
+    ) - closingStock;
+    if (requestedSoldQuantity !== expectedSoldQuantity) {
+      return new ClosingStockValidationError(
+        'sold_quantity_mismatch',
+        row.product.id,
+        row.product.name,
+        availability.availableStock,
+      );
+    }
+  }
+
+  return null;
 }
 
 export function buildClosingStockUpserts({
@@ -665,6 +791,9 @@ export function buildClosingStockUpserts({
   createdBy: string | null;
   updatedAt?: string;
 }): { upserts: ClosingStockUpsert[]; savedClosings: Record<string, number> } {
+  const validationError = validateClosingStockRows(rows);
+  if (validationError) throw validationError;
+
   const upserts = rows.map((row) => {
     if (row.product.tracks_inventory === false) {
       const summary = calculateDirectSalesSummary(
@@ -678,6 +807,8 @@ export function buildClosingStockUpserts({
         product_id: row.product.id,
         previous_stock: 0,
         added_today: 0,
+        adjustment_quantity: 0,
+        adjustment_reason: null,
         closing_stock: 0,
         sold_quantity: summary.soldQuantity,
         sale_price: row.product.sale_price,
@@ -692,10 +823,13 @@ export function buildClosingStockUpserts({
 
     const previousStock = normalizeStockCount(row.previousStock);
     const addedToday = normalizeStockCount(row.addedToday);
+    const adjustmentQuantity = normalizeStockAdjustment(row.adjustmentQuantity);
+    const adjustmentReason = String(row.adjustmentReason ?? '').trim() || null;
     const closingStock = normalizeStockCount(row.closingStock);
     const { soldQuantity, barIncome, barCost, barProfit } = calculateStockCountSummary({
       previousStock,
       addedToday,
+      adjustmentQuantity,
       closingStock,
       salePrice: row.product.sale_price,
       costPrice: row.product.cost_price,
@@ -706,6 +840,8 @@ export function buildClosingStockUpserts({
       product_id: row.product.id,
       previous_stock: previousStock,
       added_today: addedToday,
+      adjustment_quantity: adjustmentQuantity,
+      adjustment_reason: adjustmentReason,
       closing_stock: closingStock,
       sold_quantity: soldQuantity,
       sale_price: row.product.sale_price,

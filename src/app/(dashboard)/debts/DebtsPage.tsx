@@ -15,7 +15,7 @@ import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatCurrencyInput, formatDate, parseCurrencyInput } from '@/lib/formatters';
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
-import { validateDebtPayment } from '@/lib/validation';
+import { getDebtDateIssue, validateDebtPayment } from '@/lib/validation';
 import { Plus, X, Users } from 'lucide-react';
 import { PAYMENT_METHODS, type NewDebt, type DebtPayment } from '@/types';
 
@@ -139,6 +139,8 @@ export default function DebtsPage() {
     if (!selectedClubId) { setError(tc('error')); return; }
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     if (!addForm.person_name.trim()) { setError(tc('required')); return; }
+    const dateIssue = getDebtDateIssue({ date: addForm.date, businessDate: businessToday });
+    if (dateIssue) { setError(dateIssue === 'future' ? t('futureDateError') : tc('error')); return; }
     setSaving(true);
     setError('');
 
@@ -175,6 +177,21 @@ export default function DebtsPage() {
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     const debt = debts.find((row) => row.id === payDebtId);
     if (!debt) { setError(tc('error')); return; }
+    const dateIssue = getDebtDateIssue({
+      date: payForm.date,
+      businessDate: businessToday,
+      debtDate: debt.date,
+    });
+    if (dateIssue) {
+      setError(
+        dateIssue === 'future'
+          ? t('futureDateError')
+          : dateIssue === 'before_debt'
+            ? t('paymentBeforeDebtDate')
+            : tc('error'),
+      );
+      return;
+    }
     const paymentValidation = validateDebtPayment({
       paymentAmount: amount,
       remainingDebt: debt.remaining_amount,
@@ -345,6 +362,7 @@ export default function DebtsPage() {
                 <DatePicker
                   value={addForm.date}
                   onChange={(value) => setAddForm((previous) => ({ ...previous, date: value }))}
+                  max={businessToday}
                   buttonClassName="h-10"
                 />
               </div>
@@ -443,6 +461,8 @@ export default function DebtsPage() {
                 <DatePicker
                   value={payForm.date}
                   onChange={(value) => setPayForm((previous) => ({ ...previous, date: value }))}
+                  min={activeDebt.date}
+                  max={businessToday}
                   buttonClassName="h-10"
                 />
               </div>

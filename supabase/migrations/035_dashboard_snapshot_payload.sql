@@ -1,3 +1,5 @@
+-- Forward-copy of the dashboard payload migration after resolving a duplicate
+-- version 032.
 -- Keep the dashboard request small: financial charts need one stock total per
 -- day, while inventory comparisons only need the latest row per product for
 -- each requested interval. The previous function returned every product/day

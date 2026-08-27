@@ -1,3 +1,5 @@
-import ExpensePage from './ExpensePage';
+import { redirect } from 'next/navigation';
 
-export default ExpensePage;
+export default function LegacyExpenseRedirect() {
+  redirect('/expenses');
+}

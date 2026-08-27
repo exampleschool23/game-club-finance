@@ -5,6 +5,7 @@ import {
   validateDate,
   validateClosingStock,
   validateDebtPayment,
+  getDebtDateIssue,
   validateEditWindow,
   validateAll,
 } from './index';
@@ -45,6 +46,7 @@ describe('validateDate', () => {
   });
   it('fails for invalid date', () => {
     expect(validateDate('2026-13-99').valid).toBe(false);
+    expect(validateDate('2026-02-30').valid).toBe(false);
   });
   it('fails for non-string', () => {
     expect(validateDate(null).valid).toBe(false);
@@ -84,6 +86,30 @@ describe('validateDebtPayment', () => {
   });
   it('fails when payment is zero or negative', () => {
     expect(validateDebtPayment({ paymentAmount: 0, remainingDebt: 500000 }).valid).toBe(false);
+  });
+});
+
+describe('getDebtDateIssue', () => {
+  it('accepts a debt or payment on the current business date', () => {
+    expect(getDebtDateIssue({ date: '2026-08-27', businessDate: '2026-08-27' })).toBeNull();
+  });
+
+  it('rejects dates after the current business date', () => {
+    expect(getDebtDateIssue({ date: '2026-08-28', businessDate: '2026-08-27' })).toBe('future');
+  });
+
+  it('rejects a payment before its debt originated', () => {
+    expect(
+      getDebtDateIssue({
+        date: '2026-08-20',
+        debtDate: '2026-08-21',
+        businessDate: '2026-08-27',
+      }),
+    ).toBe('before_debt');
+  });
+
+  it('rejects malformed dates', () => {
+    expect(getDebtDateIssue({ date: '27/08/2026', businessDate: '2026-08-27' })).toBe('invalid');
   });
 });
 

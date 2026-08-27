@@ -65,12 +65,12 @@ npm run dev
 | Page | Description |
 |---|---|
 | **Dashboard** | Daily, monthly, and custom-range KPIs |
-| **Add Income** | Cash / terminal / card income |
-| **Add Expense** | 11 categories, 3 payment sources |
-| **Daily Report** | Last 31 days, income by method, expense by category |
+| **Daily Cash** | Game-club income by cash, terminal, card, and PlayStation |
+| **Expenses** | Categorized expenses with their payment method |
+| **Reports** | Income, expenses, and money left by payment method |
+| **Daily Report** | Income, bar activity, debts, expenses, and daily result |
 | **Monthly Report** | Daily income, expense, and profit summary for a selected month |
-| **Balance** | Cash movements (deposit/withdraw/correction) |
-| **Debts** | Customer debts, mark as paid with method selection |
+| **Debts** | Customer debts and partial payment history |
 | **Products & Stock** | Product prices, purchases, daily closings, inventory value, and low-stock alerts |
 
 ## Roles
@@ -78,7 +78,7 @@ npm run dev
 | Role | Can do |
 |---|---|
 | **owner** | Everything |
-| **admin** | Add income & expense, view all reports, manage balance |
+| **admin** | Record daily cash and expenses, manage assigned ledgers, and view enabled reports |
 | **viewer** | Read dashboards, reports, and ledgers without changing financial data |
 
 ## Quality checks

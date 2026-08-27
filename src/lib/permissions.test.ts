@@ -27,15 +27,20 @@ describe('feature permissions', () => {
     expect(updateFeatureAccessSelection(['dashboard', 'reports'], 'dashboard', false)).toEqual(['reports']);
   });
 
-  it('maps detail and legacy routes to their parent feature', () => {
+  it('maps detail and retired redirect routes to their destination feature', () => {
     expect(featureForPath('/game-club-money-details')).toBe('dashboard');
     expect(featureForPath('/monthly-report')).toBe('reports');
     expect(featureForPath('/expense')).toBe('expenses');
+    expect(featureForPath('/balance')).toBe('expenses');
+    expect(featureForPath('/income')).toBe('daily_cash');
   });
 
   it('guards paths and picks the first allowed destination', () => {
     expect(canAccessPath('admin', ['reports'], '/expenses')).toBe(false);
     expect(canAccessPath('admin', ['reports'], '/reports')).toBe(true);
+    expect(canAccessPath('admin', ['expenses'], '/income')).toBe(false);
+    expect(canAccessPath('admin', ['daily_cash'], '/income')).toBe(true);
+    expect(canAccessPath('admin', ['expenses'], '/balance')).toBe(true);
     expect(defaultPathForAccess('admin', ['reports'])).toBe('/reports');
   });
 

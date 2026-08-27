@@ -16,7 +16,7 @@ import {
   formatDateOnly,
   parseCurrencyInput,
 } from '@/lib/formatters';
-import { calculateWeightedAverageCost } from '@/lib/calculations/stock';
+import { calculateWeightedAverageCost, isWholePositiveStockQuantity } from '@/lib/calculations/stock';
 import {
   Check,
   CheckCircle,
@@ -277,6 +277,11 @@ export default function StockPurchasePage() {
       return;
     }
 
+    if (!isWholePositiveStockQuantity(quantity)) {
+      setError(t('quantityWholePositive'));
+      return;
+    }
+
     setSaving(true);
     setError('');
     setSuccess('');
@@ -418,8 +423,8 @@ export default function StockPurchasePage() {
                 <Package size={17} className="text-primary-600" />
                 <input
                   type="number"
-                  min="0"
-                  step="0.01"
+                  min="1"
+                  step="1"
                   className="min-w-0 flex-1 bg-transparent font-semibold text-gray-900 outline-none"
                   value={form.quantity}
                   onChange={(event) => set('quantity', event.target.value)}

@@ -1,6 +1,7 @@
 export interface StockCountInput {
   previousStock: number;
   addedToday: number;
+  adjustmentQuantity?: number;
   closingStock: number;
   salePrice: number;
   costPrice: number;
@@ -43,6 +44,7 @@ export interface ClosingStockDefaults {
 export interface FutureStockCountInput {
   date: string;
   added_today: number;
+  adjustment_quantity?: number;
   closing_stock: number;
   sale_price: number;
   cost_price: number;
@@ -56,20 +58,56 @@ export interface RecalculatedFutureStockCount extends FutureStockCountInput {
   bar_profit: number;
 }
 
+export interface StockAvailability {
+  availableStock: number;
+  excessClosingStock: number;
+  isValid: boolean;
+}
+
+export function isWholePositiveStockQuantity(value: number): boolean {
+  return Number.isFinite(value) && value > 0 && Number.isInteger(value);
+}
+
+export function calculateAvailableStock(
+  previousStock: number,
+  addedToday: number,
+  adjustmentQuantity = 0,
+): number {
+  return previousStock + addedToday + adjustmentQuantity;
+}
+
+export function validateStockAvailability(
+  previousStock: number,
+  addedToday: number,
+  closingStock: number,
+  adjustmentQuantity = 0,
+): StockAvailability {
+  const availableStock = calculateAvailableStock(previousStock, addedToday, adjustmentQuantity);
+  const excessClosingStock = Math.max(0, closingStock - availableStock);
+
+  return {
+    availableStock,
+    excessClosingStock,
+    isValid: availableStock >= 0 && excessClosingStock === 0,
+  };
+}
+
 export function calculateSoldQuantity(
   previousStock: number,
   addedToday: number,
   closingStock: number,
+  adjustmentQuantity = 0,
 ): number {
-  return Math.max(0, previousStock + addedToday - closingStock);
+  return Math.max(0, calculateAvailableStock(previousStock, addedToday, adjustmentQuantity) - closingStock);
 }
 
 export function calculateClosingStockFromSold(
   previousStock: number,
   addedToday: number,
   soldQuantity: number,
+  adjustmentQuantity = 0,
 ): number {
-  return Math.max(0, previousStock + addedToday - soldQuantity);
+  return Math.max(0, calculateAvailableStock(previousStock, addedToday, adjustmentQuantity) - soldQuantity);
 }
 
 export function calculateBarIncome(soldQuantity: number, salePrice: number): number {
@@ -106,6 +144,7 @@ export function calculateStockCountSummary(input: StockCountInput): StockCountRe
     input.previousStock,
     input.addedToday,
     input.closingStock,
+    input.adjustmentQuantity,
   );
   return calculateDirectSalesSummary(soldQuantity, input.salePrice, input.costPrice);
 }
@@ -116,6 +155,7 @@ export function applyPurchaseDeltaToStockCount(input: StockCountPurchaseDeltaInp
   const summary = calculateStockCountSummary({
     previousStock: input.previousStock,
     addedToday,
+    adjustmentQuantity: input.adjustmentQuantity,
     closingStock,
     salePrice: input.salePrice,
     costPrice: input.costPrice,
@@ -166,6 +206,7 @@ export function recalculateFutureStockCounts(
       const summary = calculateStockCountSummary({
         previousStock,
         addedToday: row.added_today,
+        adjustmentQuantity: row.adjustment_quantity,
         closingStock: row.closing_stock,
         salePrice: row.sale_price,
         costPrice: row.cost_price,

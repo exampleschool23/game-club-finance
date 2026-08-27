@@ -9,20 +9,12 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencyInput } from '@/lib/formatters';
+import { buildProductInsertPayload, buildProductUpdatePayload, type ProductWriteForm } from '@/lib/productWrites';
 import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
 import type { Product } from '@/types';
 
-interface ProductForm {
-  name: string;
-  category: string;
-  sale_price: string;
-  cost_price: string;
-  current_stock: string;
-  low_stock_threshold: string;
-  tracks_inventory: boolean;
-  is_active: boolean;
-}
+type ProductForm = ProductWriteForm;
 
 const emptyForm = (): ProductForm => ({
   name: '',
@@ -201,25 +193,9 @@ export default function ProductsPage() {
     setError('');
 
     const supabase = createClient();
-    const payload = {
-      name: form.name.trim(),
-      category: form.category.trim() || null,
-      sale_price: parseCurrencyInput(form.sale_price),
-      // Only owners can change cost_price and current_stock directly
-      ...(isOwner ? { cost_price: parseCurrencyInput(form.cost_price) } : {}),
-      ...(isOwner ? {
-        tracks_inventory: form.tracks_inventory,
-        current_stock: !form.tracks_inventory
-          ? 0
-          : parseFloat(form.current_stock) || 0,
-      } : {}),
-      low_stock_threshold: parseFloat(form.low_stock_threshold) || 5,
-      is_active: form.is_active,
-      updated_at: new Date().toISOString(),
-    };
-
     let err: string | null = null;
     if (editingId) {
+      const payload = buildProductUpdatePayload(form, { isOwner });
       const { error: e } = await supabase
         .from('products')
         .update(payload)
@@ -227,6 +203,7 @@ export default function ProductsPage() {
         .eq('id', editingId);
       err = e?.message ?? null;
     } else {
+      const payload = buildProductInsertPayload(form, { isOwner });
       const maxSortOrder = products.reduce(
         (max, product, index) => Math.max(max, product.sort_order ?? index + 1),
         0,
@@ -540,18 +517,20 @@ export default function ProductsPage() {
                 <div>
                   <label className="label flex items-center gap-1.5">
                     {t('currentStock')}
-                    {!isOwner && <Lock size={12} className="text-gray-400" />}
+                    {(!isOwner || editingId) && <Lock size={12} className="text-gray-400" />}
                   </label>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="1"
                     className="input-field disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     value={form.current_stock}
-                    disabled={!isOwner || !form.tracks_inventory}
+                    disabled={!isOwner || Boolean(editingId) || !form.tracks_inventory}
                     onChange={(e) => set('current_stock', e.target.value)}
                   />
-                  {!form.tracks_inventory ? (
+                  {editingId ? (
+                    <p className="mt-1 text-xs text-gray-400">{t('stockManagedByLedger')}</p>
+                  ) : !form.tracks_inventory ? (
                     <p className="mt-1 text-xs text-purple-600">{t('madeToOrderStockHelp')}</p>
                   ) : !isOwner && (
                     <p className="mt-1 text-xs text-gray-400">Only owners can edit stock count</p>
@@ -576,7 +555,7 @@ export default function ProductsPage() {
                     type="checkbox"
                     id="made_to_order"
                     checked={!form.tracks_inventory}
-                    disabled={!isOwner}
+                    disabled={!isOwner || Boolean(editingId)}
                     onChange={(e) => set('tracks_inventory', !e.target.checked)}
                     className="mt-0.5 rounded"
                   />
@@ -585,7 +564,9 @@ export default function ProductsPage() {
                       {t('madeToOrder')}
                     </label>
                     <p className="mt-1 text-xs leading-5 text-purple-700">{t('madeToOrderHelp')}</p>
-                    {!isOwner && <p className="mt-1 text-xs text-gray-500">{t('ownerOnlyTrackingMode')}</p>}
+                    {editingId
+                      ? <p className="mt-1 text-xs text-gray-500">{t('trackingModeLockedAfterCreation')}</p>
+                      : !isOwner && <p className="mt-1 text-xs text-gray-500">{t('ownerOnlyTrackingMode')}</p>}
                   </div>
                 </div>
               </div>
