@@ -103,6 +103,7 @@ export interface ClosingStockExistingCount {
 export interface ClosingStockPurchaseQuantity {
   product_id: string;
   quantity: number | string | null;
+  cost_price?: number | string | null;
 }
 
 export interface BuildEditableClosingStockRowsInput {
@@ -111,6 +112,19 @@ export interface BuildEditableClosingStockRowsInput {
   purchases: ClosingStockPurchaseQuantity[];
   previousClosings: Record<string, number>;
   isCurrentDate: boolean;
+}
+
+export function calculatePurchaseCostsByProduct(
+  purchases: ClosingStockPurchaseQuantity[],
+): Record<string, number> {
+  return purchases.reduce<Record<string, number>>((costs, purchase) => {
+    const quantity = Number(purchase.quantity ?? 0);
+    const costPrice = Number(purchase.cost_price ?? 0);
+    if (!Number.isFinite(quantity) || !Number.isFinite(costPrice)) return costs;
+
+    costs[purchase.product_id] = (costs[purchase.product_id] ?? 0) + quantity * costPrice;
+    return costs;
+  }, {});
 }
 
 const headerAliases = {

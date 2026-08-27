@@ -15,7 +15,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, formatUnitCurrency } from '@/lib/formatters';
 import {
   calculateClosingStockFromSold,
   calculateDirectSalesSummary,
@@ -25,6 +25,7 @@ import {
   applyClosingStockDraft,
   buildEditableClosingStockRows,
   buildClosingStockUpserts,
+  calculatePurchaseCostsByProduct,
   clearClosingStockDraft,
   normalizeStockCount,
   normalizeStockAdjustment,
@@ -53,6 +54,7 @@ import type { Product } from '@/types';
 interface PurchaseQuantity {
   product_id: string;
   quantity: number;
+  cost_price: number;
 }
 
 interface PreviousClosing {
@@ -251,6 +253,7 @@ export default function ClosingStockPage() {
   const today = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [date, setDate] = useState(() => today);
   const [rows, setRows] = useState<RowData[]>([]);
+  const [purchaseCostsByProduct, setPurchaseCostsByProduct] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
@@ -290,11 +293,13 @@ export default function ClosingStockPage() {
   const loadData = useCallback(async (selectedDate: string) => {
     if (!selectedClubId) {
       setRows([]);
+      setPurchaseCostsByProduct({});
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setPurchaseCostsByProduct({});
     setError('');
     const supabase = createClient();
     const readOnlyDate = selectedDate < today;
@@ -337,7 +342,7 @@ export default function ClosingStockPage() {
           fetchActiveProductsOrdered(supabase, selectedClubId),
           supabase
             .from('stock_purchases')
-            .select('product_id, quantity')
+            .select('product_id, quantity, cost_price')
             .eq('club_id', selectedClubId)
             .eq('date', selectedDate),
           fetchPreviousClosings(supabase, selectedDate, selectedClubId),
@@ -350,10 +355,12 @@ export default function ClosingStockPage() {
           return;
         }
 
+        const purchases = ((purchasesRes.data as PurchaseQuantity[]) ?? []);
+        setPurchaseCostsByProduct(calculatePurchaseCostsByProduct(purchases));
         const editableRows = buildEditableRows(
             (productsRes.data ?? []) as Product[],
             [],
-            ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+            purchases,
             previousClosingsRes.data ?? {},
             false,
         );
@@ -364,7 +371,7 @@ export default function ClosingStockPage() {
 
       const purchasesRes = await supabase
         .from('stock_purchases')
-        .select('product_id, quantity')
+        .select('product_id, quantity, cost_price')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate);
 
@@ -375,6 +382,8 @@ export default function ClosingStockPage() {
         return;
       }
 
+      const purchases = ((purchasesRes.data as PurchaseQuantity[]) ?? []);
+      setPurchaseCostsByProduct(calculatePurchaseCostsByProduct(purchases));
       const productsFromCounts = stockCountRows.flatMap((count) => {
           const relation = Array.isArray(count.products) ? count.products[0] : count.products;
           if (relation?.is_deleted) return [];
@@ -400,7 +409,7 @@ export default function ClosingStockPage() {
       const savedRows = buildEditableRows(
         productsFromCounts,
         stockCountRows,
-        ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+        purchases,
         {},
         false,
       );
@@ -418,7 +427,7 @@ export default function ClosingStockPage() {
         .eq('date', selectedDate),
       supabase
         .from('stock_purchases')
-        .select('product_id, quantity')
+        .select('product_id, quantity, cost_price')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate),
       fetchPreviousClosings(supabase, selectedDate, selectedClubId),
@@ -431,11 +440,13 @@ export default function ClosingStockPage() {
       return;
     }
 
+    const purchases = ((purchasesRes.data as PurchaseQuantity[]) ?? []);
+    setPurchaseCostsByProduct(calculatePurchaseCostsByProduct(purchases));
     const existingCounts = (countsRes.data ?? []) as ClosingStockExistingCount[];
     const editableRows = buildEditableRows(
         (productsRes.data ?? []) as Product[],
         existingCounts,
-        ((purchasesRes.data as PurchaseQuantity[]) ?? []),
+        purchases,
         previousClosingsRes.data ?? {},
         selectedDate === today,
     );
@@ -592,12 +603,13 @@ export default function ClosingStockPage() {
           acc.stockValue += parseNum(row.closingStock) * row.product.cost_price;
           acc.previous += parseNum(row.previousStock);
           acc.added += parseNum(row.addedToday);
+          acc.purchaseCost += purchaseCostsByProduct[row.product.id] ?? 0;
         }
         return acc;
       },
-      { sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0 },
+      { sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0, purchaseCost: 0 },
     );
-  }, [filteredRows]);
+  }, [filteredRows, purchaseCostsByProduct]);
 
   function handleSaveDraft() {
     if (isReadOnly) {
@@ -690,12 +702,12 @@ export default function ClosingStockPage() {
   }
 
   const kpis = [
-    { label: t('totalProducts'), value: filteredRows.length, unit: t('items'), icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
-    { label: t('stockPurchased'), value: totals.added, unit: t('pcs'), icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: t('totalSold'), value: totals.sold, unit: t('pcs'), icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: t('barIncomeEst'), value: formatCurrency(totals.income), unit: tc('currency'), icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
-    { label: t('barProfitEst'), value: formatCurrency(totals.profit), unit: tc('currency'), icon: TrendingUp, color: 'text-success-600', bg: 'bg-success-50' },
-    { label: t('stockValue'), value: formatCurrency(totals.stockValue), unit: tc('currency'), icon: Coins, color: 'text-gray-900', bg: 'bg-gray-100' },
+    { label: t('totalProducts'), value: filteredRows.length, unit: t('items'), detail: '', icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
+    { label: t('stockPurchased'), value: totals.added, unit: t('pcs'), detail: `${formatCurrency(totals.purchaseCost)} ${tc('currency')}`, icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: t('totalSold'), value: totals.sold, unit: t('pcs'), detail: '', icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: t('barIncomeEst'), value: formatCurrency(totals.income), unit: tc('currency'), detail: '', icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
+    { label: t('barProfitEst'), value: formatCurrency(totals.profit), unit: tc('currency'), detail: '', icon: TrendingUp, color: 'text-success-600', bg: 'bg-success-50' },
+    { label: t('stockValue'), value: formatCurrency(totals.stockValue), unit: tc('currency'), detail: '', icon: Coins, color: 'text-gray-900', bg: 'bg-gray-100' },
   ];
 
   return (
@@ -760,7 +772,7 @@ export default function ClosingStockPage() {
         <MetricGridSkeleton count={6} className="lg:grid-cols-3 2xl:grid-cols-6" />
       ) : (
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        {kpis.map(({ label, value, unit, icon: Icon, color, bg }) => (
+        {kpis.map(({ label, value, unit, detail, icon: Icon, color, bg }) => (
           <div key={label} className="min-w-0 rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
             <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 sm:gap-4">
               <div className={`flex h-10 w-10 items-center justify-center rounded-full sm:h-12 sm:w-12 ${bg}`}>
@@ -769,7 +781,10 @@ export default function ClosingStockPage() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-600">{label}</p>
                 <p className={`mt-1 break-words text-xl font-bold leading-tight tabular-nums sm:text-2xl ${color}`}>{value}</p>
-                <p className="mt-1 text-xs font-medium text-gray-500">{unit}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs font-medium text-gray-500">
+                  <span>{unit}</span>
+                  {detail && <span className={`font-bold ${color}`}>· {detail}</span>}
+                </p>
               </div>
             </div>
           </div>
@@ -895,13 +910,13 @@ export default function ClosingStockPage() {
                                   {t('madeToOrder')}
                                 </span>
                               )}
-                              <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatCurrency(row.product.cost_price)} {tc('currency')}</p>
+                              <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatUnitCurrency(row.product.cost_price)} {tc('currency')}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-4 text-right font-semibold text-gray-900">{formatCurrency(row.product.sale_price)}</td>
                         <td className="px-4 py-4 text-right">
-                          <p className="font-semibold text-gray-900">{formatCurrency(row.product.cost_price)}</p>
+                          <p className="font-semibold text-gray-900">{formatUnitCurrency(row.product.cost_price)}</p>
                           <p className="mt-1 text-xs text-gray-500">
                             {row.product.tracks_inventory === false
                               ? t('notIncludedInStockValue')

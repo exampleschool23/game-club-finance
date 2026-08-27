@@ -194,6 +194,17 @@ export function formatCurrency(amount: number, locale = 'ru-UZ'): string {
   return formatNumber(amount, locale);
 }
 
+/**
+ * Format a weighted-average unit cost without hiding meaningful fractions.
+ * Aggregate UZS totals still use formatCurrency() and round to whole sums.
+ */
+export function formatUnitCurrency(amount: number, locale = 'ru-UZ'): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount).replace(/[\u00a0\u202f]/g, ' ');
+}
+
 export function extractCurrencyDigits(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
 

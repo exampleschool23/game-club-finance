@@ -9,6 +9,7 @@ import {
   formatDateShort,
   formatDateTime,
   formatNumber,
+  formatUnitCurrency,
   formatYearMonth,
   parseCurrencyInput,
   setFormatterLocale,
@@ -139,6 +140,17 @@ describe('formatNumber', () => {
 describe('formatCurrency', () => {
   it('uses the shared numeric currency format', () => {
     expect(formatCurrency(1234567)).toBe('1 234 567');
+  });
+});
+
+describe('formatUnitCurrency', () => {
+  it('preserves meaningful weighted-average cost precision', () => {
+    expect(formatUnitCurrency(2432.5)).toBe('2 432,5');
+    expect(formatUnitCurrency(3112.142857)).toBe('3 112,14');
+  });
+
+  it('does not add decimals to whole unit costs', () => {
+    expect(formatUnitCurrency(5000)).toBe('5 000');
   });
 });
 

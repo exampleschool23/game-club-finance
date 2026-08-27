@@ -5,6 +5,7 @@ import {
   applyClosingStockImport,
   buildEditableClosingStockRows,
   buildClosingStockUpserts,
+  calculatePurchaseCostsByProduct,
   clearClosingStockDraft,
   closingStockDraftKey,
   parseClosingStockImportRecords,
@@ -17,6 +18,26 @@ import {
   type ClosingStockRowData,
   type StorageLike,
 } from './closingStock';
+
+describe('closing stock purchase costs', () => {
+  it('totals actual ledger cost by product across multiple purchases', () => {
+    expect(calculatePurchaseCostsByProduct([
+      { product_id: 'cola', quantity: 12, cost_price: 5860 },
+      { product_id: 'cola', quantity: 6, cost_price: 6000 },
+      { product_id: 'water', quantity: 24, cost_price: 2511 },
+    ])).toEqual({
+      cola: 106_320,
+      water: 60_264,
+    });
+  });
+
+  it('accepts numeric database strings and ignores invalid values', () => {
+    expect(calculatePurchaseCostsByProduct([
+      { product_id: 'cola', quantity: '12', cost_price: '5860' },
+      { product_id: 'cola', quantity: 'invalid', cost_price: 5000 },
+    ])).toEqual({ cola: 70_320 });
+  });
+});
 
 class MemoryStorage implements StorageLike {
   private values = new Map<string, string>();
