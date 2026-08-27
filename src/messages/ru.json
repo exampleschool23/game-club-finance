@@ -178,6 +178,11 @@
     "deleteEntryConfirm": "Удалить эту запись отчёта? Это действие нельзя отменить.",
     "entryDeleted": "Запись отчёта удалена.",
     "date": "Дата",
+    "filterByCategory": "Фильтр по категории",
+    "allCategories": "Все категории",
+    "incomeCategories": "Доходы",
+    "expenseCategories": "Расходы",
+    "allExpenses": "Все расходы",
     "noData": "Нет данных за выбранный период"
   },
   "dailyCash": {
@@ -421,6 +426,8 @@
     "noComment": "Без комментария",
     "addCategory": "Добавить категорию",
     "customCategoryPlaceholder": "Название новой категории",
+    "filterByCategory": "Фильтр по категории",
+    "allCategories": "Все категории",
     "paymentSources": {
       "game_club": "Деньги клуба",
       "bar": "Деньги бара"

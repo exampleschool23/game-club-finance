@@ -180,6 +180,11 @@
     "deleteEntryConfirm": "Delete this report entry? This cannot be undone.",
     "entryDeleted": "Report entry deleted.",
     "date": "Date",
+    "filterByCategory": "Filter by category",
+    "allCategories": "All categories",
+    "incomeCategories": "Income",
+    "expenseCategories": "Expenses",
+    "allExpenses": "All expenses",
     "noData": "No report data for this period"
   },
   "dailyCash": {
@@ -421,6 +426,8 @@
     "noComment": "No comment",
     "addCategory": "Add new category",
     "customCategoryPlaceholder": "New category name",
+    "filterByCategory": "Filter by category",
+    "allCategories": "All categories",
     "paymentSources": {
       "game_club": "Game Club money",
       "bar": "Bar money"

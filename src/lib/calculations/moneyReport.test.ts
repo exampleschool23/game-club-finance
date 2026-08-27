@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMoneyReport } from './moneyReport';
+import { buildFilteredMoneyReport, buildMoneyReport } from './moneyReport';
 
 describe('money report', () => {
   it('shows collected, expenses, and money left by payment method', () => {
@@ -167,5 +167,52 @@ describe('money report', () => {
         paymentBreakdown: { cash: 100, terminal: 0, card: 0, playstation: 0 },
       },
     ]);
+  });
+
+  it('filters the complete report by activity and expense category', () => {
+    const cashRows = [
+      { date: '2026-08-25', cash_income: 1_000, terminal_income: 0, card_income: 0 },
+    ];
+    const expenseRows = [
+      {
+        id: 'rent',
+        date: '2026-08-25',
+        amount: 300,
+        category: 'rent',
+        payment_method: 'cash',
+        payment_source: 'game_club' as const,
+        comment: null,
+        created_at: '2026-08-25T10:00:00Z',
+      },
+      {
+        id: 'salary',
+        date: '2026-08-25',
+        amount: 200,
+        category: 'salary',
+        payment_method: 'cash',
+        payment_source: 'game_club' as const,
+        comment: null,
+        created_at: '2026-08-25T11:00:00Z',
+      },
+    ];
+    const debtRows = [{ date: '2026-08-25', amount: 100, payment_method: 'card' }];
+
+    const income = buildFilteredMoneyReport(cashRows, expenseRows, debtRows, 'income');
+    expect(income.totalCollected).toBe(1_000);
+    expect(income.totalExpenses).toBe(0);
+    expect(income.days[0].activities.map((activity) => activity.kind)).toEqual(['income']);
+
+    const expenses = buildFilteredMoneyReport(cashRows, expenseRows, debtRows, 'expense');
+    expect(expenses.totalCollected).toBe(0);
+    expect(expenses.totalExpenses).toBe(500);
+    expect(expenses.days[0].activities).toHaveLength(2);
+
+    const rent = buildFilteredMoneyReport(cashRows, expenseRows, debtRows, 'expense:rent');
+    expect(rent.totalExpenses).toBe(300);
+    expect(rent.days[0].activities.map((activity) => activity.category)).toEqual(['rent']);
+
+    const debtPayments = buildFilteredMoneyReport(cashRows, expenseRows, debtRows, 'debt_payment');
+    expect(debtPayments.totalCollected).toBe(100);
+    expect(debtPayments.days[0].activities.map((activity) => activity.kind)).toEqual(['debt_payment']);
   });
 });

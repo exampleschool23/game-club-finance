@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Filter,
   LoaderCircle,
   MinusCircle,
   ReceiptText,
@@ -52,6 +53,7 @@ export default function ExpensesPage() {
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [todaySummary, setTodaySummary] = useState({ count: 0, total: 0 });
   const [expensePage, setExpensePage] = useState(1);
   const [expenseCount, setExpenseCount] = useState(0);
@@ -80,10 +82,18 @@ export default function ExpensesPage() {
     setExpenses([]);
     setExpenseCount(0);
     setCustomCategories([]);
+    setSelectedCategory('');
     setTodaySummary({ count: 0, total: 0 });
     setExpensesLoading(true);
     setMetadataLoading(true);
   }, [businessToday, selectedClubId]);
+
+  useEffect(() => {
+    if (selectedCategory && !CATEGORIES.includes(selectedCategory) && !customCategories.includes(selectedCategory)) {
+      setSelectedCategory('');
+      setExpensePage(1);
+    }
+  }, [customCategories, selectedCategory]);
 
   function categoryLabel(category: string): string {
     if (CATEGORIES.includes(category)) {
@@ -107,10 +117,14 @@ export default function ExpensesPage() {
     const from = (pageNumber - 1) * EXPENSES_PAGE_SIZE;
     const to = from + EXPENSES_PAGE_SIZE - 1;
     const supabase = createClient();
-    const recentResult = await supabase
+    let recentQuery = supabase
       .from('expenses')
       .select('*', { count: 'exact' })
-      .eq('club_id', selectedClubId)
+      .eq('club_id', selectedClubId);
+    if (selectedCategory) {
+      recentQuery = recentQuery.eq('category', selectedCategory);
+    }
+    const recentResult = await recentQuery
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
@@ -135,7 +149,7 @@ export default function ExpensesPage() {
     setExpenses(recentResult.data ?? []);
     setExpenseCount(totalCount);
     setExpensesLoading(false);
-  }, [selectedClubId]);
+  }, [selectedCategory, selectedClubId]);
 
   const loadExpenseMetadata = useCallback(async () => {
     const requestId = ++metadataLoadSequence.current;
@@ -151,10 +165,10 @@ export default function ExpensesPage() {
     const supabase = createClient();
     setError('');
     const [todayResult, categoriesResult] = await Promise.all([
-      fetchAllRows<Pick<Expense, 'amount'>>(() =>
+      fetchAllRows<Pick<Expense, 'amount' | 'category'>>(() =>
         supabase
           .from('expenses')
-          .select('amount')
+          .select('amount,category')
           .eq('club_id', selectedClubId)
           .eq('date', businessToday),
       ),
@@ -182,12 +196,14 @@ export default function ExpensesPage() {
         .map((expense) => expense.category)
         .filter((category) => category && !knownCategories.has(category)),
     )).sort((a, b) => a.localeCompare(b)));
+    const todayExpenses = (todayResult.data ?? [])
+      .filter((expense) => !selectedCategory || expense.category === selectedCategory);
     setTodaySummary({
-      count: todayResult.data?.length ?? 0,
-      total: (todayResult.data ?? []).reduce((total, expense) => total + Number(expense.amount), 0),
+      count: todayExpenses.length,
+      total: todayExpenses.reduce((total, expense) => total + Number(expense.amount), 0),
     });
     setMetadataLoading(false);
-  }, [businessToday, selectedClubId]);
+  }, [businessToday, selectedCategory, selectedClubId]);
 
   useEffect(() => {
     loadExpensePage(expensePage).catch((loadError) => {
@@ -315,6 +331,34 @@ export default function ExpensesPage() {
           <span>{error || success}</span>
         </div>
       )}
+
+      <div className="mb-5 flex flex-col gap-2 sm:max-w-sm">
+        <label className="label mb-0" htmlFor="expense-category-filter">{t('filterByCategory')}</label>
+        <div className="relative">
+          <Filter
+            size={17}
+            className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-primary-600"
+            aria-hidden="true"
+          />
+          <select
+            id="expense-category-filter"
+            className="input-field h-11 w-full appearance-none pl-10 pr-9 font-semibold"
+            value={selectedCategory}
+            onChange={(event) => {
+              setSelectedCategory(event.target.value);
+              setExpensePage(1);
+            }}
+          >
+            <option value="">{t('allCategories')}</option>
+            {CATEGORIES.map((category) => (
+              <option key={category} value={category}>{categoryLabel(category)}</option>
+            ))}
+            {customCategories.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(320px,0.78fr)_minmax(0,1.5fr)]">
         <form

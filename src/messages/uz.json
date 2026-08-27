@@ -178,6 +178,11 @@
     "deleteEntryConfirm": "Bu hisobot yozuvi o'chirilsinmi? Bu amalni bekor qilib bo'lmaydi.",
     "entryDeleted": "Hisobot yozuvi o'chirildi.",
     "date": "Sana",
+    "filterByCategory": "Kategoriya bo'yicha filtrlash",
+    "allCategories": "Barcha kategoriyalar",
+    "incomeCategories": "Daromadlar",
+    "expenseCategories": "Xarajatlar",
+    "allExpenses": "Barcha xarajatlar",
     "noData": "Bu davr uchun hisobot ma'lumoti yo'q"
   },
   "dailyCash": {
@@ -421,6 +426,8 @@
     "noComment": "Izoh yo'q",
     "addCategory": "Yangi kategoriya qo'shish",
     "customCategoryPlaceholder": "Yangi kategoriya nomi",
+    "filterByCategory": "Kategoriya bo'yicha filtrlash",
+    "allCategories": "Barcha kategoriyalar",
     "paymentSources": {
       "game_club": "Klub puli",
       "bar": "Bar puli"

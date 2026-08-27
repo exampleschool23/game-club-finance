@@ -7,6 +7,7 @@ import {
   Banknote,
   CircleDollarSign,
   CreditCard,
+  Filter,
   Gamepad2,
   Landmark,
   LoaderCircle,
@@ -21,8 +22,9 @@ import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import { Skeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import {
-  buildMoneyReport,
+  buildFilteredMoneyReport,
   type MoneyReportActivity,
+  type MoneyReportCategoryFilter,
   type MoneyReportCashRow,
   type MoneyReportDebtPaymentRow,
   type MoneyReportPaymentBreakdown,
@@ -37,7 +39,11 @@ import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
 
-const emptyReport = buildMoneyReport([], [], []);
+const emptyReportRows = {
+  cash: [] as MoneyReportCashRow[],
+  expenses: [] as ExpenseRow[],
+  debtPayments: [] as MoneyReportDebtPaymentRow[],
+};
 
 function Amount({ value, className }: { value: number; className?: string }) {
   return (
@@ -193,19 +199,43 @@ export default function ReportsPage() {
   const { selectedClubId, businessDayStartHour, role } = useClub();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [range, setRange] = useState(() => getDashboardRange('month', businessToday));
-  const [report, setReport] = useState(emptyReport);
+  const [reportRows, setReportRows] = useState(emptyReportRows);
+  const [categoryFilter, setCategoryFilter] = useState<MoneyReportCategoryFilter>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const isOwner = role === 'owner';
+  const report = useMemo(() => buildFilteredMoneyReport(
+    reportRows.cash,
+    reportRows.expenses,
+    reportRows.debtPayments,
+    categoryFilter,
+  ), [categoryFilter, reportRows]);
+  const customExpenseCategories = useMemo(() => {
+    const knownCategories = new Set<string>(knownExpenseCategories);
+    return Array.from(new Set(
+      reportRows.expenses
+        .filter((expense) => expense.payment_source !== 'bar')
+        .map((expense) => expense.category)
+        .filter((category) => category && !knownCategories.has(category)),
+    )).sort((a, b) => a.localeCompare(b));
+  }, [reportRows.expenses]);
+
+  useEffect(() => {
+    if (!categoryFilter.startsWith('expense:')) return;
+    const category = categoryFilter.slice('expense:'.length);
+    if (!isKnownExpenseCategory(category) && !customExpenseCategories.includes(category)) {
+      setCategoryFilter('all');
+    }
+  }, [categoryFilter, customExpenseCategories]);
 
   const loadReport = useCallback(async () => {
     const requestId = ++requestSequence.current;
 
     if (!selectedClubId) {
-      setReport(emptyReport);
+      setReportRows(emptyReportRows);
       setLoading(false);
       return;
     }
@@ -244,17 +274,17 @@ export default function ReportsPage() {
 
     const firstError = [cashResult.error, expenseResult.error, debtPaymentResult.error].find(Boolean);
     if (firstError) {
-      setReport(emptyReport);
+      setReportRows(emptyReportRows);
       setError(firstError.message);
       setLoading(false);
       return;
     }
 
-    setReport(buildMoneyReport(
-      (cashResult.data ?? []) as MoneyReportCashRow[],
-      (expenseResult.data ?? []) as ExpenseRow[],
-      (debtPaymentResult.data ?? []) as MoneyReportDebtPaymentRow[],
-    ));
+    setReportRows({
+      cash: (cashResult.data ?? []) as MoneyReportCashRow[],
+      expenses: (expenseResult.data ?? []) as ExpenseRow[],
+      debtPayments: (debtPaymentResult.data ?? []) as MoneyReportDebtPaymentRow[],
+    });
     setLoading(false);
   }, [range.from, range.to, selectedClubId]);
 
@@ -362,14 +392,48 @@ export default function ReportsPage() {
         </div>
       )}
 
-      <DateRangePicker
-        from={range.from}
-        to={range.to}
-        fromLabel={t('from')}
-        toLabel={t('to')}
-        className="max-w-3xl"
-        onChange={setRange}
-      />
+      <div className="grid max-w-5xl gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)]">
+        <DateRangePicker
+          from={range.from}
+          to={range.to}
+          fromLabel={t('from')}
+          toLabel={t('to')}
+          onChange={setRange}
+        />
+        <label className="relative block min-w-0">
+          <span className="sr-only">{t('filterByCategory')}</span>
+          <Filter
+            size={17}
+            className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-primary-600"
+            aria-hidden="true"
+          />
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value as MoneyReportCategoryFilter)}
+            className="input-field h-14 w-full appearance-none pl-10 pr-9 font-bold text-gray-900"
+            aria-label={t('filterByCategory')}
+          >
+            <option value="all">{t('allCategories')}</option>
+            <optgroup label={t('incomeCategories')}>
+              <option value="income">{t('dailyClubIncome')}</option>
+              <option value="debt_payment">{t('debtPayment')}</option>
+            </optgroup>
+            <optgroup label={t('expenseCategories')}>
+              <option value="expense">{t('allExpenses')}</option>
+              {knownExpenseCategories.map((category) => (
+                <option key={category} value={`expense:${category}`}>
+                  {te(category)}
+                </option>
+              ))}
+              {customExpenseCategories.map((category) => (
+                <option key={category} value={`expense:${category}`}>
+                  {category}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
+      </div>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard

@@ -61,6 +61,13 @@ export interface MoneyReportDebtPaymentRow extends DebtPaymentValueRow {
   created_at?: string;
 }
 
+export type MoneyReportCategoryFilter =
+  | 'all'
+  | 'income'
+  | 'debt_payment'
+  | 'expense'
+  | `expense:${string}`;
+
 function paymentBucket(method: string | null | undefined): 'cash' | 'terminal' | 'card' {
   if (method === 'cash') return 'cash';
   if (method === 'terminal') return 'terminal';
@@ -219,4 +226,31 @@ export function buildMoneyReport(
   });
 
   return { totalCollected, totalExpenses, totalLeft, paymentMethods, days };
+}
+
+export function buildFilteredMoneyReport(
+  cashRows: MoneyReportCashRow[],
+  expenseRows: ExpenseRow[],
+  debtPaymentRows: MoneyReportDebtPaymentRow[] = [],
+  categoryFilter: MoneyReportCategoryFilter = 'all',
+): MoneyReport {
+  if (categoryFilter === 'income') {
+    return buildMoneyReport(cashRows, [], []);
+  }
+  if (categoryFilter === 'debt_payment') {
+    return buildMoneyReport([], [], debtPaymentRows);
+  }
+  if (categoryFilter === 'expense') {
+    return buildMoneyReport([], expenseRows, []);
+  }
+  if (categoryFilter.startsWith('expense:')) {
+    const category = categoryFilter.slice('expense:'.length);
+    return buildMoneyReport(
+      [],
+      expenseRows.filter((row) => row.category === category),
+      [],
+    );
+  }
+
+  return buildMoneyReport(cashRows, expenseRows, debtPaymentRows);
 }
