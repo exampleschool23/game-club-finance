@@ -6,6 +6,10 @@ import {
   previousTashkentDateIso,
   sendTelegramMessage,
 } from '@/lib/telegram/sendDailyFinanceReport';
+import {
+  describeUnknownError,
+  retryReportBuild,
+} from '@/lib/telegram/reportDelivery';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -111,32 +115,53 @@ export async function GET(request: NextRequest) {
     const botToken = requireEnv('TELEGRAM_BOT_TOKEN');
     const targets = filterTargets(getTelegramReportTargets(), targetKey);
     const supabase = createServiceClient();
-    const reports = await Promise.all(
-      targets.map(async (target) => ({
-        target: target.key,
-        ...(await buildDailyFinanceTelegramReport(supabase, {
-          businessDate,
-          chatId: target.chatId,
-          clubId: target.clubId,
-        })),
-      })),
+    const buildReport = (target: TelegramReportTarget) => retryReportBuild(
+      () => buildDailyFinanceTelegramReport(supabase, {
+        businessDate,
+        chatId: target.chatId,
+        clubId: target.clubId,
+      }),
     );
 
     if (dryRun) {
+      const built = await Promise.allSettled(
+        targets.map(async (target) => ({
+          target: target.key,
+          ...(await buildReport(target)),
+        })),
+      );
+      const reports = built.map((result, index) => {
+        const target = targets[index];
+
+        if (result.status === 'fulfilled') {
+          return {
+            ok: true,
+            target: result.value.target,
+            businessDate: result.value.businessDate,
+            message: result.value.message,
+          };
+        }
+
+        return {
+          ok: false,
+          target: target.key,
+          businessDate,
+          error: describeUnknownError(result.reason),
+        };
+      });
+      const hasFailure = reports.some((report) => !report.ok);
+
       return jsonNoStore({
-        ok: true,
+        ok: !hasFailure,
         dryRun: true,
         businessDate,
-        reports: reports.map(({ target, businessDate: reportDate, message }) => ({
-          target,
-          businessDate: reportDate,
-          message,
-        })),
-      });
+        reports,
+      }, { status: hasFailure ? 207 : 200 });
     }
 
     const sent = await Promise.allSettled(
-      reports.map(async (report) => {
+      targets.map(async (target) => {
+        const report = await buildReport(target);
         const telegram = await sendTelegramMessage({
           botToken,
           chatId: report.chatId,
@@ -144,7 +169,7 @@ export async function GET(request: NextRequest) {
         });
 
         return {
-          target: report.target,
+          target: target.key,
           businessDate: report.businessDate,
           messageId: telegram.result.message_id,
           telegramChatId: telegram.result.chat.id,
@@ -155,7 +180,7 @@ export async function GET(request: NextRequest) {
       }),
     );
     const results = sent.map((result, index) => {
-      const report = reports[index];
+      const target = targets[index];
 
       if (result.status === 'fulfilled') {
         return {
@@ -166,9 +191,9 @@ export async function GET(request: NextRequest) {
 
       return {
         ok: false,
-        target: report.target,
-        businessDate: report.businessDate,
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        target: target.key,
+        businessDate,
+        error: describeUnknownError(result.reason),
       };
     });
     const hasFailure = results.some((result) => !result.ok);
@@ -182,7 +207,7 @@ export async function GET(request: NextRequest) {
     return jsonNoStore(
       {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeUnknownError(error),
       },
       { status: 500 },
     );

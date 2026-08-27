@@ -251,25 +251,7 @@ export async function sendTelegramMessage({
   chatId: string;
   text: string;
 }) {
-  const response = await fetch(`${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_notification: false,
-    }),
-  });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok || !payload?.ok) {
-    throw new Error(`Telegram send failed: ${JSON.stringify(payload)}`);
-  }
-
-  return payload as {
+  type TelegramSuccess = {
     ok: true;
     result: {
       message_id: number;
@@ -281,4 +263,38 @@ export async function sendTelegramMessage({
       date: number;
     };
   };
+
+  async function send(destinationChatId: string) {
+    const response = await fetch(`${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: destinationChatId,
+        text,
+        disable_notification: false,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    return { payload, response };
+  }
+
+  const firstAttempt = await send(chatId);
+  if (firstAttempt.response.ok && firstAttempt.payload?.ok) {
+    return firstAttempt.payload as TelegramSuccess;
+  }
+
+  const migratedChatId = firstAttempt.payload?.parameters?.migrate_to_chat_id;
+  if (typeof migratedChatId === 'number' || typeof migratedChatId === 'string') {
+    const migratedAttempt = await send(String(migratedChatId));
+    if (migratedAttempt.response.ok && migratedAttempt.payload?.ok) {
+      return migratedAttempt.payload as TelegramSuccess;
+    }
+
+    throw new Error(`Telegram send failed after chat migration: ${JSON.stringify(migratedAttempt.payload)}`);
+  }
+
+  throw new Error(`Telegram send failed: ${JSON.stringify(firstAttempt.payload)}`);
 }
