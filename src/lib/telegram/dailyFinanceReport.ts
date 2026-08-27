@@ -87,8 +87,11 @@ const RUSSIAN_EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   other: 'Другое',
 };
 
-function categoryName(category: string): string {
-  return RUSSIAN_EXPENSE_CATEGORY_LABELS[category] ?? category;
+function expenseName(row: ExpenseRow): string {
+  const comment = row.comment?.trim();
+  if (row.category === 'other' && comment) return comment;
+
+  return RUSSIAN_EXPENSE_CATEGORY_LABELS[row.category] ?? row.category;
 }
 
 export function summarizeExpenseCategories(
@@ -98,7 +101,7 @@ export function summarizeExpenseCategories(
   const totals = rows.reduce((categoryMap, row) => {
     if ((row.payment_source ?? 'game_club') !== paymentSource) return categoryMap;
 
-    const name = categoryName(row.category);
+    const name = expenseName(row);
     categoryMap.set(name, (categoryMap.get(name) ?? 0) + Number(row.amount ?? 0));
     return categoryMap;
   }, new Map<string, number>());

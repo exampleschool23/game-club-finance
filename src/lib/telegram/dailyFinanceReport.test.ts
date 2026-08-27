@@ -90,9 +90,9 @@ Pixel Game Zone
           id: 'custom-game-club-expense',
           date: '2026-07-04',
           amount: 40_000,
-          category: 'Пополнение Номера',
+          category: 'other',
           payment_source: 'game_club',
-          comment: null,
+          comment: 'Elektrenergiya',
           created_at: '2026-07-04T10:30:00Z',
         },
         {
@@ -183,7 +183,7 @@ Pixel Game Zone
       barExpenses: 40_000,
       gameClubExpenseCategories: [
         { name: 'Зарплата', amount: 80_000 },
-        { name: 'Пополнение Номера', amount: 40_000 },
+        { name: 'Elektrenergiya', amount: 40_000 },
       ],
       barExpenseCategories: [{ name: 'Ремонт', amount: 40_000 }],
       gameClubMoneyLeft: 1_750_000,
@@ -225,6 +225,43 @@ Pixel Game Zone
     - Пополнение Номера: 224 000 UZS
   • Из денег бара: 60 000 UZS
     - Еда / Напитки: 60 000 UZS`);
+  });
+
+  it('uses the saved description for other expenses and falls back when it is blank', () => {
+    const input = buildDailyFinanceReportInput({
+      clubName: 'Pixel Game Club',
+      businessDate: '2026-08-25',
+      businessDateLabel: '25 августа 2026',
+      cashRows: [],
+      stockRows: [],
+      stockPurchaseRows: [],
+      expenseRows: [
+        {
+          id: 'described-other',
+          date: '2026-08-25',
+          amount: 3_541_000,
+          category: 'other',
+          payment_source: 'game_club',
+          comment: '  Elektrenergiya  ',
+          created_at: '2026-08-25T17:56:47Z',
+        },
+        {
+          id: 'blank-other',
+          date: '2026-08-25',
+          amount: 25_000,
+          category: 'other',
+          payment_source: 'game_club',
+          comment: '   ',
+          created_at: '2026-08-25T18:00:00Z',
+        },
+      ],
+      debtRows: [],
+    });
+
+    expect(input.gameClubExpenseCategories).toEqual([
+      { name: 'Elektrenergiya', amount: 3_541_000 },
+      { name: 'Другое', amount: 25_000 },
+    ]);
   });
 });
 
