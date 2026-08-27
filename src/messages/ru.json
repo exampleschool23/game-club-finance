@@ -238,6 +238,8 @@
     "product": "Товар",
     "previousStock": "Остаток",
     "addedToday": "Добавлено",
+    "purchasesBadge": "Закупки: {purchased}",
+    "purchaseMismatch": "В сохранённом снимке добавлено {saved}, а связанные закупки составляют {purchased}. Историческое значение сохранено без изменений.",
     "adjustment": "Корректировка",
     "adjustmentReason": "Причина корректировки (обязательно)",
     "adjustmentReasonRequired": "{product}: укажите причину корректировки склада.",

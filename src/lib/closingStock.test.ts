@@ -182,7 +182,33 @@ describe('closing stock row defaults', () => {
     });
   });
 
-  it('refreshes saved added-today values from purchases while preserving counted closing stock', () => {
+  it('refreshes a current-day saved row from purchases while preserving sold quantity', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'cola-05', current_stock: 21, sale_price: 10000, cost_price: 6000 })],
+      counts: [
+        {
+          product_id: 'cola-05',
+          previous_stock: 7,
+          added_today: 2,
+          closing_stock: 6,
+          sold_quantity: 3,
+        },
+      ],
+      purchases: [{ product_id: 'cola-05', quantity: 21 }],
+      previousClosings: {},
+      isCurrentDate: true,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '7',
+      addedToday: '21',
+      closingStock: '25',
+      soldQuantity: '3',
+      hasPurchaseMismatch: false,
+    });
+  });
+
+  it('preserves a historical whole-unit snapshot and exposes a later purchase mismatch', () => {
     const rows = buildEditableClosingStockRows({
       products: [product({ id: 'cola-05', current_stock: 21, sale_price: 10000, cost_price: 6000 })],
       counts: [
@@ -201,9 +227,69 @@ describe('closing stock row defaults', () => {
 
     expect(rows[0]).toMatchObject({
       previousStock: '7',
-      addedToday: '21',
-      closingStock: '25',
+      addedToday: '2',
+      closingStock: '6',
       soldQuantity: '3',
+      purchaseQuantity: 21,
+      hasPurchaseMismatch: true,
+    });
+  });
+
+  it('preserves the July 4 snapshot when a legacy purchase has fractional quantity', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'juice', current_stock: 8, sale_price: 12000, cost_price: 7000 })],
+      counts: [
+        {
+          product_id: 'juice',
+          previous_stock: 10,
+          added_today: 306,
+          closing_stock: 300,
+          sold_quantity: 16,
+        },
+      ],
+      purchases: [{ product_id: 'juice', quantity: 305.99 }],
+      previousClosings: {},
+      isCurrentDate: false,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '10',
+      addedToday: '306',
+      closingStock: '300',
+      soldQuantity: '16',
+      purchaseQuantity: 305.99,
+      hasPurchaseMismatch: true,
+    });
+  });
+
+  it('preserves the critical July 4 zero-added snapshot against 3.03 linked purchases', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'legacy-item', current_stock: 4, sale_price: 10000, cost_price: 6000 })],
+      counts: [
+        {
+          product_id: 'legacy-item',
+          previous_stock: 8,
+          added_today: 0,
+          closing_stock: 5,
+          sold_quantity: 3,
+        },
+      ],
+      purchases: [
+        { product_id: 'legacy-item', quantity: 0.01 },
+        { product_id: 'legacy-item', quantity: 0.02 },
+        { product_id: 'legacy-item', quantity: 3 },
+      ],
+      previousClosings: {},
+      isCurrentDate: false,
+    });
+
+    expect(rows[0]).toMatchObject({
+      previousStock: '8',
+      addedToday: '0',
+      closingStock: '5',
+      soldQuantity: '3',
+      purchaseQuantity: 3.03,
+      hasPurchaseMismatch: true,
     });
   });
 });

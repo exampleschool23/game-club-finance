@@ -4,6 +4,14 @@
     {
       "path": "/api/cron/daily-finance-report",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/daily-finance-report-retry-1",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/daily-finance-report-retry-2",
+      "schedule": "0 3 * * *"
     }
   ]
 }

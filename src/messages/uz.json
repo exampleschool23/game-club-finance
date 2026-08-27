@@ -238,6 +238,8 @@
     "product": "Mahsulot",
     "previousStock": "Avvalgi qoldiq",
     "addedToday": "Bugun qo'shildi",
+    "purchasesBadge": "Xaridlar: {purchased}",
+    "purchaseMismatch": "Saqlangan yozuvda {saved} ta qo'shilgan, bog'langan xaridlar esa {purchased} tani tashkil qiladi. Tarixiy qiymat o'zgartirilmay saqlandi.",
     "adjustment": "Tuzatish",
     "adjustmentReason": "Tuzatish sababi (majburiy)",
     "adjustmentReasonRequired": "{product}: ombor tuzatishining sababini kiriting.",

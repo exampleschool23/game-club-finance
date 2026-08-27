@@ -55,4 +55,27 @@ describe('Supabase migration files', () => {
     expect(migration).toContain("NEW.status <> 'unpaid'");
     expect(migration).toContain('NEW.remaining_amount <> NEW.amount');
   });
+
+  it('preserves historical stock snapshots and validates payment methods', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/038_stock_snapshot_and_payment_method_integrity.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('if v_has_existing and p_date < v_business_date then');
+    expect(migration).toContain('v_added := v_existing.added_today;');
+    expect(migration).toMatch(
+      /elsif v_purchase_added is not null and v_purchase_added <> trunc\(v_purchase_added\) then/i,
+    );
+    expect(migration).toContain('validate constraint expenses_payment_method_check');
+    expect(migration).toContain('validate constraint debt_payments_payment_method_check');
+    expect(migration).toContain('validate constraint stock_purchases_payment_method_check');
+    expect(migration).toContain('NEW.current_stock := 0;');
+    expect(migration).toContain(
+      'counts.previous_stock is distinct from recalculated.canonical_previous',
+    );
+    expect(migration).toContain(
+      'counts.bar_profit is distinct from',
+    );
+  });
 });

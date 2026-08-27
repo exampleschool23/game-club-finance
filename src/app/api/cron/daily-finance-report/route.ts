@@ -5,15 +5,22 @@ import {
   isIsoDate,
   previousTashkentDateIso,
   sendTelegramMessage,
+  TelegramSendError,
 } from '@/lib/telegram/sendDailyFinanceReport';
 import {
+  beginReportDispatch,
+  claimReportDelivery,
+  completeReportDelivery,
   describeUnknownError,
+  resolveDeliveryKey,
   retryReportBuild,
+  type ReportDeliveryClaim,
 } from '@/lib/telegram/reportDelivery';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
+export const maxDuration = 60;
 
 function jsonNoStore(body: unknown, init?: ResponseInit) {
   const headers = new Headers(init?.headers);
@@ -92,6 +99,51 @@ function isAuthorized(request: NextRequest): boolean {
   return Boolean(cronSecret && request.headers.get('authorization') === `Bearer ${cronSecret}`);
 }
 
+function logDeliveryEvent(
+  level: 'info' | 'warn' | 'error',
+  event: string,
+  fields: Record<string, unknown>,
+) {
+  const entry = JSON.stringify({
+    event,
+    timestamp: new Date().toISOString(),
+    ...fields,
+  });
+
+  if (level === 'error') console.error(entry);
+  else if (level === 'warn') console.warn(entry);
+  else console.info(entry);
+}
+
+function failurePayload(stage: string, error: unknown) {
+  return {
+    stage,
+    message: describeUnknownError(error).slice(0, 1_000),
+  };
+}
+
+async function finalizeClaim(
+  supabase: ReturnType<typeof createServiceClient>,
+  claim: Extract<ReportDeliveryClaim, { outcome: 'claimed' }>,
+  input: {
+    outcome: 'sent' | 'failed' | 'manual_review';
+    telegramAttemptCount: number;
+    attemptHistory: Array<Record<string, unknown>>;
+    telegramResult?: Record<string, unknown> | null;
+    error?: Record<string, unknown> | null;
+    retryNotBefore?: string | null;
+  },
+) {
+  await retryReportBuild(
+    () => completeReportDelivery(supabase, {
+      deliveryId: claim.deliveryId,
+      claimToken: claim.claimToken,
+      ...input,
+    }),
+    { attempts: 3, delayMs: 200 },
+  );
+}
+
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
     return new Response('Unauthorized', {
@@ -106,13 +158,27 @@ export async function GET(request: NextRequest) {
     const requestedDate = request.nextUrl.searchParams.get('date');
     const dryRun = request.nextUrl.searchParams.get('dryRun') === '1';
     const targetKey = request.nextUrl.searchParams.get('target');
+    const force = request.nextUrl.searchParams.get('force');
+    const requestId = request.nextUrl.searchParams.get('requestId');
     const businessDate = requestedDate ?? previousTashkentDateIso();
 
     if (!isIsoDate(businessDate)) {
       return jsonNoStore({ ok: false, error: 'date must be YYYY-MM-DD' }, { status: 400 });
     }
 
-    const botToken = requireEnv('TELEGRAM_BOT_TOKEN');
+    let deliveryKey: string;
+    try {
+      deliveryKey = resolveDeliveryKey({
+        force,
+        requestId,
+        requestedDate,
+        targetKey,
+        dryRun,
+      });
+    } catch (error) {
+      return jsonNoStore({ ok: false, error: describeUnknownError(error) }, { status: 400 });
+    }
+
     const targets = filterTargets(getTelegramReportTargets(), targetKey);
     const supabase = createServiceClient();
     const buildReport = (target: TelegramReportTarget) => retryReportBuild(
@@ -156,54 +222,332 @@ export async function GET(request: NextRequest) {
         dryRun: true,
         businessDate,
         reports,
-      }, { status: hasFailure ? 207 : 200 });
+      }, { status: hasFailure ? 500 : 200 });
     }
 
-    const sent = await Promise.allSettled(
-      targets.map(async (target) => {
-        const report = await buildReport(target);
+    const botToken = requireEnv('TELEGRAM_BOT_TOKEN');
+    const results = await Promise.all(targets.map(async (target) => {
+      let claim: ReportDeliveryClaim;
+
+      try {
+        claim = await claimReportDelivery(supabase, {
+          businessDate,
+          targetKey: target.key,
+          clubId: target.clubId,
+          chatId: target.chatId,
+          deliveryKey,
+        });
+      } catch (error) {
+        const failure = failurePayload('claim', error);
+        logDeliveryEvent('error', 'telegram_report_delivery_claim_failed', {
+          businessDate,
+          target: target.key,
+          deliveryKey,
+          error: failure.message,
+        });
+        return { ok: false, target: target.key, businessDate, ...failure };
+      }
+
+      if (claim.outcome === 'already_sent') {
+        logDeliveryEvent('info', 'telegram_report_delivery_skipped', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          reason: 'already_sent',
+        });
+        return {
+          ok: true,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          status: 'already_sent',
+          skipped: true,
+          sentAt: claim.sentAt,
+          telegram: claim.telegramResult,
+        };
+      }
+
+      if (claim.outcome === 'in_progress') {
+        logDeliveryEvent('info', 'telegram_report_delivery_skipped', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          reason: 'in_progress',
+          claimExpiresAt: claim.claimExpiresAt,
+        });
+        return {
+          ok: true,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          status: 'in_progress',
+          skipped: true,
+          claimExpiresAt: claim.claimExpiresAt,
+        };
+      }
+
+      if (claim.outcome === 'retry_deferred') {
+        logDeliveryEvent('info', 'telegram_report_delivery_skipped', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          reason: 'retry_deferred',
+          retryNotBefore: claim.retryNotBefore,
+        });
+        return {
+          ok: true,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          status: 'retry_deferred',
+          skipped: true,
+          retryNotBefore: claim.retryNotBefore,
+        };
+      }
+
+      if (claim.outcome === 'manual_review') {
+        logDeliveryEvent('error', 'telegram_report_delivery_manual_review', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          dispatchStartedAt: claim.dispatchStartedAt,
+          error: claim.lastError,
+        });
+        return {
+          ok: false,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          status: 'manual_review',
+          stage: 'manual_review',
+          dispatchStartedAt: claim.dispatchStartedAt,
+          error: claim.lastError,
+        };
+      }
+
+      logDeliveryEvent('info', 'telegram_report_delivery_claimed', {
+        businessDate,
+        target: target.key,
+        deliveryId: claim.deliveryId,
+        claimCount: claim.claimCount,
+      });
+
+      let report;
+      try {
+        report = await buildReport(target);
+      } catch (error) {
+        const failure = failurePayload('build', error);
+        const attemptHistory = [{
+          stage: 'build',
+          outcome: 'failed',
+          timestamp: new Date().toISOString(),
+          error: failure.message,
+        }];
+        let ledgerFinalized = true;
+
+        try {
+          await finalizeClaim(supabase, claim, {
+            outcome: 'failed',
+            telegramAttemptCount: 0,
+            attemptHistory,
+            error: failure,
+          });
+        } catch (finalizeError) {
+          ledgerFinalized = false;
+          logDeliveryEvent('error', 'telegram_report_delivery_finalize_failed', {
+            businessDate,
+            target: target.key,
+            deliveryId: claim.deliveryId,
+            error: describeUnknownError(finalizeError),
+          });
+        }
+
+        logDeliveryEvent('error', 'telegram_report_delivery_failed', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          stage: 'build',
+          error: failure.message,
+          ledgerFinalized,
+        });
+        return {
+          ok: false,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          ledgerFinalized,
+          ...failure,
+        };
+      }
+
+      try {
+        await retryReportBuild(
+          () => beginReportDispatch(supabase, {
+            deliveryId: claim.deliveryId,
+            claimToken: claim.claimToken,
+          }),
+          { attempts: 3, delayMs: 200 },
+        );
+        logDeliveryEvent('info', 'telegram_report_dispatch_started', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+        });
+      } catch (error) {
+        const failure = failurePayload('begin_dispatch', error);
+        logDeliveryEvent('error', 'telegram_report_dispatch_start_failed', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          error: failure.message,
+        });
+        return {
+          ok: false,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          ledgerStateUnknown: true,
+          ...failure,
+        };
+      }
+
+      try {
         const telegram = await sendTelegramMessage({
           botToken,
           chatId: report.chatId,
           text: report.message,
         });
+        const telegramResult = {
+          messageId: telegram.result.message_id,
+          chatId: telegram.result.chat.id,
+          chatTitle: telegram.result.chat.title ?? null,
+          chatType: telegram.result.chat.type,
+          telegramDate: telegram.result.date,
+        };
 
+        try {
+          await finalizeClaim(supabase, claim, {
+            outcome: 'sent',
+            telegramAttemptCount: telegram.attempts.length,
+            attemptHistory: telegram.attempts,
+            telegramResult,
+          });
+        } catch (error) {
+          const failure = failurePayload('finalize', error);
+          logDeliveryEvent('error', 'telegram_report_delivery_finalize_failed', {
+            businessDate,
+            target: target.key,
+            deliveryId: claim.deliveryId,
+            error: failure.message,
+          });
+          return {
+            ok: false,
+            target: target.key,
+            businessDate,
+            deliveryId: claim.deliveryId,
+            telegramDelivered: true,
+            ...failure,
+          };
+        }
+
+        logDeliveryEvent('info', 'telegram_report_delivery_sent', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          messageId: telegram.result.message_id,
+          attempts: telegram.attempts.length,
+        });
         return {
+          ok: true,
           target: target.key,
           businessDate: report.businessDate,
+          deliveryId: claim.deliveryId,
+          status: 'sent',
           messageId: telegram.result.message_id,
           telegramChatId: telegram.result.chat.id,
           telegramChatTitle: telegram.result.chat.title ?? null,
           telegramChatType: telegram.result.chat.type,
           telegramDate: telegram.result.date,
+          attempts: telegram.attempts.length,
         };
-      }),
-    );
-    const results = sent.map((result, index) => {
-      const target = targets[index];
+      } catch (error) {
+        const telegramAttempts = error instanceof TelegramSendError ? error.attempts : [];
+        const requiresManualReview = !(error instanceof TelegramSendError)
+          || error.requiresManualReview;
+        const retryNotBefore = !requiresManualReview
+          && error instanceof TelegramSendError
+          && error.retryAfterSeconds !== null
+          ? new Date(Date.now() + error.retryAfterSeconds * 1_000).toISOString()
+          : null;
+        const failure = {
+          ...failurePayload('telegram', error),
+          retryable: error instanceof TelegramSendError ? error.retryable : true,
+          requiresManualReview,
+        };
+        let ledgerFinalized = true;
 
-      if (result.status === 'fulfilled') {
+        try {
+          await finalizeClaim(supabase, claim, {
+            outcome: requiresManualReview ? 'manual_review' : 'failed',
+            telegramAttemptCount: telegramAttempts.length,
+            attemptHistory: telegramAttempts,
+            error: failure,
+            retryNotBefore,
+          });
+        } catch (finalizeError) {
+          ledgerFinalized = false;
+          logDeliveryEvent('error', 'telegram_report_delivery_finalize_failed', {
+            businessDate,
+            target: target.key,
+            deliveryId: claim.deliveryId,
+            error: describeUnknownError(finalizeError),
+          });
+        }
+
+        logDeliveryEvent('error', 'telegram_report_delivery_failed', {
+          businessDate,
+          target: target.key,
+          deliveryId: claim.deliveryId,
+          stage: 'telegram',
+          attempts: telegramAttempts.length,
+          error: failure.message,
+          ledgerFinalized,
+        });
         return {
-          ok: true,
-          ...result.value,
+          ok: false,
+          target: target.key,
+          businessDate,
+          deliveryId: claim.deliveryId,
+          attempts: telegramAttempts.length,
+          ledgerFinalized,
+          status: requiresManualReview ? 'manual_review' : 'failed',
+          retryNotBefore,
+          ...failure,
         };
       }
-
-      return {
-        ok: false,
-        target: target.key,
-        businessDate,
-        error: describeUnknownError(result.reason),
-      };
-    });
+    }));
     const hasFailure = results.some((result) => !result.ok);
+
+    logDeliveryEvent(hasFailure ? 'error' : 'info', 'telegram_report_delivery_batch_completed', {
+      businessDate,
+      force: force === '1',
+      targets: results.map((result) => ({
+        target: result.target,
+        ok: result.ok,
+        status: 'status' in result ? result.status : 'failed',
+      })),
+    });
 
     return jsonNoStore({
       ok: !hasFailure,
       businessDate,
+      forced: force === '1',
       sent: results,
-    }, { status: hasFailure ? 207 : 200 });
+    }, { status: hasFailure ? 500 : 200 });
   } catch (error) {
+    logDeliveryEvent('error', 'telegram_report_delivery_request_failed', {
+      error: describeUnknownError(error).slice(0, 1_000),
+    });
     return jsonNoStore(
       {
         ok: false,

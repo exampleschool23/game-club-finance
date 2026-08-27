@@ -12,6 +12,8 @@ export interface ClosingStockRowData {
   product: Product;
   previousStock: string;
   addedToday: string;
+  purchaseQuantity?: number;
+  hasPurchaseMismatch?: boolean;
   adjustmentQuantity?: string;
   adjustmentReason?: string;
   closingStock: string;
@@ -670,15 +672,26 @@ export function buildEditableClosingStockRows({
       : previousStock + addedToday;
 
     if (existing) {
-      return refreshRowPurchasedToday({
+      const purchaseQuantity = Number(purchasedToday ?? 0);
+      const savedRow: ClosingStockRowData = {
         product,
         previousStock: formatStockValue(existing.previous_stock),
         addedToday: formatStockValue(existing.added_today),
+        purchaseQuantity,
+        hasPurchaseMismatch: !isCurrentDate
+          && Number(existing.added_today ?? 0) !== purchaseQuantity,
         adjustmentQuantity: String(normalizeStockAdjustment(existing.adjustment_quantity)),
         adjustmentReason: String(existing.adjustment_reason ?? ''),
         closingStock: formatStockValue(existing.closing_stock),
         soldQuantity: formatStockValue(existing.sold_quantity),
-      }, purchasedToday);
+      };
+
+      // An already-saved historical row is an accounting snapshot. Purchases
+      // may have been entered or corrected later, so display the mismatch but
+      // never synthesize different added/closing values for that old count.
+      return isCurrentDate
+        ? refreshRowPurchasedToday(savedRow, purchasedToday)
+        : savedRow;
     }
 
     return {

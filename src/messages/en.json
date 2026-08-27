@@ -240,6 +240,8 @@
     "product": "Product",
     "previousStock": "Previous Stock",
     "addedToday": "Added Today",
+    "purchasesBadge": "Purchases: {purchased}",
+    "purchaseMismatch": "This saved snapshot records {saved} added, while linked purchases total {purchased}. The saved historical value is preserved.",
     "adjustment": "Adjustment",
     "adjustmentReason": "Adjustment reason (required)",
     "adjustmentReasonRequired": "{product}: enter a reason for the inventory adjustment.",

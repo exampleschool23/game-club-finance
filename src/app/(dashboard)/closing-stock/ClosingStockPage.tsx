@@ -912,7 +912,23 @@ export default function ClosingStockPage() {
                           {row.product.tracks_inventory === false ? '—' : parseNum(row.previousStock)}
                         </td>
                         <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">
-                          {row.product.tracks_inventory === false ? '—' : parseNum(row.addedToday)}
+                          {row.product.tracks_inventory === false ? '—' : (
+                            <div className="flex flex-col items-center gap-1">
+                              <span>{parseNum(row.addedToday)}</span>
+                              {row.hasPurchaseMismatch && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                                  title={t('purchaseMismatch', {
+                                    purchased: row.purchaseQuantity ?? 0,
+                                    saved: parseNum(row.addedToday),
+                                  })}
+                                >
+                                  <Info size={12} />
+                                  {t('purchasesBadge', { purchased: row.purchaseQuantity ?? 0 })}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-4">
                           {row.product.tracks_inventory === false ? (

@@ -266,7 +266,12 @@ export default function ReportsPage() {
   }, [loadReport]);
 
   useEffect(() => {
-    setRange(getDashboardRange('month', businessToday));
+    const nextRange = getDashboardRange('month', businessToday);
+    setRange((currentRange) => (
+      currentRange.from === nextRange.from && currentRange.to === nextRange.to
+        ? currentRange
+        : nextRange
+    ));
   }, [businessToday, selectedClubId]);
 
   async function handleDeleteActivity(activity: MoneyReportActivity) {
