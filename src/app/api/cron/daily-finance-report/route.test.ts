@@ -46,9 +46,9 @@ import { TelegramSendError } from '../../../../lib/telegram/sendDailyFinanceRepo
 
 const CLUB_ID = '290c5c33-9dfa-464a-a072-ef5a231f5308';
 
-function cronRequest(query = ''): NextRequest {
+function cronRequest(query = '', authorization = 'Bearer test-cron-secret'): NextRequest {
   return {
-    headers: new Headers({ authorization: 'Bearer test-cron-secret' }),
+    headers: new Headers({ authorization, 'user-agent': 'vercel-cron/1.0' }),
     nextUrl: new URL(`https://example.test/api/cron/daily-finance-report${query}`),
   } as NextRequest;
 }
@@ -113,6 +113,57 @@ describe('daily finance report cron route', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  it('fails loudly before report work when CRON_SECRET is too short', async () => {
+    vi.stubEnv('CRON_SECRET', 'short-value');
+
+    const response = await GET(cronRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload.error).toContain('at least 16 characters');
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(
+      'telegram_report_cron_auth_misconfigured',
+    ));
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.claimDelivery).not.toHaveBeenCalled();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+  });
+
+  it('logs safe diagnostics when Vercel sends a mismatched cron credential', async () => {
+    const response = await GET(cronRequest('', 'Bearer stale-cron-secret'));
+
+    expect(response.status).toBe(401);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(
+      'telegram_report_cron_auth_failed',
+    ));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(
+      '"bearerTokenLength":17',
+    ));
+    expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining('stale-cron-secret'));
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.claimDelivery).not.toHaveBeenCalled();
+    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+  });
+
+  it('retries a transient delivery-claim failure before sending', async () => {
+    mocks.claimDelivery
+      .mockRejectedValueOnce({ code: 'PGRST303', message: 'JWT issued at future' })
+      .mockResolvedValueOnce({
+        outcome: 'claimed',
+        deliveryId: '40c05af5-5a59-45ae-a891-19a18228a721',
+        status: 'claimed',
+        claimToken: 'ce4801cd-cd1c-4d88-a860-b1dc41c03a26',
+        claimCount: 1,
+        claimExpiresAt: '2026-08-27T06:05:00.000Z',
+      });
+
+    const response = await GET(cronRequest('?date=2026-08-26&target=pixel'));
+
+    expect(response.status).toBe(200);
+    expect(mocks.claimDelivery).toHaveBeenCalledTimes(2);
+    expect(mocks.sendTelegram).toHaveBeenCalledOnce();
   });
 
   it('returns 500 with per-target diagnostics when Telegram exhausts retries', async () => {

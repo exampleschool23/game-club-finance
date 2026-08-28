@@ -22,6 +22,9 @@ export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 export const maxDuration = 60;
 
+const MIN_CRON_SECRET_LENGTH = 16;
+const CRON_SECRET_PATTERN = /^[A-Za-z0-9._~-]+$/;
+
 function jsonNoStore(body: unknown, init?: ResponseInit) {
   const headers = new Headers(init?.headers);
   headers.set('cache-control', 'no-store, no-cache, max-age=0, must-revalidate');
@@ -94,9 +97,22 @@ function filterTargets(
   return [selectedTarget];
 }
 
-function isAuthorized(request: NextRequest): boolean {
+function cronAuthorizationStatus(
+  request: NextRequest,
+): 'authorized' | 'unauthorized' | 'invalid_configuration' {
   const cronSecret = process.env.CRON_SECRET;
-  return Boolean(cronSecret && request.headers.get('authorization') === `Bearer ${cronSecret}`);
+
+  if (
+    !cronSecret
+    || cronSecret.length < MIN_CRON_SECRET_LENGTH
+    || !CRON_SECRET_PATTERN.test(cronSecret)
+  ) {
+    return 'invalid_configuration';
+  }
+
+  return request.headers.get('authorization') === `Bearer ${cronSecret}`
+    ? 'authorized'
+    : 'unauthorized';
 }
 
 function logDeliveryEvent(
@@ -145,7 +161,28 @@ async function finalizeClaim(
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const authorizationStatus = cronAuthorizationStatus(request);
+
+  if (authorizationStatus === 'invalid_configuration') {
+    logDeliveryEvent('error', 'telegram_report_cron_auth_misconfigured', {
+      cronSecretPresent: Boolean(process.env.CRON_SECRET),
+      cronSecretLength: process.env.CRON_SECRET?.length ?? 0,
+    });
+    return jsonNoStore(
+      { ok: false, error: 'CRON_SECRET must be a header-safe random string of at least 16 characters' },
+      { status: 500 },
+    );
+  }
+
+  if (authorizationStatus === 'unauthorized') {
+    const authorization = request.headers.get('authorization');
+    logDeliveryEvent('error', 'telegram_report_cron_auth_failed', {
+      authorizationPresent: Boolean(authorization),
+      bearerTokenLength: authorization?.startsWith('Bearer ')
+        ? authorization.length - 'Bearer '.length
+        : null,
+      userAgent: request.headers.get('user-agent'),
+    });
     return new Response('Unauthorized', {
       status: 401,
       headers: {
@@ -230,13 +267,16 @@ export async function GET(request: NextRequest) {
       let claim: ReportDeliveryClaim;
 
       try {
-        claim = await claimReportDelivery(supabase, {
-          businessDate,
-          targetKey: target.key,
-          clubId: target.clubId,
-          chatId: target.chatId,
-          deliveryKey,
-        });
+        claim = await retryReportBuild(
+          () => claimReportDelivery(supabase, {
+            businessDate,
+            targetKey: target.key,
+            clubId: target.clubId,
+            chatId: target.chatId,
+            deliveryKey,
+          }),
+          { attempts: 3, delayMs: 250 },
+        );
       } catch (error) {
         const failure = failurePayload('claim', error);
         logDeliveryEvent('error', 'telegram_report_delivery_claim_failed', {

@@ -3,7 +3,7 @@
 -- runs use the fixed key `scheduled`; intentional resends use `force:<uuid>`.
 
 create table public.telegram_report_deliveries (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   business_date date not null,
   target_key text not null,
   club_id uuid not null references public.clubs(id),
@@ -211,7 +211,7 @@ begin
     );
   end if;
 
-  v_claim_token := uuid_generate_v4();
+  v_claim_token := gen_random_uuid();
 
   update public.telegram_report_deliveries
   set

@@ -6,6 +6,10 @@ const migration = readFileSync(
   resolve(process.cwd(), 'supabase/migrations/037_telegram_report_delivery_ledger.sql'),
   'utf8',
 );
+const uuidFixMigration = readFileSync(
+  resolve(process.cwd(), 'supabase/migrations/039_fix_telegram_delivery_uuid_generation.sql'),
+  'utf8',
+);
 
 describe('Telegram report delivery ledger migration', () => {
   it('uses one durable idempotency row per date, target, and delivery key', () => {
@@ -28,6 +32,17 @@ describe('Telegram report delivery ledger migration', () => {
     expect(migration).toContain('create or replace function public.begin_telegram_report_dispatch');
     expect(migration).toContain('dispatch_started_at');
     expect(migration).toContain('claim_token = p_claim_token');
+    expect(migration).toContain('v_claim_token := gen_random_uuid();');
+    expect(migration).not.toContain('uuid_generate_v4()');
+  });
+
+  it('repairs UUID generation in databases that already applied migration 037', () => {
+    expect(uuidFixMigration).toContain('alter column id set default gen_random_uuid()');
+    expect(uuidFixMigration).toContain("pg_get_functiondef(v_signature)");
+    expect(uuidFixMigration).toContain(
+      "replace(v_definition, 'uuid_generate_v4()', 'gen_random_uuid()')",
+    );
+    expect(uuidFixMigration).toContain("position('gen_random_uuid()' in v_definition) = 0");
   });
 
   it('keeps delivery metadata service-only', () => {

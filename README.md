@@ -106,6 +106,9 @@ runs skip successful deliveries and retry only definite build or Telegram
 failures. Configure `CRON_SECRET`,
 `TELEGRAM_BOT_TOKEN`, and at least one complete chat/club target pair from
 `.env.example`. The endpoint rejects requests without the exact bearer secret.
+`CRON_SECRET` must be a header-safe random string of at least 16 characters;
+after changing it in Vercel, redeploy so the scheduler and function use the
+same production value.
 
 Migration `037_telegram_report_delivery_ledger.sql` provides the service-only
 delivery ledger used to prevent concurrent or repeated scheduled runs from
