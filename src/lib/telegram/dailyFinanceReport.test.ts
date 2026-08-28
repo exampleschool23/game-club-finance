@@ -11,17 +11,28 @@ describe('formatRussianDailyFinanceReport', () => {
     expect(formatRussianDailyFinanceReportCaption({
       clubName: 'Main Game Club',
       businessDateLabel: '27 августа 2026',
+      dailyRevenue: 0,
       gameClubIncome: 0,
       computerIncome: 0,
       debtIncome: 0,
       playstationIncome: 0,
       barSales: 0,
+      barCost: 0,
+      grossProfit: 0,
+      netProfit: 0,
       stockPurchases: 0,
       totalExpenses: 0,
       gameClubExpenses: 0,
       barExpenses: 0,
       gameClubExpenseCategories: [],
       barExpenseCategories: [],
+      salaryCosts: 0,
+      kpiCosts: 0,
+      rentCosts: 0,
+      utilitiesCosts: 0,
+      otherOperatingCosts: 0,
+      monthToDateRevenue: 0,
+      averageDailyRevenue: 0,
       gameClubMoneyLeft: 0,
       averageDailyGameClubIncome: 0,
       barMoneyLeft: 0,
@@ -31,49 +42,44 @@ describe('formatRussianDailyFinanceReport', () => {
   });
 
   it('formats the saved Russian Telegram daily finance template', () => {
-    expect(
-      formatRussianDailyFinanceReport({
+    const message = formatRussianDailyFinanceReport({
         clubName: 'Pixel Game Zone',
         businessDateLabel: '4 июля 2026',
+        dailyRevenue: 931_000,
         gameClubIncome: 0,
         computerIncome: 0,
         debtIncome: 0,
         playstationIncome: 0,
         barSales: 931_000,
+        barCost: 400_000,
+        grossProfit: 531_000,
+        netProfit: 531_000,
         stockPurchases: 668_000,
         totalExpenses: 0,
         gameClubExpenses: 0,
         barExpenses: 0,
         gameClubExpenseCategories: [],
         barExpenseCategories: [],
+        salaryCosts: 0,
+        kpiCosts: 0,
+        rentCosts: 0,
+        utilitiesCosts: 0,
+        otherOperatingCosts: 0,
+        monthToDateRevenue: 4_000_000,
+        averageDailyRevenue: 1_000_000,
         gameClubMoneyLeft: 3_024_000,
         averageDailyGameClubIncome: 756_000,
         barMoneyLeft: 2_311_000,
         inventoryValue: 8_473_309,
         activeDebts: 0,
-      }),
-    ).toBe(`📊 Ежедневный финансовый отчёт
-Pixel Game Zone
-Рабочий день: 4 июля 2026
+      });
 
-🎮 Доход клуба: 0 UZS
-  • Компьютеры: 0 UZS
-  • Долги: 0 UZS
-  • PlayStation: 0 UZS
-
-🍫 Продажи бара: 931 000 UZS
-📦 Закупки склада: 668 000 UZS
-
-💸 Расходы: 0 UZS
-  • Из денег клуба: 0 UZS
-  • Из денег бара: 0 UZS
-
-💰 Остаток денег клуба за месяц: 3 024 000 UZS
-📈 Средний дневной доход клуба за месяц: 756 000 UZS
-🧾 Остаток денег бара за месяц: 2 311 000 UZS
-
-📦 Стоимость склада: 8 473 309 UZS
-🤝 Активные долги: 0 UZS`);
+    expect(message).toContain('💳 Выручка за день: 931 000 UZS');
+    expect(message).toContain('🍫 Продажи бара: 931 000 UZS (100%)');
+    expect(message).toContain('📈 Валовая прибыль: 531 000 UZS');
+    expect(message).toContain('✅ Чистая прибыль: 531 000 UZS');
+    expect(message).toContain('🗓 Выручка с начала месяца: 4 000 000 UZS');
+    expect(message).toContain('📊 Средняя выручка в день: 1 000 000 UZS');
   });
 
   it('uses daily rows for the report day and month-to-date rows for balances', () => {
@@ -196,11 +202,15 @@ Pixel Game Zone
     });
 
     expect(input).toMatchObject({
+      dailyRevenue: 1_140_000,
       gameClubIncome: 840_000,
       computerIncome: 790_000,
       debtIncome: 90_000,
       playstationIncome: 50_000,
       barSales: 300_000,
+      barCost: 200_000,
+      grossProfit: 940_000,
+      netProfit: 780_000,
       stockPurchases: 100_000,
       totalExpenses: 160_000,
       gameClubExpenses: 120_000,
@@ -210,6 +220,13 @@ Pixel Game Zone
         { name: 'Elektrenergiya', amount: 40_000 },
       ],
       barExpenseCategories: [{ name: 'Ремонт', amount: 40_000 }],
+      salaryCosts: 80_000,
+      kpiCosts: 0,
+      rentCosts: 0,
+      utilitiesCosts: 40_000,
+      otherOperatingCosts: 40_000,
+      monthToDateRevenue: 2_640_000,
+      averageDailyRevenue: 660_000,
       gameClubMoneyLeft: 1_750_000,
       averageDailyGameClubIncome: 485_000,
       barMoneyLeft: 560_000,
@@ -223,11 +240,15 @@ Pixel Game Zone
       formatRussianDailyFinanceReport({
         clubName: 'Main Game Club',
         businessDateLabel: '3 июля 2026',
+        dailyRevenue: 2_496_000,
         gameClubIncome: 1_904_000,
         computerIncome: 1_904_000,
         debtIncome: 0,
         playstationIncome: 0,
         barSales: 592_000,
+        barCost: 250_000,
+        grossProfit: 2_246_000,
+        netProfit: 1_622_000,
         stockPurchases: 0,
         totalExpenses: 624_000,
         gameClubExpenses: 564_000,
@@ -237,6 +258,13 @@ Pixel Game Zone
           { name: 'Пополнение Номера', amount: 224_000 },
         ],
         barExpenseCategories: [{ name: 'Еда / Напитки', amount: 60_000 }],
+        salaryCosts: 340_000,
+        kpiCosts: 0,
+        rentCosts: 0,
+        utilitiesCosts: 0,
+        otherOperatingCosts: 284_000,
+        monthToDateRevenue: 5_000_000,
+        averageDailyRevenue: 1_666_667,
         gameClubMoneyLeft: 2_941_000,
         averageDailyGameClubIncome: 980_333,
         barMoneyLeft: 1_084_000,
@@ -286,6 +314,8 @@ Pixel Game Zone
       { name: 'Elektrenergiya', amount: 3_541_000 },
       { name: 'Другое', amount: 25_000 },
     ]);
+    expect(input.utilitiesCosts).toBe(3_541_000);
+    expect(input.otherOperatingCosts).toBe(25_000);
   });
 });
 

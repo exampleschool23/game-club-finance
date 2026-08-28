@@ -16,17 +16,28 @@ import type {
 export interface DailyFinanceReportInput {
   clubName: string;
   businessDateLabel: string;
+  dailyRevenue: number;
   gameClubIncome: number;
   computerIncome: number;
   debtIncome: number;
   playstationIncome: number;
   barSales: number;
+  barCost: number;
+  grossProfit: number;
+  netProfit: number;
   stockPurchases: number;
   totalExpenses: number;
   gameClubExpenses: number;
   barExpenses: number;
   gameClubExpenseCategories: DailyFinanceExpenseCategory[];
   barExpenseCategories: DailyFinanceExpenseCategory[];
+  salaryCosts: number;
+  kpiCosts: number;
+  rentCosts: number;
+  utilitiesCosts: number;
+  otherOperatingCosts: number;
+  monthToDateRevenue: number;
+  averageDailyRevenue: number;
   gameClubMoneyLeft: number;
   averageDailyGameClubIncome: number;
   barMoneyLeft: number;
@@ -114,6 +125,45 @@ function categoryLines(categories: DailyFinanceExpenseCategory[]): string[] {
   return categories.map((category) => `    - ${category.name}: ${money(category.amount)}`);
 }
 
+function isKpiExpense(row: ExpenseRow): boolean {
+  return /(?:^|\W)(?:kpi|кпи|bonus|бонус)(?:\W|$)/iu.test(
+    `${row.category} ${row.comment ?? ''}`,
+  );
+}
+
+function summarizeOperatingCosts(rows: ExpenseRow[]) {
+  return rows.reduce((summary, row) => {
+    const amount = Number(row.amount ?? 0);
+    const description = `${row.category} ${row.comment ?? ''}`;
+
+    if (isKpiExpense(row)) summary.kpiCosts += amount;
+    else if (row.category === 'salary' || /зарплат|oylik/iu.test(description)) {
+      summary.salaryCosts += amount;
+    } else if (row.category === 'rent' || /аренд|ijara/iu.test(description)) {
+      summary.rentCosts += amount;
+    } else if (
+      row.category === 'electricity'
+      || row.category === 'internet'
+      || /elektr|электр|svet|свет|kommun|коммун|internet|интернет/iu.test(description)
+    ) {
+      summary.utilitiesCosts += amount;
+    } else summary.otherOperatingCosts += amount;
+
+    return summary;
+  }, {
+    salaryCosts: 0,
+    kpiCosts: 0,
+    rentCosts: 0,
+    utilitiesCosts: 0,
+    otherOperatingCosts: 0,
+  });
+}
+
+function percent(value: number, total: number): string {
+  if (total <= 0) return '0%';
+  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format((value / total) * 100)}%`;
+}
+
 export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): DailyFinanceReportInput {
   const monthStart = `${rows.businessDate.slice(0, 7)}-01`;
   const monthRange = { from: monthStart, to: rows.businessDate };
@@ -148,24 +198,39 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     rows.debtRows,
   );
   const latestDailyCashEntryDate = getLatestRowDateInRange(rows.monthCashRows ?? rows.cashRows, monthRange);
-  const averageGameClubDayCount = countDashboardRangeDaysThroughDate(monthRange, latestDailyCashEntryDate);
+  const latestBarEntryDate = getLatestRowDateInRange(rows.monthStockRows ?? rows.stockRows, monthRange);
+  const latestRevenueDate = [latestDailyCashEntryDate, latestBarEntryDate]
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .at(-1);
+  const averageRevenueDayCount = countDashboardRangeDaysThroughDate(monthRange, latestRevenueDate);
+  const dailyRevenue = dailyTotals.gameClubIncome + dailyTotals.barSales;
+  const monthToDateRevenue = monthTotals.gameClubIncome + monthTotals.barSales;
+  const operatingCosts = summarizeOperatingCosts(rows.expenseRows);
 
   return {
     clubName: rows.clubName,
     businessDateLabel: rows.businessDateLabel,
+    dailyRevenue,
     gameClubIncome: dailyTotals.gameClubIncome,
     computerIncome: dailyTotals.computerIncome,
     debtIncome: dailyTotals.debtIncome,
     playstationIncome: dailyTotals.playstationIncome,
     barSales: dailyTotals.barSales,
+    barCost: dailyTotals.barCost,
+    grossProfit: dailyRevenue - dailyTotals.barCost,
+    netProfit: dailyTotals.accountingNetProfit,
     stockPurchases: dailyTotals.stockPurchaseCost,
     totalExpenses: dailyTotals.totalExpenses,
     gameClubExpenses: dailyTotals.gameClubExpenses,
     barExpenses: dailyTotals.barExpenses,
     gameClubExpenseCategories: summarizeExpenseCategories(rows.expenseRows, 'game_club'),
     barExpenseCategories: summarizeExpenseCategories(rows.expenseRows, 'bar'),
+    ...operatingCosts,
+    monthToDateRevenue,
+    averageDailyRevenue: calculateAverageDailyIncome(monthToDateRevenue, averageRevenueDayCount),
     gameClubMoneyLeft: monthTotals.gameClubMoneyLeft,
-    averageDailyGameClubIncome: calculateAverageDailyIncome(monthTotals.gameClubIncome, averageGameClubDayCount),
+    averageDailyGameClubIncome: calculateAverageDailyIncome(monthTotals.gameClubIncome, averageRevenueDayCount),
     barMoneyLeft: monthTotals.barIncome,
     inventoryValue: dailyTotals.inventoryValue,
     activeDebts: dailyTotals.activeDebts,
@@ -178,12 +243,16 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     input.clubName,
     `Рабочий день: ${input.businessDateLabel}`,
     '',
+    `💳 Выручка за день: ${money(input.dailyRevenue)}`,
     `🎮 Доход клуба: ${money(input.gameClubIncome)}`,
-    `  • Компьютеры: ${money(input.computerIncome)}`,
-    `  • Долги: ${money(input.debtIncome)}`,
-    `  • PlayStation: ${money(input.playstationIncome)}`,
+    `  • Компьютеры: ${money(input.computerIncome)} (${percent(input.computerIncome, input.dailyRevenue)})`,
+    `  • Долги: ${money(input.debtIncome)} (${percent(input.debtIncome, input.dailyRevenue)})`,
+    `  • PlayStation: ${money(input.playstationIncome)} (${percent(input.playstationIncome, input.dailyRevenue)})`,
     '',
-    `🍫 Продажи бара: ${money(input.barSales)}`,
+    `🍫 Продажи бара: ${money(input.barSales)} (${percent(input.barSales, input.dailyRevenue)})`,
+    `📉 Себестоимость бара: ${money(input.barCost)}`,
+    `📈 Валовая прибыль: ${money(input.grossProfit)}`,
+    `✅ Чистая прибыль: ${money(input.netProfit)}`,
     `📦 Закупки склада: ${money(input.stockPurchases)}`,
     '',
     `💸 Расходы: ${money(input.totalExpenses)}`,
@@ -191,7 +260,14 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     ...categoryLines(input.gameClubExpenseCategories),
     `  • Из денег бара: ${money(input.barExpenses)}`,
     ...categoryLines(input.barExpenseCategories),
+    `  • Зарплата: ${money(input.salaryCosts)}`,
+    `  • KPI и бонусы: ${money(input.kpiCosts)}`,
+    `  • Аренда: ${money(input.rentCosts)}`,
+    `  • Коммунальные услуги: ${money(input.utilitiesCosts)}`,
+    `  • Прочие расходы: ${money(input.otherOperatingCosts)}`,
     '',
+    `🗓 Выручка с начала месяца: ${money(input.monthToDateRevenue)}`,
+    `📊 Средняя выручка в день: ${money(input.averageDailyRevenue)}`,
     `💰 Остаток денег клуба за месяц: ${money(input.gameClubMoneyLeft)}`,
     `📈 Средний дневной доход клуба за месяц: ${money(input.averageDailyGameClubIncome)}`,
     `🧾 Остаток денег бара за месяц: ${money(input.barMoneyLeft)}`,

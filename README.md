@@ -100,15 +100,21 @@ Supabase rows:
 Supabase data → calculations → SVG → PNG → Telegram sendPhoto → delivery status saved
 ```
 
-The PNG renderer is loaded only when the report is built. If the native image
-runtime cannot load or render, the cron sends the same financial report as a
-Telegram text message and records `deliveryType: text` instead of losing the
-daily report. Telegram transport failures still follow the delivery ledger's
-retry and manual-review rules; they do not switch formats after dispatch begins.
+The route statically imports the Sharp renderer so Vercel traces the native
+dependency. Its function bundle explicitly includes Linux libvips and the Noto
+Sans TTF files. At runtime the renderer creates a private fontconfig file and
+sets `FONTCONFIG_FILE`, so Russian labels never depend on fonts installed on a
+developer machine or the Vercel host. If image rendering still fails, the exact
+error is logged and the cron sends the same financial report as a Telegram text
+message with `deliveryType: text`. Telegram transport failures still follow the
+delivery ledger's retry and manual-review rules; they do not switch formats
+after dispatch begins.
 
-The primary cron runs every day at 01:00 UTC (06:00 in Tashkent) and reports
-the previous Tashkent business date. Recovery runs at 02:00 and 03:00 UTC use
-the same delivery ledger key, so they do not duplicate a successful photo.
+Supabase Cron owns the primary schedule. It runs every day at `01:00 UTC`,
+which is `06:00 Asia/Tashkent`, and reports the previous Tashkent business date.
+Migration `041_supabase_daily_report_cron_and_delivery_audit.sql` replaces the
+named job idempotently, reads its Bearer credential from Supabase Vault, and
+invokes only the production endpoint.
 
 > **Required deployment order:** apply
 > `037_telegram_report_delivery_ledger.sql` and
@@ -118,10 +124,19 @@ the same delivery ledger key, so they do not duplicate a successful photo.
 > nothing during that gap; after the migration is applied, a later recovery run
 > can safely catch up the same business date.
 
-Vercel calls the primary route at 01:00 UTC, then distinct recovery routes at
-02:00 and 03:00 UTC. All three use the same date/target ledger key, so recovery
-runs skip successful deliveries and retry only definite image-build or Telegram
-failures. Configure `CRON_SECRET`,
+Before applying migration 041, store the same `CRON_SECRET` configured in
+Vercel under the Vault name used by the migration:
+
+```sql
+select vault.create_secret(
+  '<the Vercel CRON_SECRET value>',
+  'game_club_daily_report_cron_secret',
+  'Bearer token used by the Game Club daily finance report cron'
+);
+```
+
+The scheduled route and any controlled manual retry use the same date/target
+ledger key, so successful deliveries cannot be duplicated. Configure `CRON_SECRET`,
 `TELEGRAM_BOT_TOKEN`, and at least one complete chat/club target pair from
 `.env.example`. The endpoint rejects requests without the exact bearer secret.
 `CRON_SECRET` must be a header-safe random string of at least 16 characters;
@@ -131,7 +146,16 @@ same production value.
 Migration `037_telegram_report_delivery_ledger.sql` provides the service-only
 delivery ledger used to prevent concurrent or repeated scheduled runs from
 sending the same target twice. A normal authenticated request is idempotent for
-each business date and target.
+each business date and target. Migration 041 also records the attempt time,
+actual Telegram chat/message IDs, sent time, final status, actual format, and
+structured errors. Telegram message deletion is deliberately not treated as a
+delivery-state change.
+
+To regenerate a local preview from a real club/date without sending Telegram:
+
+```bash
+npx tsx scripts/generate-daily-finance-preview.ts 2026-08-27
+```
 
 The route durably marks dispatch before contacting Telegram. A timeout, network
 failure, malformed success response, or interrupted post-send finalization has

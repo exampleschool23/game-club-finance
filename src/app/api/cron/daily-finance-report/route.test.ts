@@ -218,6 +218,7 @@ describe('daily finance report cron route', () => {
       outcome: 'already_sent',
       deliveryId: '40c05af5-5a59-45ae-a891-19a18228a721',
       status: 'sent',
+      format: 'photo',
       claimCount: 1,
       sentAt: '2026-08-27T06:00:00.000Z',
       telegramResult: { messageId: 50 },
@@ -227,6 +228,7 @@ describe('daily finance report cron route', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
+    expect(payload).toMatchObject({ status: 'already_sent', format: null });
     expect(payload.sent[0]).toMatchObject({
       ok: true,
       target: 'pixel',
@@ -269,6 +271,7 @@ describe('daily finance report cron route', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
+    expect(payload).toMatchObject({ status: 'sent', format: 'photo' });
     expect(payload.sent[0]).toMatchObject({
       ok: true,
       status: 'sent',

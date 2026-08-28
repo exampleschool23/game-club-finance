@@ -309,6 +309,10 @@ export async function GET(request: NextRequest) {
           businessDate,
           deliveryId: claim.deliveryId,
           status: 'already_sent',
+          format: claim.telegramResult.deliveryType === 'photo'
+            || claim.telegramResult.deliveryType === 'text'
+            ? claim.telegramResult.deliveryType
+            : null,
           skipped: true,
           sentAt: claim.sentAt,
           telegram: claim.telegramResult,
@@ -521,6 +525,7 @@ export async function GET(request: NextRequest) {
           businessDate: report.businessDate,
           deliveryId: claim.deliveryId,
           status: 'sent',
+          format: deliveryType,
           messageId: telegram.result.message_id,
           telegramChatId: telegram.result.chat.id,
           telegramChatTitle: telegram.result.chat.title ?? null,
@@ -585,6 +590,14 @@ export async function GET(request: NextRequest) {
       }
     }));
     const hasFailure = results.some((result) => !result.ok);
+    const singleResult = results.length === 1 ? results[0] : null;
+    const singleStatus = singleResult && 'status' in singleResult
+      ? singleResult.status
+      : hasFailure ? 'failed' : null;
+    const singleFormat = singleResult && 'format' in singleResult
+      && (singleResult.format === 'photo' || singleResult.format === 'text')
+      ? singleResult.format
+      : null;
 
     logDeliveryEvent(hasFailure ? 'error' : 'info', 'telegram_report_delivery_batch_completed', {
       businessDate,
@@ -600,6 +613,8 @@ export async function GET(request: NextRequest) {
       ok: !hasFailure,
       businessDate,
       forced: force === '1',
+      status: singleStatus,
+      format: singleFormat,
       sent: results,
     }, { status: hasFailure ? 500 : 200 });
   } catch (error) {

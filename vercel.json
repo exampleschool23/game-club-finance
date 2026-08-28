@@ -1,18 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["syd1"],
-  "crons": [
-    {
-      "path": "/api/cron/daily-finance-report",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/daily-finance-report-retry-1",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/daily-finance-report-retry-2",
-      "schedule": "0 3 * * *"
+  "functions": {
+    "src/app/api/cron/daily-finance-report/route.ts": {
+      "includeFiles": "{node_modules/@img/sharp-libvips-linux-x64/**,node_modules/notosans-fontface/fonts/*.ttf}"
     }
-  ]
+  }
 }
