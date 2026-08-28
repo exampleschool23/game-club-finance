@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
   buildReport: vi.fn(),
-  sendTelegram: vi.fn(),
+  sendTelegramPhoto: vi.fn(),
+  sendTelegramMessage: vi.fn(),
   claimDelivery: vi.fn(),
   beginDispatch: vi.fn(),
   completeDelivery: vi.fn(),
@@ -23,7 +24,8 @@ vi.mock('@/lib/telegram/sendDailyFinanceReport', async () => {
   return {
     ...actual,
     buildDailyFinanceTelegramReport: mocks.buildReport,
-    sendTelegramPhoto: mocks.sendTelegram,
+    sendTelegramPhoto: mocks.sendTelegramPhoto,
+    sendTelegramMessage: mocks.sendTelegramMessage,
   };
 });
 
@@ -102,7 +104,7 @@ describe('daily finance report cron route', () => {
       imagePng: Buffer.from('png'),
       imageFileName: 'report.png',
     });
-    mocks.sendTelegram.mockResolvedValue({
+    const telegramSuccess = {
       ok: true,
       result: {
         message_id: 51,
@@ -110,7 +112,9 @@ describe('daily finance report cron route', () => {
         date: 1_787_799_541,
       },
       attempts: [sentAttempt()],
-    });
+    };
+    mocks.sendTelegramPhoto.mockResolvedValue(telegramSuccess);
+    mocks.sendTelegramMessage.mockResolvedValue(telegramSuccess);
   });
 
   afterEach(() => {
@@ -131,7 +135,8 @@ describe('daily finance report cron route', () => {
     ));
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
     expect(mocks.claimDelivery).not.toHaveBeenCalled();
-    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   });
 
   it('logs safe diagnostics when Vercel sends a mismatched cron credential', async () => {
@@ -147,7 +152,8 @@ describe('daily finance report cron route', () => {
     expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining('stale-cron-secret'));
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
     expect(mocks.claimDelivery).not.toHaveBeenCalled();
-    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   });
 
   it('retries a transient delivery-claim failure before sending', async () => {
@@ -166,7 +172,7 @@ describe('daily finance report cron route', () => {
 
     expect(response.status).toBe(200);
     expect(mocks.claimDelivery).toHaveBeenCalledTimes(2);
-    expect(mocks.sendTelegram).toHaveBeenCalledOnce();
+    expect(mocks.sendTelegramPhoto).toHaveBeenCalledOnce();
   });
 
   it('returns 500 with per-target diagnostics when Telegram exhausts retries', async () => {
@@ -177,7 +183,7 @@ describe('daily finance report cron route', () => {
       telegramErrorCode: 503,
       description: 'Service Unavailable',
     }];
-    mocks.sendTelegram.mockRejectedValue(
+    mocks.sendTelegramPhoto.mockRejectedValue(
       new TelegramSendError('Telegram send failed after 3 attempts', attempts, true),
     );
 
@@ -228,7 +234,8 @@ describe('daily finance report cron route', () => {
       skipped: true,
     });
     expect(mocks.buildReport).not.toHaveBeenCalled();
-    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
     expect(mocks.beginDispatch).not.toHaveBeenCalled();
     expect(mocks.completeDelivery).not.toHaveBeenCalled();
   });
@@ -253,7 +260,8 @@ describe('daily finance report cron route', () => {
       retryNotBefore: '2026-08-27T06:45:00.000Z',
     });
     expect(mocks.buildReport).not.toHaveBeenCalled();
-    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   });
 
   it('finalizes a successful delivery before reporting success', async () => {
@@ -279,11 +287,38 @@ describe('daily finance report cron route', () => {
         }),
       }),
     );
-    expect(mocks.sendTelegram).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.sendTelegramPhoto).toHaveBeenCalledWith(expect.objectContaining({
       imagePng: Buffer.from('png'),
       imageFileName: 'report.png',
       caption: 'caption',
     }));
+  });
+
+  it('sends the text report when PNG rendering is unavailable', async () => {
+    mocks.buildReport.mockResolvedValue({
+      clubId: CLUB_ID,
+      chatId: '-1001',
+      businessDate: '2026-08-26',
+      message: 'text fallback report',
+      caption: 'caption',
+      imagePng: null,
+      imageFileName: 'report.png',
+    });
+
+    const response = await GET(cronRequest('?date=2026-08-26&target=pixel'));
+
+    expect(response.status).toBe(200);
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith(expect.objectContaining({
+      text: 'text fallback report',
+    }));
+    expect(mocks.completeDelivery).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        outcome: 'sent',
+        telegramResult: expect.objectContaining({ deliveryType: 'text' }),
+      }),
+    );
   });
 
   it('leaves a started dispatch quarantinable when Telegram succeeds but finalization fails', async () => {
@@ -299,7 +334,7 @@ describe('daily finance report cron route', () => {
       telegramDelivered: true,
     });
     expect(mocks.beginDispatch).toHaveBeenCalledOnce();
-    expect(mocks.sendTelegram).toHaveBeenCalledOnce();
+    expect(mocks.sendTelegramPhoto).toHaveBeenCalledOnce();
     expect(mocks.completeDelivery).toHaveBeenCalledTimes(3);
     expect(mocks.completeDelivery).toHaveBeenCalledWith(
       expect.anything(),
@@ -316,7 +351,8 @@ describe('daily finance report cron route', () => {
     expect(response.status).toBe(400);
     expect(payload.error).toContain('requestId to be a UUID');
     expect(mocks.claimDelivery).not.toHaveBeenCalled();
-    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   });
 
   it('persists an ambiguous Telegram outcome for manual review without retrying', async () => {
@@ -327,7 +363,7 @@ describe('daily finance report cron route', () => {
       telegramErrorCode: null,
       description: 'socket reset',
     }];
-    mocks.sendTelegram.mockRejectedValue(
+    mocks.sendTelegramPhoto.mockRejectedValue(
       new TelegramSendError('Telegram outcome is unknown', attempts, false, true),
     );
 
@@ -372,6 +408,7 @@ describe('daily finance report cron route', () => {
     });
     expect(mocks.buildReport).not.toHaveBeenCalled();
     expect(mocks.beginDispatch).not.toHaveBeenCalled();
-    expect(mocks.sendTelegram).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramPhoto).not.toHaveBeenCalled();
+    expect(mocks.sendTelegramMessage).not.toHaveBeenCalled();
   });
 });

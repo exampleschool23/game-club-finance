@@ -100,6 +100,12 @@ Supabase rows:
 Supabase data → calculations → SVG → PNG → Telegram sendPhoto → delivery status saved
 ```
 
+The PNG renderer is loaded only when the report is built. If the native image
+runtime cannot load or render, the cron sends the same financial report as a
+Telegram text message and records `deliveryType: text` instead of losing the
+daily report. Telegram transport failures still follow the delivery ledger's
+retry and manual-review rules; they do not switch formats after dispatch begins.
+
 The primary cron runs every day at 01:00 UTC (06:00 in Tashkent) and reports
 the previous Tashkent business date. Recovery runs at 02:00 and 03:00 UTC use
 the same delivery ledger key, so they do not duplicate a successful photo.

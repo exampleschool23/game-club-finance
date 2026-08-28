@@ -6,7 +6,6 @@ import {
   formatRussianDailyFinanceReportCaption,
   formatRussianDailyFinanceReport,
 } from './dailyFinanceReport';
-import { renderDailyFinanceReportPng } from './dailyFinanceReportImage';
 import type {
   DailyCashRow,
   ExpenseRow,
@@ -33,7 +32,7 @@ export interface DailyFinanceReportBuildResult {
   businessDate: string;
   message: string;
   caption: string;
-  imagePng: Buffer;
+  imagePng: Buffer | null;
   imageFileName: string;
 }
 
@@ -238,7 +237,16 @@ export async function buildDailyFinanceTelegramReport(
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
     debtPaymentRows: (debtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
   });
-  const imagePng = await renderDailyFinanceReportPng(input);
+  let imagePng: Buffer | null = null;
+  try {
+    // Keep the native image dependency out of cron module initialization. If
+    // sharp cannot load or render in the deployed runtime, the caller can
+    // still deliver the already-built text report.
+    const { renderDailyFinanceReportPng } = await import('./dailyFinanceReportImage');
+    imagePng = await renderDailyFinanceReportPng(input);
+  } catch (error) {
+    console.error('[telegram/daily-finance] report image unavailable; using text fallback:', error);
+  }
 
   return {
     clubId,
