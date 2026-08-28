@@ -1,11 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDailyFinanceReportInput,
+  formatRussianDailyFinanceReportCaption,
   formatRussianDailyFinanceReport,
 } from './dailyFinanceReport';
 import { monthStartIso, previousTashkentDateIso } from './sendDailyFinanceReport';
 
 describe('formatRussianDailyFinanceReport', () => {
+  it('formats the two-line photo caption without duplicating the club name', () => {
+    expect(formatRussianDailyFinanceReportCaption({
+      clubName: 'Main Game Club',
+      businessDateLabel: '27 августа 2026',
+      gameClubIncome: 0,
+      computerIncome: 0,
+      debtIncome: 0,
+      playstationIncome: 0,
+      barSales: 0,
+      stockPurchases: 0,
+      totalExpenses: 0,
+      gameClubExpenses: 0,
+      barExpenses: 0,
+      gameClubExpenseCategories: [],
+      barExpenseCategories: [],
+      gameClubMoneyLeft: 0,
+      averageDailyGameClubIncome: 0,
+      barMoneyLeft: 0,
+      inventoryValue: 0,
+      activeDebts: 0,
+    })).toBe('📊 Ежедневный финансовый отчёт\nРабочий день: 27 августа 2026');
+  });
+
   it('formats the saved Russian Telegram daily finance template', () => {
     expect(
       formatRussianDailyFinanceReport({

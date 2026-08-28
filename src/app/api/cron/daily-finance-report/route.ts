@@ -4,7 +4,7 @@ import {
   buildDailyFinanceTelegramReport,
   isIsoDate,
   previousTashkentDateIso,
-  sendTelegramMessage,
+  sendTelegramPhoto,
   TelegramSendError,
 } from '@/lib/telegram/sendDailyFinanceReport';
 import {
@@ -20,6 +20,7 @@ import {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const MIN_CRON_SECRET_LENGTH = 16;
@@ -242,6 +243,12 @@ export async function GET(request: NextRequest) {
             target: result.value.target,
             businessDate: result.value.businessDate,
             message: result.value.message,
+            caption: result.value.caption,
+            image: {
+              format: 'png',
+              fileName: result.value.imageFileName,
+              bytes: result.value.imagePng.byteLength,
+            },
           };
         }
 
@@ -452,12 +459,15 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        const telegram = await sendTelegramMessage({
+        const telegram = await sendTelegramPhoto({
           botToken,
           chatId: report.chatId,
-          text: report.message,
+          imagePng: report.imagePng,
+          imageFileName: report.imageFileName,
+          caption: report.caption,
         });
         const telegramResult = {
+          deliveryType: 'photo',
           messageId: telegram.result.message_id,
           chatId: telegram.result.chat.id,
           chatTitle: telegram.result.chat.title ?? null,

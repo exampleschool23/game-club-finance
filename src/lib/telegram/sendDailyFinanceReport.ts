@@ -3,8 +3,10 @@ import { formatDateOnly } from '../formatters';
 import { fetchAllRows } from '../supabase/pagination';
 import {
   buildDailyFinanceReportInput,
+  formatRussianDailyFinanceReportCaption,
   formatRussianDailyFinanceReport,
 } from './dailyFinanceReport';
+import { renderDailyFinanceReportPng } from './dailyFinanceReportImage';
 import type {
   DailyCashRow,
   ExpenseRow,
@@ -30,6 +32,9 @@ export interface DailyFinanceReportBuildResult {
   chatId: string;
   businessDate: string;
   message: string;
+  caption: string;
+  imagePng: Buffer;
+  imageFileName: string;
 }
 
 function datePartsInTashkent(date: Date): { year: number; month: number; day: number } {
@@ -233,12 +238,16 @@ export async function buildDailyFinanceTelegramReport(
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
     debtPaymentRows: (debtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
   });
+  const imagePng = await renderDailyFinanceReportPng(input);
 
   return {
     clubId,
     chatId,
     businessDate,
     message: formatRussianDailyFinanceReport(input),
+    caption: formatRussianDailyFinanceReportCaption(input),
+    imagePng,
+    imageFileName: `daily-finance-${clubId}-${businessDate}.png`,
   };
 }
 
@@ -344,27 +353,31 @@ function retryDelayMs(attempt: number, retryAfterSeconds: number | null, baseDel
   return Math.max(backoff, retryAfterSeconds === null ? 0 : retryAfterSeconds * 1_000);
 }
 
-export async function sendTelegramMessage({
-  botToken,
-  chatId,
-  text,
-  maxAttempts = 3,
-  timeoutMs = 8_000,
-  baseDelayMs = 500,
-  maxInProcessRetryDelayMs = 10_000,
-  fetchImpl = fetch,
-  sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-}: {
+interface TelegramRequestOptions {
   botToken: string;
   chatId: string;
-  text: string;
+  endpoint: 'sendMessage' | 'sendPhoto';
+  buildRequest: (destinationChatId: string) => Omit<RequestInit, 'signal'>;
   maxAttempts?: number;
   timeoutMs?: number;
   baseDelayMs?: number;
   maxInProcessRetryDelayMs?: number;
   fetchImpl?: typeof fetch;
   sleep?: (milliseconds: number) => Promise<void>;
-}): Promise<TelegramSendResult> {
+}
+
+async function sendTelegramRequest({
+  botToken,
+  chatId,
+  endpoint,
+  buildRequest,
+  maxAttempts = 3,
+  timeoutMs = 8_000,
+  baseDelayMs = 500,
+  maxInProcessRetryDelayMs = 10_000,
+  fetchImpl = fetch,
+  sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+}: TelegramRequestOptions): Promise<TelegramSendResult> {
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
     throw new Error('Telegram maxAttempts must be between 1 and 5');
   }
@@ -387,16 +400,10 @@ export async function sendTelegramMessage({
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetchImpl(`${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`, {
+      const request = buildRequest(destinationChatId);
+      const response = await fetchImpl(`${TELEGRAM_API_BASE}/bot${botToken}/${endpoint}`, {
+        ...request,
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          chat_id: destinationChatId,
-          text,
-          disable_notification: false,
-        }),
         signal: controller.signal,
       });
       const payload = await response.json().catch(() => null) as TelegramSuccess | TelegramErrorPayload | null;
@@ -550,4 +557,57 @@ export async function sendTelegramMessage({
   }
 
   throw new TelegramSendError('Telegram send failed without an attempt', attempts, true);
+}
+
+interface TelegramCommonSendOptions {
+  botToken: string;
+  chatId: string;
+  maxAttempts?: number;
+  timeoutMs?: number;
+  baseDelayMs?: number;
+  maxInProcessRetryDelayMs?: number;
+  fetchImpl?: typeof fetch;
+  sleep?: (milliseconds: number) => Promise<void>;
+}
+
+export function sendTelegramMessage({
+  text,
+  ...options
+}: TelegramCommonSendOptions & { text: string }): Promise<TelegramSendResult> {
+  return sendTelegramRequest({
+    ...options,
+    endpoint: 'sendMessage',
+    buildRequest: (destinationChatId) => ({
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: destinationChatId,
+        text,
+        disable_notification: false,
+      }),
+    }),
+  });
+}
+
+export function sendTelegramPhoto({
+  imagePng,
+  imageFileName,
+  caption,
+  ...options
+}: TelegramCommonSendOptions & {
+  imagePng: Buffer;
+  imageFileName: string;
+  caption: string;
+}): Promise<TelegramSendResult> {
+  return sendTelegramRequest({
+    ...options,
+    endpoint: 'sendPhoto',
+    buildRequest: (destinationChatId) => {
+      const form = new FormData();
+      form.set('chat_id', destinationChatId);
+      form.set('photo', new Blob([new Uint8Array(imagePng)], { type: 'image/png' }), imageFileName);
+      form.set('caption', caption);
+      form.set('disable_notification', 'false');
+      return { body: form };
+    },
+  });
 }

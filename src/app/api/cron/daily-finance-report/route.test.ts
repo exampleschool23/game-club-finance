@@ -23,7 +23,7 @@ vi.mock('@/lib/telegram/sendDailyFinanceReport', async () => {
   return {
     ...actual,
     buildDailyFinanceTelegramReport: mocks.buildReport,
-    sendTelegramMessage: mocks.sendTelegram,
+    sendTelegramPhoto: mocks.sendTelegram,
   };
 });
 
@@ -98,6 +98,9 @@ describe('daily finance report cron route', () => {
       chatId: '-1001',
       businessDate: '2026-08-26',
       message: 'report',
+      caption: 'caption',
+      imagePng: Buffer.from('png'),
+      imageFileName: 'report.png',
     });
     mocks.sendTelegram.mockResolvedValue({
       ok: true,
@@ -270,9 +273,17 @@ describe('daily finance report cron route', () => {
       expect.objectContaining({
         outcome: 'sent',
         telegramAttemptCount: 1,
-        telegramResult: expect.objectContaining({ messageId: 51 }),
+        telegramResult: expect.objectContaining({
+          deliveryType: 'photo',
+          messageId: 51,
+        }),
       }),
     );
+    expect(mocks.sendTelegram).toHaveBeenCalledWith(expect.objectContaining({
+      imagePng: Buffer.from('png'),
+      imageFileName: 'report.png',
+      caption: 'caption',
+    }));
   });
 
   it('leaves a started dispatch quarantinable when Telegram succeeds but finalization fails', async () => {

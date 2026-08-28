@@ -92,6 +92,18 @@ npm run build
 
 ## Scheduled Telegram report
 
+The scheduled report is delivered as a generated PNG photo with a two-line
+caption. Each configured target is built independently from that club's
+Supabase rows:
+
+```text
+Supabase data → calculations → SVG → PNG → Telegram sendPhoto → delivery status saved
+```
+
+The primary cron runs every day at 01:00 UTC (06:00 in Tashkent) and reports
+the previous Tashkent business date. Recovery runs at 02:00 and 03:00 UTC use
+the same delivery ledger key, so they do not duplicate a successful photo.
+
 > **Required deployment order:** apply
 > `037_telegram_report_delivery_ledger.sql` and
 > `038_stock_snapshot_and_payment_method_integrity.sql` to Supabase **before
@@ -102,7 +114,7 @@ npm run build
 
 Vercel calls the primary route at 01:00 UTC, then distinct recovery routes at
 02:00 and 03:00 UTC. All three use the same date/target ledger key, so recovery
-runs skip successful deliveries and retry only definite build or Telegram
+runs skip successful deliveries and retry only definite image-build or Telegram
 failures. Configure `CRON_SECRET`,
 `TELEGRAM_BOT_TOKEN`, and at least one complete chat/club target pair from
 `.env.example`. The endpoint rejects requests without the exact bearer secret.

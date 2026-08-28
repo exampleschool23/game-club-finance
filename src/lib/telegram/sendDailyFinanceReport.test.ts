@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sendTelegramMessage } from './sendDailyFinanceReport';
+import { sendTelegramMessage, sendTelegramPhoto } from './sendDailyFinanceReport';
 
 describe('sendTelegramMessage', () => {
   afterEach(() => {
@@ -305,5 +305,44 @@ describe('sendTelegramMessage', () => {
     });
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(sleep).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendTelegramPhoto', () => {
+  it('uploads the PNG and caption with Telegram sendPhoto', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        result: {
+          message_id: 52,
+          chat: { id: -1006, title: 'Pixel', type: 'supergroup' },
+          date: 1_787_799_540,
+        },
+      }),
+    } as Response);
+
+    const result = await sendTelegramPhoto({
+      botToken: 'test-token',
+      chatId: '-1006',
+      imagePng: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      imageFileName: 'daily-finance.png',
+      caption: '📊 Ежедневный финансовый отчёт\nРабочий день: 27 августа 2026',
+      fetchImpl: fetchMock,
+    });
+
+    expect(result.result.message_id).toBe(52);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/sendPhoto$/);
+    const form = fetchMock.mock.calls[0][1]?.body as FormData;
+    expect(form.get('chat_id')).toBe('-1006');
+    expect(form.get('caption')).toBe(
+      '📊 Ежедневный финансовый отчёт\nРабочий день: 27 августа 2026',
+    );
+    expect(form.get('disable_notification')).toBe('false');
+    const photo = form.get('photo');
+    expect(photo).toBeInstanceOf(Blob);
+    expect((photo as File).name).toBe('daily-finance.png');
+    expect((photo as Blob).type).toBe('image/png');
   });
 });

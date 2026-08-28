@@ -200,3 +200,10 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     `🤝 Активные долги: ${money(input.activeDebts)}`,
   ].join('\n');
 }
+
+export function formatRussianDailyFinanceReportCaption(input: DailyFinanceReportInput): string {
+  return [
+    '📊 Ежедневный финансовый отчёт',
+    `Рабочий день: ${input.businessDateLabel}`,
+  ].join('\n');
+}
