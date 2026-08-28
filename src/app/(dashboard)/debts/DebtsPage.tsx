@@ -17,7 +17,8 @@ import { formatCurrency, formatCurrencyInput, formatDate, parseCurrencyInput } f
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
 import { getDebtDateIssue, validateDebtPayment } from '@/lib/validation';
 import { Plus, X, Users } from 'lucide-react';
-import { PAYMENT_METHODS, type NewDebt, type DebtPayment } from '@/types';
+import { defaultPaymentMethod } from '@/lib/paymentMethods';
+import type { NewDebt, DebtPayment } from '@/types';
 
 type DebtStatusVariant = 'danger' | 'warning' | 'success';
 
@@ -30,7 +31,7 @@ function statusVariant(status: string): DebtStatusVariant {
 export default function DebtsPage() {
   const t = useTranslations('debts');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour, role } = useClub();
+  const { selectedClubId, businessDayStartHour, enabledPaymentMethods, role } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
 
@@ -54,15 +55,21 @@ export default function DebtsPage() {
 
   const [payForm, setPayForm] = useState({
     amount: '',
-    payment_method: 'cash',
+    payment_method: defaultPaymentMethod(enabledPaymentMethods),
     date: businessToday,
     comment: '',
   });
 
   useEffect(() => {
     setAddForm((prev) => ({ ...prev, date: businessToday }));
-    setPayForm((prev) => ({ ...prev, date: businessToday }));
-  }, [businessToday, selectedClubId]);
+    setPayForm((prev) => ({
+      ...prev,
+      date: businessToday,
+      payment_method: enabledPaymentMethods.some((method) => method === prev.payment_method)
+        ? prev.payment_method
+        : defaultPaymentMethod(enabledPaymentMethods),
+    }));
+  }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
   const fetchDebts = useCallback(async () => {
     setLoading(true);
@@ -114,7 +121,7 @@ export default function DebtsPage() {
 
   function openPayModal(debtId: string) {
     setPayDebtId(debtId);
-    setPayForm({ amount: '', payment_method: 'cash', date: businessToday, comment: '' });
+    setPayForm({ amount: '', payment_method: defaultPaymentMethod(enabledPaymentMethods), date: businessToday, comment: '' });
     setError('');
     loadPayments(debtId).catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : tc('error'));
@@ -439,8 +446,8 @@ export default function DebtsPage() {
               </div>
               <div>
                 <label className="label">{t('paymentMethod')}</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {PAYMENT_METHODS.map((m) => (
+                <div className={`grid gap-2 ${enabledPaymentMethods.length === 1 ? 'grid-cols-1' : enabledPaymentMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {enabledPaymentMethods.map((m) => (
                     <button
                       key={m}
                       type="button"

@@ -528,6 +528,7 @@
   },
   "settings": {
     "title": "Настройки",
+    "description": "Управляйте клубами и настройками ежедневной работы.",
     "language": "Язык",
     "account": "Аккаунт",
     "appInfo": "О приложении",
@@ -536,6 +537,9 @@
     "nameLabel": "Имя",
     "roleLabel": "Роль",
     "clubs": "Клубы",
+    "selectClubHelp": "Выберите клуб для настройки",
+    "clubSettings": "Настройки клуба",
+    "addClub": "Добавить клуб",
     "clubName": "Название клуба",
     "clubAddress": "Адрес",
     "createClub": "Создать клуб",
@@ -549,7 +553,17 @@
     "savingBusinessDay": "Сохранение...",
     "businessDaySaved": "Время рабочего дня сохранено",
     "businessDayInvalid": "Выберите корректное время начала.",
-    "businessDayOwnerOnly": "Только владельцы могут менять эту настройку."
+    "businessDayOwnerOnly": "Только владельцы могут менять эту настройку.",
+    "paymentMethods": "Способы оплаты",
+    "paymentMethodsHelp": "Выберите способы оплаты для новых записей этого клуба. Ранее добавленные записи не изменятся.",
+    "savePaymentMethods": "Сохранить способы оплаты",
+    "savingPaymentMethods": "Сохранение...",
+    "paymentMethodsSaved": "Способы оплаты сохранены",
+    "paymentMethodsRequired": "Оставьте включённым хотя бы один способ оплаты.",
+    "paymentMethodsOwnerOnly": "Только владельцы могут менять эту настройку.",
+    "enabled": "Включено",
+    "disabled": "Выключено",
+    "paymentMethodsHint": "Изменения применятся после сохранения."
   },
   "team": {
     "title": "Команда",

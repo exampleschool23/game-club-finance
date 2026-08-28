@@ -528,6 +528,7 @@
   },
   "settings": {
     "title": "Settings",
+    "description": "Manage your clubs and how daily operations work.",
     "language": "Language",
     "account": "Account",
     "appInfo": "App Info",
@@ -536,6 +537,9 @@
     "nameLabel": "Name",
     "roleLabel": "Role",
     "clubs": "Clubs",
+    "selectClubHelp": "Select a club to configure",
+    "clubSettings": "Club settings",
+    "addClub": "Add club",
     "clubName": "Club name",
     "clubAddress": "Address",
     "createClub": "Create club",
@@ -549,7 +553,17 @@
     "savingBusinessDay": "Saving...",
     "businessDaySaved": "Business day time saved",
     "businessDayInvalid": "Select a valid start time.",
-    "businessDayOwnerOnly": "Only owners can change this setting."
+    "businessDayOwnerOnly": "Only owners can change this setting.",
+    "paymentMethods": "Payment Methods",
+    "paymentMethodsHelp": "Choose which payment methods can be used for new entries in this club. Existing records will not change.",
+    "savePaymentMethods": "Save payment methods",
+    "savingPaymentMethods": "Saving...",
+    "paymentMethodsSaved": "Payment methods saved",
+    "paymentMethodsRequired": "Keep at least one payment method enabled.",
+    "paymentMethodsOwnerOnly": "Only owners can change this setting.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "paymentMethodsHint": "Changes apply only after saving."
   },
   "team": {
     "title": "Team",

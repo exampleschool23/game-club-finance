@@ -87,6 +87,7 @@ export interface Club {
   name: string;
   address: string | null;
   business_day_start_hour?: number | null;
+  enabled_payment_methods?: EntryPaymentMethod[] | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

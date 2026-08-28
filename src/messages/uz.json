@@ -528,6 +528,7 @@
   },
   "settings": {
     "title": "Sozlamalar",
+    "description": "Klublar va kundalik ish tartibini boshqaring.",
     "language": "Til",
     "account": "Hisob",
     "appInfo": "Ilova haqida",
@@ -536,6 +537,9 @@
     "nameLabel": "Ism",
     "roleLabel": "Lavozim",
     "clubs": "Klublar",
+    "selectClubHelp": "Sozlash uchun klubni tanlang",
+    "clubSettings": "Klub sozlamalari",
+    "addClub": "Klub qo'shish",
     "clubName": "Klub nomi",
     "clubAddress": "Manzil",
     "createClub": "Klub yaratish",
@@ -549,7 +553,17 @@
     "savingBusinessDay": "Saqlanmoqda...",
     "businessDaySaved": "Ish kuni vaqti saqlandi",
     "businessDayInvalid": "To'g'ri boshlanish vaqtini tanlang.",
-    "businessDayOwnerOnly": "Bu sozlamani faqat ownerlar o'zgartira oladi."
+    "businessDayOwnerOnly": "Bu sozlamani faqat ownerlar o'zgartira oladi.",
+    "paymentMethods": "To'lov usullari",
+    "paymentMethodsHelp": "Ushbu klubdagi yangi yozuvlar uchun mavjud to'lov usullarini tanlang. Oldingi yozuvlar o'zgarmaydi.",
+    "savePaymentMethods": "To'lov usullarini saqlash",
+    "savingPaymentMethods": "Saqlanmoqda...",
+    "paymentMethodsSaved": "To'lov usullari saqlandi",
+    "paymentMethodsRequired": "Kamida bitta to'lov usulini yoqilgan holda qoldiring.",
+    "paymentMethodsOwnerOnly": "Bu sozlamani faqat ownerlar o'zgartira oladi.",
+    "enabled": "Yoqilgan",
+    "disabled": "O'chirilgan",
+    "paymentMethodsHint": "O'zgarishlar saqlangandan keyin qo'llanadi."
   },
   "team": {
     "title": "Jamoa",

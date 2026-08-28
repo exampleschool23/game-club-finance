@@ -10,7 +10,8 @@ import { Sidebar } from './Sidebar';
 import { DashboardContentLoading } from './DashboardContentLoading';
 import { createClient } from '@/lib/supabase/client';
 import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
-import type { Club, ClubMembership, UserRole } from '@/types';
+import { normalizePaymentMethods } from '@/lib/paymentMethods';
+import { PAYMENT_METHODS, type Club, type ClubMembership, type EntryPaymentMethod, type UserRole } from '@/types';
 import {
   canAccessPath,
   defaultPathForAccess,
@@ -47,6 +48,7 @@ interface ClubContextValue {
   role: UserRole;
   featureAccess: FeatureKey[];
   businessDayStartHour: number;
+  enabledPaymentMethods: EntryPaymentMethod[];
   loading: boolean;
   setSelectedClubId: (clubId: string) => void;
   refreshClubs: () => Promise<void>;
@@ -64,6 +66,7 @@ export const ClubContext = createContext<ClubContextValue>({
   role: 'viewer',
   featureAccess: [],
   businessDayStartHour: 0,
+  enabledPaymentMethods: [...PAYMENT_METHODS],
   loading: true,
   setSelectedClubId: () => {},
   refreshClubs: async () => {},
@@ -185,6 +188,10 @@ export function DashboardShell({
   );
   const selectedClub = selectedMembership?.club ?? null;
   const businessDayStartHour = normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour);
+  const enabledPaymentMethods = useMemo(
+    () => normalizePaymentMethods(selectedClub?.enabled_payment_methods),
+    [selectedClub?.enabled_payment_methods],
+  );
 
   const setSelectedClubId = useCallback((clubId: string) => {
     setSelectedClubIdState(clubId);
@@ -209,7 +216,7 @@ export function DashboardShell({
         .maybeSingle(),
       supabase
         .from('club_memberships')
-        .select('club_id, role, feature_access, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
+        .select('club_id, role, feature_access, created_at, updated_at, clubs(id, name, address, business_day_start_hour, enabled_payment_methods, is_active, created_at, updated_at)')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true }),
     ]);
@@ -218,13 +225,38 @@ export function DashboardShell({
     setProfileRole(isUserRole(profileRes.data?.role) ? profileRes.data.role : 'viewer');
 
     let membershipRows = (membershipRes.data as ClubMembership[] | null) ?? [];
-    if (isMissingDatabaseColumn(membershipRes.error, 'feature_access')) {
-      const fallbackMembershipRes = await supabase
+    if (isMissingDatabaseColumn(membershipRes.error, 'enabled_payment_methods')) {
+      const withoutPaymentMethodsRes = await supabase
         .from('club_memberships')
-        .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
+        .select('club_id, role, feature_access, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true });
-      membershipRows = (fallbackMembershipRes.data as ClubMembership[] | null) ?? [];
+      membershipRows = (withoutPaymentMethodsRes.data as ClubMembership[] | null) ?? [];
+
+      if (isMissingDatabaseColumn(withoutPaymentMethodsRes.error, 'feature_access')) {
+        const legacyMembershipRes = await supabase
+          .from('club_memberships')
+          .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: true });
+        membershipRows = (legacyMembershipRes.data as ClubMembership[] | null) ?? [];
+      }
+    } else if (isMissingDatabaseColumn(membershipRes.error, 'feature_access')) {
+      const withoutFeatureAccessRes = await supabase
+        .from('club_memberships')
+        .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, enabled_payment_methods, is_active, created_at, updated_at)')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true });
+      membershipRows = (withoutFeatureAccessRes.data as ClubMembership[] | null) ?? [];
+
+      if (isMissingDatabaseColumn(withoutFeatureAccessRes.error, 'enabled_payment_methods')) {
+        const legacyMembershipRes = await supabase
+          .from('club_memberships')
+          .select('club_id, role, created_at, updated_at, clubs(id, name, address, business_day_start_hour, is_active, created_at, updated_at)')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: true });
+        membershipRows = (legacyMembershipRes.data as ClubMembership[] | null) ?? [];
+      }
     }
 
     const nextMemberships = membershipOptions(membershipRows);
@@ -312,11 +344,12 @@ export function DashboardShell({
       role,
       featureAccess,
       businessDayStartHour,
+      enabledPaymentMethods,
       loading: clubLoading,
       setSelectedClubId,
       refreshClubs,
     }),
-    [businessDayStartHour, clubLoading, featureAccess, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
+    [businessDayStartHour, clubLoading, enabledPaymentMethods, featureAccess, memberships, refreshClubs, role, selectedClub, selectedClubId, setSelectedClubId],
   );
 
   return (

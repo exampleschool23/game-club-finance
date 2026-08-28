@@ -131,7 +131,7 @@ function PaymentCard({
 export default function DailyCashPage() {
   const t = useTranslations('dailyCash');
   const tc = useTranslations('common');
-  const { selectedClubId, role: currentRole, businessDayStartHour } = useClub();
+  const { selectedClubId, role: currentRole, businessDayStartHour, enabledPaymentMethods } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [form, setForm] = useState<CashFormData>(() => emptyForm(businessToday));
@@ -431,7 +431,7 @@ export default function DailyCashPage() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <PaymentCard
+          {enabledPaymentMethods.includes('cash') && <PaymentCard
             label={t('cash')}
             value={form.cash_income}
             disabled={disabled}
@@ -439,8 +439,8 @@ export default function DailyCashPage() {
             icon={Banknote}
             iconBgClassName="bg-green-100"
             iconClassName="text-green-600"
-          />
-          <PaymentCard
+          />}
+          {enabledPaymentMethods.includes('terminal') && <PaymentCard
             label={t('terminal')}
             value={form.terminal_income}
             disabled={disabled}
@@ -448,8 +448,8 @@ export default function DailyCashPage() {
             icon={MonitorSmartphone}
             iconBgClassName="bg-blue-100"
             iconClassName="text-blue-600"
-          />
-          <PaymentCard
+          />}
+          {enabledPaymentMethods.includes('card') && <PaymentCard
             label={t('card')}
             value={form.card_income}
             disabled={disabled}
@@ -457,7 +457,7 @@ export default function DailyCashPage() {
             icon={CreditCard}
             iconBgClassName="bg-purple-100"
             iconClassName="text-purple-600"
-          />
+          />}
           <PaymentCard
             label={t('playstation')}
             value={form.playstation_income}

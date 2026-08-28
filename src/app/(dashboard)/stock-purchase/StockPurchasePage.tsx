@@ -35,7 +35,8 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { PAYMENT_METHODS, type Product, type StockPurchase } from '@/types';
+import { defaultPaymentMethod } from '@/lib/paymentMethods';
+import type { Product, StockPurchase } from '@/types';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 
 const PURCHASES_PAGE_SIZE = 10;
@@ -101,7 +102,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
 export default function StockPurchasePage() {
   const t = useTranslations('stockPurchase');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour } = useClub();
+  const { selectedClubId, businessDayStartHour, enabledPaymentMethods } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
 
@@ -122,7 +123,7 @@ export default function StockPurchasePage() {
     quantity: '',
     cost_price: '',
     sale_price: '',
-    payment_method: 'cash',
+    payment_method: defaultPaymentMethod(enabledPaymentMethods),
     comment: '',
   });
 
@@ -203,8 +204,14 @@ export default function StockPurchasePage() {
     setPurchasePage(1);
     setPurchases([]);
     setPurchaseCount(0);
-    setForm((prev) => ({ ...prev, date: businessToday }));
-  }, [businessToday, selectedClubId]);
+    setForm((prev) => ({
+      ...prev,
+      date: businessToday,
+      payment_method: enabledPaymentMethods.some((method) => method === prev.payment_method)
+        ? prev.payment_method
+        : defaultPaymentMethod(enabledPaymentMethods),
+    }));
+  }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
   useEffect(() => {
     loadProducts().catch((err) => setError(err instanceof Error ? err.message : String(err)));
@@ -253,7 +260,7 @@ export default function StockPurchasePage() {
       quantity: '',
       cost_price: '',
       sale_price: '',
-      payment_method: 'cash',
+      payment_method: defaultPaymentMethod(enabledPaymentMethods),
       comment: '',
     });
     setError('');
@@ -473,7 +480,7 @@ export default function StockPurchasePage() {
                   value={form.payment_method}
                   onChange={(event) => set('payment_method', event.target.value)}
                 >
-                  {PAYMENT_METHODS.map((method) => (
+                  {enabledPaymentMethods.map((method) => (
                     <option key={method} value={method}>
                       {tc(`paymentMethods.${method}`)}
                     </option>

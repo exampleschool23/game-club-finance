@@ -9,7 +9,8 @@ import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
-import { PAYMENT_METHODS, type Expense } from '@/types';
+import { defaultPaymentMethod } from '@/lib/paymentMethods';
+import type { Expense } from '@/types';
 
 const CATEGORIES = [
   'rent', 'salary', 'electricity', 'internet', 'repair',
@@ -29,7 +30,7 @@ interface ExpenseRegistrationFormProps {
 export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistrationFormProps) {
   const t = useTranslations('expenses');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour } = useClub();
+  const { selectedClubId, businessDayStartHour, enabledPaymentMethods } = useClub();
   const businessToday = useMemo(
     () => todayIso(new Date(), businessDayStartHour),
     [businessDayStartHour],
@@ -43,14 +44,20 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     amount: '',
     category: 'other',
     custom_category: '',
-    payment_method: 'cash',
+    payment_method: defaultPaymentMethod(enabledPaymentMethods),
     payment_source: 'game_club',
     comment: '',
   });
 
   useEffect(() => {
-    setForm((current) => ({ ...current, date: businessToday }));
-  }, [businessToday, selectedClubId]);
+    setForm((current) => ({
+      ...current,
+      date: businessToday,
+      payment_method: enabledPaymentMethods.some((method) => method === current.payment_method)
+        ? current.payment_method
+        : defaultPaymentMethod(enabledPaymentMethods),
+    }));
+  }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
   useEffect(() => {
     const requestId = ++categoryLoadSequence.current;
@@ -143,7 +150,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
       amount: '',
       category: 'other',
       custom_category: '',
-      payment_method: 'cash',
+      payment_method: defaultPaymentMethod(enabledPaymentMethods),
       payment_source: 'game_club',
       comment: '',
     });
@@ -240,8 +247,8 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
 
       <fieldset>
         <legend className="label">{t('paymentMethod')}</legend>
-        <div className="grid grid-cols-3 gap-2">
-          {PAYMENT_METHODS.map((method) => {
+        <div className={`grid gap-2 ${enabledPaymentMethods.length === 1 ? 'grid-cols-1' : enabledPaymentMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          {enabledPaymentMethods.map((method) => {
             const selected = form.payment_method === method;
             const MethodIcon = method === 'cash' ? Banknote : method === 'terminal' ? CreditCard : WalletCards;
             return (
