@@ -181,6 +181,8 @@
     "entryDeleted": "Запись отчёта удалена.",
     "entryDetails": "Детали записи",
     "viewEntryDetails": "Открыть детали: {category}",
+    "addedBy": "Добавил",
+    "unknownCreator": "Неизвестный пользователь",
     "date": "Дата",
     "filterByCategory": "Фильтр по категории",
     "allCategories": "Все категории",

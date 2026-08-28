@@ -183,6 +183,8 @@
     "entryDeleted": "Report entry deleted.",
     "entryDetails": "Entry details",
     "viewEntryDetails": "View details for {category}",
+    "addedBy": "Added by",
+    "unknownCreator": "Unknown user",
     "date": "Date",
     "filterByCategory": "Filter by category",
     "allCategories": "All categories",

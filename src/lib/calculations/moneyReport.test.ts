@@ -2,6 +2,34 @@ import { describe, expect, it } from 'vitest';
 import { buildFilteredMoneyReport, buildMoneyReport } from './moneyReport';
 
 describe('money report', () => {
+  it('carries resolved creator names into report activities', () => {
+    const report = buildMoneyReport(
+      [{
+        date: '2026-08-25',
+        cash_income: 100,
+        terminal_income: 0,
+        card_income: 0,
+        creator_name: 'Cash Admin',
+      }],
+      [{
+        id: 'expense',
+        date: '2026-08-25',
+        amount: 40,
+        category: 'rent',
+        payment_method: 'cash',
+        payment_source: 'game_club',
+        comment: null,
+        created_at: '2026-08-25T10:00:00Z',
+        creator_name: 'Expense Admin',
+      }],
+    );
+
+    expect(report.days[0].activities.map((activity) => activity.createdByName)).toEqual([
+      'Cash Admin',
+      'Expense Admin',
+    ]);
+  });
+
   it('shows collected, expenses, and money left by payment method', () => {
     const report = buildMoneyReport(
       [

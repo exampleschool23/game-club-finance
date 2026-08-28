@@ -22,6 +22,8 @@ export interface DailyCashRow {
   card_income: number;
   playstation_income?: number;
   created_at?: string;
+  created_by?: string | null;
+  creator_name?: string | null;
 }
 
 export interface StockCountRow {
@@ -42,6 +44,8 @@ export interface ExpenseRow {
   payment_source?: 'game_club' | 'bar' | null;
   comment: string | null;
   created_at: string;
+  created_by?: string | null;
+  creator_name?: string | null;
 }
 
 export interface ProductValueRow {

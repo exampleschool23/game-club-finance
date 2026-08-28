@@ -22,6 +22,7 @@ export interface MoneyReportActivity {
   paymentMethod: string | null;
   comment: string | null;
   createdAt: string | null;
+  createdByName?: string | null;
   paymentBreakdown?: {
     cash: number;
     terminal: number;
@@ -141,6 +142,7 @@ function buildDailyActivities(
       paymentMethod: null,
       comment: row.comment ?? null,
       createdAt: row.created_at ?? null,
+      ...(row.creator_name !== undefined ? { createdByName: row.creator_name } : {}),
       paymentBreakdown,
     });
   });
@@ -171,6 +173,7 @@ function buildDailyActivities(
         paymentMethod: row.payment_method ?? null,
         comment: row.comment,
         createdAt: row.created_at,
+        ...(row.creator_name !== undefined ? { createdByName: row.creator_name } : {}),
       });
     });
 

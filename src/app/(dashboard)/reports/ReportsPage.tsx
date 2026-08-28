@@ -48,6 +48,11 @@ const emptyReportRows = {
   debtPayments: [] as MoneyReportDebtPaymentRow[],
 };
 
+interface ReportProfileRow {
+  id: string;
+  full_name: string;
+}
+
 function Amount({ value, className }: { value: number; className?: string }) {
   return (
     <span className={cn('tabular-nums', value < 0 && 'text-red-600', className)}>
@@ -253,7 +258,7 @@ export default function ReportsPage() {
     const [cashResult, expenseResult, debtPaymentResult] = await Promise.all([
       fetchAllRows<MoneyReportCashRow>(() => supabase
         .from('daily_cash_entries')
-        .select('id,date,cash_income,terminal_income,card_income,playstation_income,comment,created_at')
+        .select('id,date,cash_income,terminal_income,card_income,playstation_income,comment,created_by,created_at')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to)
@@ -261,7 +266,7 @@ export default function ReportsPage() {
         .order('created_at', { ascending: true })),
       fetchAllRows<ExpenseRow>(() => supabase
         .from('expenses')
-        .select('id,date,amount,category,payment_method,payment_source,comment,created_at')
+        .select('id,date,amount,category,payment_method,payment_source,comment,created_by,created_at')
         .eq('club_id', selectedClubId)
         .gte('date', range.from)
         .lte('date', range.to)
@@ -287,9 +292,38 @@ export default function ReportsPage() {
       return;
     }
 
+    const cashRows = (cashResult.data ?? []) as MoneyReportCashRow[];
+    const expenseRows = (expenseResult.data ?? []) as ExpenseRow[];
+    const creatorIds = Array.from(new Set([
+      ...cashRows.map((row) => row.created_by),
+      ...expenseRows.map((row) => row.created_by),
+    ].filter((creatorId): creatorId is string => Boolean(creatorId))));
+    const profileResult = creatorIds.length > 0
+      ? await supabase.from('profiles').select('id,full_name').in('id', creatorIds)
+      : { data: [] as ReportProfileRow[], error: null };
+
+    if (requestId !== requestSequence.current) return;
+
+    if (profileResult.error) {
+      setReportRows(emptyReportRows);
+      setError(profileResult.error.message);
+      setLoading(false);
+      return;
+    }
+
+    const creatorNames = new Map(
+      ((profileResult.data ?? []) as ReportProfileRow[]).map((profile) => [profile.id, profile.full_name]),
+    );
+
     setReportRows({
-      cash: (cashResult.data ?? []) as MoneyReportCashRow[],
-      expenses: (expenseResult.data ?? []) as ExpenseRow[],
+      cash: cashRows.map((row) => ({
+        ...row,
+        creator_name: row.created_by ? creatorNames.get(row.created_by) ?? null : null,
+      })),
+      expenses: expenseRows.map((row) => ({
+        ...row,
+        creator_name: row.created_by ? creatorNames.get(row.created_by) ?? null : null,
+      })),
       debtPayments: (debtPaymentResult.data ?? []) as MoneyReportDebtPaymentRow[],
     });
     setLoading(false);
@@ -599,6 +633,9 @@ export default function ReportsPage() {
                         <td className="whitespace-nowrap px-4 py-4 align-top sm:px-5">
                           <p className="font-bold text-gray-700">{formatDateOnly(day.date, locale)}</p>
                           <p className="mt-1 text-xs font-medium text-gray-400">{formatTime(activity.createdAt, locale)}</p>
+                          <p className="mt-1.5 max-w-40 truncate text-xs font-semibold text-gray-500" title={activity.createdByName || t('unknownCreator')}>
+                            {t('addedBy')}: {activity.createdByName || t('unknownCreator')}
+                          </p>
                         </td>
                         <td className="px-4 py-4 align-top">
                           <span className={cn(
@@ -711,6 +748,12 @@ export default function ReportsPage() {
               <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
                 <dt className="font-medium text-gray-500">{t('category')}</dt>
                 <dd className="break-words text-right font-bold text-gray-900">{categoryLabel(selectedEntry.activity)}</dd>
+              </div>
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
+                <dt className="font-medium text-gray-500">{t('addedBy')}</dt>
+                <dd className="break-words text-right font-bold text-gray-900">
+                  {selectedEntry.activity.createdByName || t('unknownCreator')}
+                </dd>
               </div>
               <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
                 <dt className="font-medium text-gray-500">{t('paymentMethod')}</dt>

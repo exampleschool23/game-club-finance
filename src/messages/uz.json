@@ -181,6 +181,8 @@
     "entryDeleted": "Hisobot yozuvi o'chirildi.",
     "entryDetails": "Yozuv tafsilotlari",
     "viewEntryDetails": "Tafsilotlarni ko'rish: {category}",
+    "addedBy": "Kiritgan",
+    "unknownCreator": "Noma'lum foydalanuvchi",
     "date": "Sana",
     "filterByCategory": "Kategoriya bo'yicha filtrlash",
     "allCategories": "Barcha kategoriyalar",
