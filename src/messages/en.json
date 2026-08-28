@@ -141,6 +141,8 @@
   "reports": {
     "title": "Reports",
     "description": "Sales overview and remaining balance by payment method.",
+    "registerExpense": "Register Expense",
+    "expenseRegistered": "Expense registered successfully.",
     "today": "Today",
     "yesterday": "Yesterday",
     "last7Days": "7 Days",
@@ -179,6 +181,8 @@
     "noDescription": "—",
     "deleteEntryConfirm": "Delete this report entry? This cannot be undone.",
     "entryDeleted": "Report entry deleted.",
+    "entryDetails": "Entry details",
+    "viewEntryDetails": "View details for {category}",
     "date": "Date",
     "filterByCategory": "Filter by category",
     "allCategories": "All categories",

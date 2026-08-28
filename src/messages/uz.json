@@ -139,6 +139,8 @@
   "reports": {
     "title": "Hisobotlar",
     "description": "Savdolar va har bir to'lov usuli bo'yicha qolgan pul.",
+    "registerExpense": "Xarajat kiritish",
+    "expenseRegistered": "Xarajat muvaffaqiyatli kiritildi.",
     "today": "Bugun",
     "yesterday": "Kecha",
     "last7Days": "7 kun",
@@ -177,6 +179,8 @@
     "noDescription": "—",
     "deleteEntryConfirm": "Bu hisobot yozuvi o'chirilsinmi? Bu amalni bekor qilib bo'lmaydi.",
     "entryDeleted": "Hisobot yozuvi o'chirildi.",
+    "entryDetails": "Yozuv tafsilotlari",
+    "viewEntryDetails": "Tafsilotlarni ko'rish: {category}",
     "date": "Sana",
     "filterByCategory": "Kategoriya bo'yicha filtrlash",
     "allCategories": "Barcha kategoriyalar",

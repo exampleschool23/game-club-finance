@@ -38,10 +38,12 @@ describe('feature permissions', () => {
   it('guards paths and picks the first allowed destination', () => {
     expect(canAccessPath('admin', ['reports'], '/expenses')).toBe(false);
     expect(canAccessPath('admin', ['reports'], '/reports')).toBe(true);
+    expect(canAccessPath('admin', ['expenses'], '/reports')).toBe(true);
     expect(canAccessPath('admin', ['expenses'], '/income')).toBe(false);
     expect(canAccessPath('admin', ['daily_cash'], '/income')).toBe(true);
     expect(canAccessPath('admin', ['expenses'], '/balance')).toBe(true);
     expect(defaultPathForAccess('admin', ['reports'])).toBe('/reports');
+    expect(defaultPathForAccess('admin', ['expenses'])).toBe('/reports');
   });
 
   it('always gives owners full access and keeps Team owner-only', () => {

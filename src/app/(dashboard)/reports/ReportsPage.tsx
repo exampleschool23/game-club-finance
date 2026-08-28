@@ -20,6 +20,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import { Skeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
+import { Modal } from '@/components/ui/Modal';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import {
   buildFilteredMoneyReport,
@@ -38,6 +39,8 @@ import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
+import { canAccessFeature } from '@/lib/permissions';
+import ExpenseRegistrationForm from './ExpensesPanel';
 
 const emptyReportRows = {
   cash: [] as MoneyReportCashRow[],
@@ -196,7 +199,9 @@ export default function ReportsPage() {
   const tc = useTranslations('common');
   const te = useTranslations('expenses.categories');
   const { locale } = useAppLocale();
-  const { selectedClubId, businessDayStartHour, role } = useClub();
+  const { selectedClubId, businessDayStartHour, role, featureAccess } = useClub();
+  const hasReportsAccess = canAccessFeature(role, featureAccess, 'reports');
+  const hasExpensesAccess = canAccessFeature(role, featureAccess, 'expenses');
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [range, setRange] = useState(() => getDashboardRange('month', businessToday));
   const [reportRows, setReportRows] = useState(emptyReportRows);
@@ -205,6 +210,8 @@ export default function ReportsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<{ activity: MoneyReportActivity; date: string } | null>(null);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const requestSequence = useRef(0);
   const isOwner = role === 'owner';
   const report = useMemo(() => buildFilteredMoneyReport(
@@ -234,7 +241,7 @@ export default function ReportsPage() {
   const loadReport = useCallback(async () => {
     const requestId = ++requestSequence.current;
 
-    if (!selectedClubId) {
+    if (!selectedClubId || !hasReportsAccess) {
       setReportRows(emptyReportRows);
       setLoading(false);
       return;
@@ -286,7 +293,7 @@ export default function ReportsPage() {
       debtPayments: (debtPaymentResult.data ?? []) as MoneyReportDebtPaymentRow[],
     });
     setLoading(false);
-  }, [range.from, range.to, selectedClubId]);
+  }, [hasReportsAccess, range.from, range.to, selectedClubId]);
 
   useEffect(() => {
     loadReport().catch((loadError) => {
@@ -339,6 +346,12 @@ export default function ReportsPage() {
     return isKnownExpenseCategory(category) ? te(category) : category;
   }
 
+  function activityTypeLabel(activity: MoneyReportActivity): string {
+    if (activity.kind === 'income') return t('income');
+    if (activity.kind === 'debt_payment') return t('debtPayment');
+    return t('expense');
+  }
+
   function paymentLabel(method: string | null): string {
     if (!method) return t('mixedPayments');
     if (method === 'playstation') return t('playstation');
@@ -379,9 +392,24 @@ export default function ReportsPage() {
     },
   ];
 
+  async function handleExpenseRegistered() {
+    setExpenseDialogOpen(false);
+    setSuccess(t('expenseRegistered'));
+    if (hasReportsAccess) await loadReport();
+  }
+
   return (
     <div className="space-y-5">
-      <PageHeader title={t('title')} description={t('description')} />
+      <PageHeader
+        title={t('title')}
+        description={t('description')}
+        action={hasExpensesAccess ? (
+          <button type="button" className="btn-primary h-11" onClick={() => setExpenseDialogOpen(true)}>
+            <ReceiptText size={18} />
+            {t('registerExpense')}
+          </button>
+        ) : undefined}
+      />
 
       {(error || success) && (
         <div className={cn(
@@ -498,19 +526,18 @@ export default function ReportsPage() {
           <p className="mt-1 text-sm text-gray-500">{t('dailyCloseoutDescription')}</p>
         </div>
         {loading ? (
-          <TableSkeleton rows={6} columns={isOwner ? 7 : 6} className="rounded-none border-0 shadow-none" />
+          <TableSkeleton rows={6} columns={isOwner ? 6 : 5} className="rounded-none border-0 shadow-none" />
         ) : report.days.length === 0 ? (
           <div className="p-8 text-center text-sm font-semibold text-gray-500">{t('noData')}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="w-44 px-4 py-3 text-left sm:px-5">{t('dateAndTime')}</th>
                   <th className="w-32 px-4 py-3 text-left">{t('type')}</th>
                   <th className="w-48 px-4 py-3 text-left">{t('category')}</th>
                   <th className="w-44 px-4 py-3 text-right">{t('amount')}</th>
-                  <th className="w-56 px-4 py-3 text-left">{t('paymentMethod')}</th>
                   <th className="min-w-[240px] px-4 py-3 text-left">{t('descriptionLabel')}</th>
                   {isOwner && <th className="w-24 px-4 py-3 text-right sm:px-5">{t('actions')}</th>}
                 </tr>
@@ -518,7 +545,7 @@ export default function ReportsPage() {
               {report.days.map((day) => (
                 <tbody key={day.date} className="divide-y divide-gray-100 border-b border-blue-100 last:border-b-0">
                   <tr className="bg-blue-50/80">
-                    <td colSpan={isOwner ? 7 : 6} className="px-4 py-3 sm:px-5">
+                    <td colSpan={isOwner ? 6 : 5} className="px-4 py-3 sm:px-5">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-blue-700">{formatDateOnly(day.date, locale)}</span>
@@ -554,7 +581,20 @@ export default function ReportsPage() {
                     return (
                       <tr
                         key={activity.id ?? `${day.date}-${activity.source}-${index}`}
-                        className={cn('border-l-4 transition-colors hover:brightness-[0.99]', activityRowStyle(activity))}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={t('viewEntryDetails', { category: categoryLabel(activity) })}
+                        onClick={() => setSelectedEntry({ activity, date: day.date })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedEntry({ activity, date: day.date });
+                          }
+                        }}
+                        className={cn(
+                          'cursor-pointer border-l-4 transition-colors hover:brightness-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
+                          activityRowStyle(activity),
+                        )}
                       >
                         <td className="whitespace-nowrap px-4 py-4 align-top sm:px-5">
                           <p className="font-bold text-gray-700">{formatDateOnly(day.date, locale)}</p>
@@ -594,21 +634,6 @@ export default function ReportsPage() {
                         )}>
                           {activity.amount > 0 ? '+' : ''}{formatCurrency(activity.amount)} UZS
                         </td>
-                        <td className="px-4 py-4 align-top">
-                          {activity.paymentBreakdown ? (
-                            <div className="flex max-w-[260px] flex-wrap gap-1.5">
-                              {Object.entries(activity.paymentBreakdown)
-                                .filter(([, amount]) => amount !== 0)
-                                .map(([method, amount]) => (
-                                  <span key={method} className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-gray-600 ring-1 ring-gray-200">
-                                    {paymentLabel(method)} {formatCurrency(amount)}
-                                  </span>
-                                ))}
-                            </div>
-                          ) : (
-                            <span className="font-semibold text-gray-600">{paymentLabel(activity.paymentMethod)}</span>
-                          )}
-                        </td>
                         <td className="max-w-[320px] px-4 py-4 align-top text-sm leading-5 text-gray-600">
                           {activity.comment || t('noDescription')}
                         </td>
@@ -618,7 +643,10 @@ export default function ReportsPage() {
                               <button
                                 type="button"
                                 disabled={deletingKey === deleteKey}
-                                onClick={() => handleDeleteActivity(activity)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDeleteActivity(activity);
+                                }}
                                 className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-gray-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {deletingKey === deleteKey
@@ -640,6 +668,87 @@ export default function ReportsPage() {
           </div>
         )}
       </section>
+
+      <Modal
+        open={Boolean(selectedEntry)}
+        onClose={() => setSelectedEntry(null)}
+        title={t('entryDetails')}
+        className="sm:max-w-lg"
+      >
+        {selectedEntry && (
+          <div className="space-y-5">
+            <div className={cn(
+              'rounded-xl border p-4 text-center',
+              selectedEntry.activity.amount < 0
+                ? 'border-red-100 bg-red-50'
+                : 'border-emerald-100 bg-emerald-50',
+            )}>
+              <span className={cn(
+                'inline-flex rounded-full border px-2.5 py-1 text-xs font-bold',
+                selectedEntry.activity.kind === 'income'
+                  ? 'border-emerald-200 bg-white text-emerald-700'
+                  : selectedEntry.activity.kind === 'debt_payment'
+                    ? 'border-cyan-200 bg-white text-cyan-700'
+                    : 'border-red-200 bg-white text-red-700',
+              )}>
+                {activityTypeLabel(selectedEntry.activity)}
+              </span>
+              <p className={cn(
+                'mt-3 text-2xl font-black tabular-nums',
+                selectedEntry.activity.amount < 0 ? 'text-red-600' : 'text-emerald-700',
+              )}>
+                {selectedEntry.activity.amount > 0 ? '+' : ''}{formatCurrency(selectedEntry.activity.amount)} UZS
+              </p>
+            </div>
+
+            <dl className="divide-y divide-gray-100 rounded-xl border border-gray-200 px-4">
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
+                <dt className="font-medium text-gray-500">{t('dateAndTime')}</dt>
+                <dd className="text-right font-bold text-gray-900">
+                  {formatDateOnly(selectedEntry.date, locale)} · {formatTime(selectedEntry.activity.createdAt, locale)}
+                </dd>
+              </div>
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
+                <dt className="font-medium text-gray-500">{t('category')}</dt>
+                <dd className="break-words text-right font-bold text-gray-900">{categoryLabel(selectedEntry.activity)}</dd>
+              </div>
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
+                <dt className="font-medium text-gray-500">{t('paymentMethod')}</dt>
+                <dd className="text-right font-bold text-gray-900">
+                  {selectedEntry.activity.paymentBreakdown ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {Object.entries(selectedEntry.activity.paymentBreakdown)
+                        .filter(([, amount]) => amount !== 0)
+                        .map(([method, amount]) => (
+                          <span key={method} className="rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs ring-1 ring-gray-200">
+                            {paymentLabel(method)} · {formatCurrency(amount)} UZS
+                          </span>
+                        ))}
+                    </div>
+                  ) : (
+                    paymentLabel(selectedEntry.activity.paymentMethod)
+                  )}
+                </dd>
+              </div>
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-3 text-sm">
+                <dt className="font-medium text-gray-500">{t('descriptionLabel')}</dt>
+                <dd className="break-words text-right font-medium text-gray-700">
+                  {selectedEntry.activity.comment || t('noDescription')}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={expenseDialogOpen}
+        onClose={() => setExpenseDialogOpen(false)}
+        title={t('registerExpense')}
+        className="sm:max-w-xl"
+      >
+        <ExpenseRegistrationForm onSaved={handleExpenseRegistered} />
+      </Modal>
     </div>
   );
 }

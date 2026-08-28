@@ -170,7 +170,7 @@ export default async function TestChecklistPage() {
       badExpenses.length === 0
         ? `All ${expenseRows.length} expenses for today are valid.`
         : `${badExpenses.length} expenses have zero or negative amount.`,
-    link: '/expenses',
+    link: '/reports',
   });
 
   const passCount = checks.filter((c) => c.pass).length;

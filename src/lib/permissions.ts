@@ -76,6 +76,11 @@ export function canAccessFeature(role: UserRole, explicitAccess: unknown, featur
 }
 
 export function canAccessPath(role: UserRole, explicitAccess: unknown, pathname: string): boolean {
+  const normalizedPath = pathname !== '/' ? pathname.replace(/\/$/, '') : pathname;
+  if (normalizedPath === '/reports') {
+    return canAccessFeature(role, explicitAccess, 'reports') || canAccessFeature(role, explicitAccess, 'expenses');
+  }
+
   const feature = featureForPath(pathname);
   return feature === null || canAccessFeature(role, explicitAccess, feature);
 }
@@ -84,7 +89,7 @@ export function defaultPathForAccess(role: UserRole, explicitAccess: unknown): s
   const access = featureAccessForMembership(role, explicitAccess);
   for (const feature of FEATURE_DEFINITIONS) {
     if (access.includes(feature.key) && (!('ownerOnly' in feature) || !feature.ownerOnly || role === 'owner')) {
-      return feature.paths[0];
+      return feature.key === 'expenses' ? '/reports' : feature.paths[0];
     }
   }
   return null;

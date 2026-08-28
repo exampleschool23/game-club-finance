@@ -1,3 +1,5 @@
-import ExpensesPage from './ExpensesPage';
+import { redirect } from 'next/navigation';
 
-export default ExpensesPage;
+export default function ExpensesRedirectPage() {
+  redirect('/reports');
+}

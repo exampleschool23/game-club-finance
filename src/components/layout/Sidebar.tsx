@@ -17,7 +17,6 @@ import {
   Gamepad2,
   Building2,
   ChevronDown,
-  MinusCircle,
   Archive,
   Settings,
   Shield,
@@ -142,12 +141,6 @@ export function Sidebar({
       feature: 'stock_purchase' as FeatureKey,
     },
     {
-      href: '/expenses',
-      icon: MinusCircle,
-      label: t('expenses'),
-      feature: 'expenses' as FeatureKey,
-    },
-    {
       href: '/reports',
       icon: BarChart3,
       label: t('reports'),
@@ -183,7 +176,11 @@ export function Sidebar({
       label: t('settings'),
       feature: 'settings' as FeatureKey,
     },
-  ].filter((link) => canAccessFeature(role, featureAccess, link.feature));
+  ].filter((link) => (
+    link.href === '/reports'
+      ? canAccessFeature(role, featureAccess, 'reports') || canAccessFeature(role, featureAccess, 'expenses')
+      : canAccessFeature(role, featureAccess, link.feature)
+  ));
 
   const initials = fullName
     .split(' ')

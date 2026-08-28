@@ -139,6 +139,8 @@
   "reports": {
     "title": "Отчёты",
     "description": "Обзор продаж и остаток по каждому способу оплаты.",
+    "registerExpense": "Зарегистрировать расход",
+    "expenseRegistered": "Расход успешно зарегистрирован.",
     "today": "Сегодня",
     "yesterday": "Вчера",
     "last7Days": "7 дней",
@@ -177,6 +179,8 @@
     "noDescription": "—",
     "deleteEntryConfirm": "Удалить эту запись отчёта? Это действие нельзя отменить.",
     "entryDeleted": "Запись отчёта удалена.",
+    "entryDetails": "Детали записи",
+    "viewEntryDetails": "Открыть детали: {category}",
     "date": "Дата",
     "filterByCategory": "Фильтр по категории",
     "allCategories": "Все категории",
