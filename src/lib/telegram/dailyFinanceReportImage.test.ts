@@ -126,6 +126,25 @@ describe('daily finance report image', () => {
     expect(metadata.height).toBe(1468);
   });
 
+  it('shrinks the report when the club has fewer expense rows', () => {
+    const compact = buildDailyFinanceReportSvg(reportInput());
+    const expanded = buildDailyFinanceReportSvg({
+      ...reportInput(),
+      gameClubExpenseCategories: [
+        { name: 'Зарплата', amount: 1 },
+        { name: 'KPI', amount: 1 },
+        { name: 'Аренда', amount: 1 },
+        { name: 'Коммунальные услуги', amount: 1 },
+        { name: 'Прочие расходы', amount: 1 },
+      ],
+    });
+
+    expect(compact).toContain('height="1468"');
+    expect(compact).toContain('<rect x="68" y="554" width="1064" height="278"');
+    expect(expanded).toContain('height="1600"');
+    expect(expanded).toContain('<rect x="68" y="686" width="1064" height="278"');
+  });
+
   it('configures application-owned Noto Sans before the static Sharp import', () => {
     const rendererSource = readFileSync(
       resolve(process.cwd(), 'src/lib/telegram/dailyFinanceReportImage.ts'),

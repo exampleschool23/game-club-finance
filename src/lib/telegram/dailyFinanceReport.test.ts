@@ -321,6 +321,71 @@ describe('formatRussianDailyFinanceReport', () => {
     expect(input.utilitiesCosts).toBe(3_541_000);
     expect(input.otherOperatingCosts).toBe(25_000);
   });
+
+  it('keeps club month revenue separate and compares monthly metrics with the prior month', () => {
+    const currentCash = {
+      date: '2026-08-28',
+      cash_income: 2_000_000,
+      terminal_income: 0,
+      card_income: 0,
+      playstation_income: 0,
+    };
+    const currentStock = {
+      date: '2026-08-28',
+      bar_income: 1_000_000,
+      bar_profit: 600_000,
+      bar_cost: 400_000,
+      sold_quantity: 10,
+    };
+    const currentBarExpense = {
+      id: 'current-bar-expense',
+      date: '2026-08-28',
+      amount: 100_000,
+      category: 'other',
+      payment_source: 'bar' as const,
+      comment: null,
+      created_at: '2026-08-28T10:00:00Z',
+    };
+    const previousBarExpense = {
+      ...currentBarExpense,
+      id: 'previous-bar-expense',
+      date: '2026-07-28',
+      created_at: '2026-07-28T10:00:00Z',
+    };
+
+    const input = buildDailyFinanceReportInput({
+      clubName: 'Main Game Club',
+      businessDate: '2026-08-28',
+      businessDateLabel: '28 августа 2026',
+      cashRows: [currentCash],
+      stockRows: [currentStock],
+      stockPurchaseRows: [{ date: '2026-08-28', quantity: 1, cost_price: 100_000 }],
+      expenseRows: [currentBarExpense],
+      monthCashRows: [currentCash],
+      monthStockRows: [currentStock],
+      monthStockPurchaseRows: [{ date: '2026-08-28', quantity: 1, cost_price: 100_000 }],
+      monthExpenseRows: [currentBarExpense],
+      previousMonthCashRows: [{ ...currentCash, date: '2026-07-28', cash_income: 1_000_000 }],
+      previousMonthStockRows: [{ ...currentStock, date: '2026-07-28', bar_income: 500_000 }],
+      previousMonthStockPurchaseRows: [{ date: '2026-07-28', quantity: 1, cost_price: 100_000 }],
+      previousMonthExpenseRows: [previousBarExpense],
+      previousMonthInventoryRows: [{
+        product_id: 'product-1',
+        date: '2026-07-28',
+        closing_stock: 1,
+        cost_price: 100_000,
+        products: { tracks_inventory: true },
+      }],
+      productRows: [{ current_stock: 2, cost_price: 100_000, tracks_inventory: true }],
+      debtRows: [],
+    });
+
+    expect(input.monthToDateRevenue).toBe(2_000_000);
+    expect(input.monthToDateRevenue).not.toBe(3_000_000);
+    expect(input.averageDailyGameClubIncomeChange).toBe(100);
+    expect(input.barMoneyLeftChange).toBe(167);
+    expect(input.inventoryValueChange).toBe(100);
+  });
 });
 
 describe('previousTashkentDateIso', () => {
