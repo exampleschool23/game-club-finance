@@ -90,90 +90,30 @@ npm test
 npm run build
 ```
 
+## Project documentation
+
+- [Agent guide](AGENTS.md) — concise rules and task-specific reading map
+- [Architecture](docs/agents/architecture.md)
+- [Finance definitions](docs/agents/domain-finance.md)
+- [Inventory and closing stock](docs/agents/inventory.md)
+- [Database and authorization](docs/agents/database.md)
+- [Testing guide](docs/agents/testing.md)
+- [Telegram report runbook](docs/runbooks/telegram-report.md)
+
 ## Scheduled Telegram report
 
-The scheduled report is delivered as a generated PNG photo with a two-line
-caption. Each configured target is built independently from that club's
-Supabase rows:
+The daily finance report is generated independently per club and delivered as a
+PNG, with a safe text fallback when rendering fails before dispatch:
 
 ```text
 Supabase data → calculations → SVG → PNG → Telegram sendPhoto → delivery status saved
 ```
 
-The route statically imports the Sharp renderer so Vercel traces the native
-dependency. Its function bundle explicitly includes Linux libvips and the Noto
-Sans TTF files. At runtime the renderer creates a private fontconfig file and
-sets `FONTCONFIG_FILE`, so Russian labels never depend on fonts installed on a
-developer machine or the Vercel host. If image rendering still fails, the exact
-error is logged and the cron sends the same financial report as a Telegram text
-message with `deliveryType: text`. Telegram transport failures still follow the
-delivery ledger's retry and manual-review rules; they do not switch formats
-after dispatch begins.
-
-Supabase Cron owns the primary schedule. It runs every day at `01:00 UTC`,
-which is `06:00 Asia/Tashkent`, and reports the previous Tashkent business date.
-Migration `041_supabase_daily_report_cron_and_delivery_audit.sql` replaces the
-named job idempotently, reads its Bearer credential from Supabase Vault, and
-invokes only the production endpoint.
-
-> **Required deployment order:** apply
-> `037_telegram_report_delivery_ledger.sql` and
-> `038_stock_snapshot_and_payment_method_integrity.sql` to Supabase **before
-> the next Telegram cron**—ideally before deploying this application version. If the
-> application deploys first, the route fails closed with HTTP 500 and sends
-> nothing during that gap; after the migration is applied, a later recovery run
-> can safely catch up the same business date.
-
-Before applying migration 041, store the same `CRON_SECRET` configured in
-Vercel under the Vault name used by the migration:
-
-```sql
-select vault.create_secret(
-  '<the Vercel CRON_SECRET value>',
-  'game_club_daily_report_cron_secret',
-  'Bearer token used by the Game Club daily finance report cron'
-);
-```
-
-The scheduled route and any controlled manual retry use the same date/target
-ledger key, so successful deliveries cannot be duplicated. Configure `CRON_SECRET`,
-`TELEGRAM_BOT_TOKEN`, and at least one complete chat/club target pair from
-`.env.example`. The endpoint rejects requests without the exact bearer secret.
-`CRON_SECRET` must be a header-safe random string of at least 16 characters;
-after changing it in Vercel, redeploy so the scheduler and function use the
-same production value.
-
-Migration `037_telegram_report_delivery_ledger.sql` provides the service-only
-delivery ledger used to prevent concurrent or repeated scheduled runs from
-sending the same target twice. A normal authenticated request is idempotent for
-each business date and target. Migration 041 also records the attempt time,
-actual Telegram chat/message IDs, sent time, final status, actual format, and
-structured errors. Telegram message deletion is deliberately not treated as a
-delivery-state change.
-
-To regenerate a local preview from a real club/date without sending Telegram:
-
-```bash
-npx tsx scripts/generate-daily-finance-preview.ts 2026-08-27
-```
-
-The route durably marks dispatch before contacting Telegram. A timeout, network
-failure, malformed success response, or interrupted post-send finalization has
-an unknown outcome and is quarantined as `manual_review`; recovery crons return
-HTTP 500 for it and never resend it automatically. Check the Telegram group and
-delivery ledger first, then use an explicit forced resend only if the message is
-confirmed missing.
-
-An intentional resend must be scoped to exactly one date and target and must
-include a new UUID chosen by the caller, for example:
-
-```text
-/api/cron/daily-finance-report?date=2026-08-26&target=pixel&force=1&requestId=40c05af5-5a59-45ae-a891-19a18228a721
-```
-
-Keep the same `requestId` when retrying that request: it will return the stored
-delivery instead of sending again. Use a new UUID only when another Telegram
-message is explicitly intended. Forced sends cannot be combined with `dryRun`.
+Supabase Cron runs it at `01:00 UTC` (`06:00 Asia/Tashkent`) for the previous
+Tashkent business date. Delivery is idempotent, and uncertain post-dispatch
+outcomes are held for manual review rather than automatically resent. See the
+[Telegram report runbook](docs/runbooks/telegram-report.md) for configuration,
+deployment order, previewing, recovery, and intentional resend procedures.
 
 ## Localization
 
