@@ -78,4 +78,26 @@ describe('Supabase migration files', () => {
       'counts.bar_profit is distinct from',
     );
   });
+
+  it('stores finalized monthly average income and reads only the current month live', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/042_monthly_average_income_snapshots.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('create table if not exists public.monthly_average_income_snapshots');
+    expect(migration).toContain('primary key (club_id, month)');
+    expect(migration).toContain('public.user_has_club_access(club_id)');
+    expect(migration).toMatch(
+      /revoke insert, update, delete, truncate, references, trigger\s+on table public\.monthly_average_income_snapshots from authenticated;/i,
+    );
+    expect(migration).toContain('create or replace function public.refresh_monthly_average_income_snapshot');
+    expect(migration).toContain("'finalize-monthly-average-income'");
+    expect(migration).toContain('create or replace function public.get_monthly_average_income_chart');
+    expect(migration).toContain('entries.date between v_current_month and p_business_date');
+    expect(migration).toContain('counts.date between v_current_month and p_business_date');
+    expect(migration).toContain('debts.date between v_current_month and p_business_date');
+    expect(migration).toContain('else coalesce(snapshots.average_daily_income, 0)');
+    expect(migration).toContain('grant execute on function public.get_monthly_average_income_chart(uuid, date)');
+  });
 });

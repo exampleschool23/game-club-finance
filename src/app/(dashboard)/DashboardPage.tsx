@@ -90,6 +90,16 @@ const MoneyLeftBreakdownChart = dynamic(
   () => import('@/components/dashboard/MoneyLeftBreakdownChart').then((module) => module.MoneyLeftBreakdownChart),
   { ssr: false, loading: ChartLoading },
 );
+const MonthlyAverageIncomeChart = dynamic(
+  () => import('@/components/dashboard/MonthlyAverageIncomeChart').then((module) => module.MonthlyAverageIncomeChart),
+  { ssr: false, loading: ChartLoading },
+);
+
+interface MonthlyAverageIncomePoint {
+  month: string;
+  average_daily_income: number;
+  is_current: boolean;
+}
 
 interface StockPurchaseRow extends StockPurchaseCostRow {
   id: string;
@@ -213,6 +223,7 @@ export default function DashboardPage({
   const [loading, setLoading] = useState(!initialSnapshotMatches);
   const [error, setError] = useState('');
   const [renderCharts, setRenderCharts] = useState(false);
+  const [monthlyAverageIncome, setMonthlyAverageIncome] = useState<MonthlyAverageIncomePoint[]>([]);
   const requestSequence = useRef(0);
   const chartsAnchorRef = useRef<HTMLDivElement>(null);
   const loadedRequestKey = useRef(initialSnapshotMatches
@@ -507,6 +518,37 @@ export default function DashboardPage({
   }, [businessToday, period, range, selectedClubId]);
 
   useEffect(() => {
+    if (!selectedClubId) {
+      setMonthlyAverageIncome([]);
+      return;
+    }
+
+    let cancelled = false;
+    const supabase = createClient();
+    async function loadMonthlyAverageIncome() {
+      const result = await supabase.rpc('get_monthly_average_income_chart', {
+        p_club_id: selectedClubId,
+        p_business_date: businessToday,
+      });
+      if (cancelled) return;
+      if (result.error) {
+        if (!isMissingDatabaseFunction(result.error, 'get_monthly_average_income_chart')) {
+          setError(result.error.message);
+        }
+        setMonthlyAverageIncome([]);
+        return;
+      }
+      setMonthlyAverageIncome((result.data ?? []) as MonthlyAverageIncomePoint[]);
+    }
+
+    loadMonthlyAverageIncome().catch((loadError) => {
+      if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
+    });
+
+    return () => { cancelled = true; };
+  }, [businessToday, selectedClubId]);
+
+  useEffect(() => {
     const requestKey = `${selectedClubId}:${range.from}:${range.to}`;
     if (loadedRequestKey.current === requestKey) return;
     loadedRequestKey.current = requestKey;
@@ -796,6 +838,10 @@ export default function DashboardPage({
             />
             <IncomeCategoryChart data={categoryData} total={incomeCategoryTotal} />
           </div>
+
+          {monthlyAverageIncome.length > 0 ? (
+            <MonthlyAverageIncomeChart data={monthlyAverageIncome} locale={locale} />
+          ) : null}
         </>
       )}
     </div>
