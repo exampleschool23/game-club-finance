@@ -99,9 +99,9 @@ export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): stri
     <rect x="68" y="1054" width="1064" height="202" rx="34" fill="#FFFFFF" stroke="#DDE8E5" stroke-width="2"/>
     <text x="108" y="1105" font-size="20" font-weight="800" letter-spacing="2" fill="${MUTED}">МЕСЯЦ НА ТЕКУЩУЮ ДАТУ</text>
     <line x1="600" y1="1126" x2="600" y2="1223" stroke="#E7EEEC" stroke-width="2"/>
-    <text x="108" y="1164" font-size="24" font-weight="700" fill="#4D5A59">Выручка с начала месяца</text>
+    <text x="108" y="1164" font-size="24" font-weight="700" fill="#4D5A59">Доход клуба с начала месяца</text>
     <text x="108" y="1215" font-size="36" font-weight="850" fill="${INK}">${escapeXml(money(input.monthToDateRevenue))}</text>
-    <text x="640" y="1164" font-size="24" font-weight="700" fill="#4D5A59">Средняя выручка в день</text>
+    <text x="640" y="1164" font-size="24" font-weight="700" fill="#4D5A59">Средний доход клуба в день</text>
     <text x="640" y="1215" font-size="36" font-weight="850" fill="${TEAL}">${escapeXml(money(input.averageDailyRevenue))}</text>
     <text x="68" y="1280" font-size="18" font-weight="650" fill="${MUTED}">Закупки склада: ${escapeXml(money(input.stockPurchases))} · Активные долги: ${escapeXml(money(input.activeDebts))}</text>
   </g>

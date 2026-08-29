@@ -78,8 +78,8 @@ describe('formatRussianDailyFinanceReport', () => {
     expect(message).toContain('🍫 Продажи бара: 931 000 UZS (100%)');
     expect(message).toContain('📈 Валовая прибыль: 531 000 UZS');
     expect(message).toContain('✅ Чистая прибыль: 531 000 UZS');
-    expect(message).toContain('🗓 Выручка с начала месяца: 4 000 000 UZS');
-    expect(message).toContain('📊 Средняя выручка в день: 1 000 000 UZS');
+    expect(message).toContain('🗓 Доход клуба с начала месяца: 4 000 000 UZS');
+    expect(message).toContain('📊 Средний доход клуба в день: 1 000 000 UZS');
   });
 
   it('uses daily rows for the report day and month-to-date rows for balances', () => {
@@ -225,8 +225,8 @@ describe('formatRussianDailyFinanceReport', () => {
       rentCosts: 0,
       utilitiesCosts: 40_000,
       otherOperatingCosts: 40_000,
-      monthToDateRevenue: 2_640_000,
-      averageDailyRevenue: 660_000,
+      monthToDateRevenue: 1_940_000,
+      averageDailyRevenue: 485_000,
       gameClubMoneyLeft: 1_750_000,
       averageDailyGameClubIncome: 485_000,
       barMoneyLeft: 560_000,

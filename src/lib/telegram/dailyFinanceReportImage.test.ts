@@ -95,6 +95,8 @@ describe('daily finance report image', () => {
     expect(svg).toContain('ВАЛОВАЯ ПРИБЫЛЬ');
     expect(svg).toContain('ЧИСТАЯ ПРИБЫЛЬ');
     expect(svg).toContain('МЕСЯЦ НА ТЕКУЩУЮ ДАТУ');
+    expect(svg).toContain('Доход клуба с начала месяца');
+    expect(svg).toContain('Средний доход клуба в день');
     expect(svg).toContain('474 000 UZS');
     expect(svg).toContain('font-family="Noto Sans"');
     expect(buildDailyFinanceReportSvg(reportInput())).toBe(svg);

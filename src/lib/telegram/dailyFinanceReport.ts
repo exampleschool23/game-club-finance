@@ -198,14 +198,12 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     rows.debtRows,
   );
   const latestDailyCashEntryDate = getLatestRowDateInRange(rows.monthCashRows ?? rows.cashRows, monthRange);
-  const latestBarEntryDate = getLatestRowDateInRange(rows.monthStockRows ?? rows.stockRows, monthRange);
-  const latestRevenueDate = [latestDailyCashEntryDate, latestBarEntryDate]
-    .filter((date): date is string => Boolean(date))
-    .sort()
-    .at(-1);
-  const averageRevenueDayCount = countDashboardRangeDaysThroughDate(monthRange, latestRevenueDate);
+  const averageRevenueDayCount = countDashboardRangeDaysThroughDate(
+    monthRange,
+    latestDailyCashEntryDate,
+  );
   const dailyRevenue = dailyTotals.gameClubIncome + dailyTotals.barSales;
-  const monthToDateRevenue = monthTotals.gameClubIncome + monthTotals.barSales;
+  const monthToDateRevenue = monthTotals.gameClubIncome;
   const operatingCosts = summarizeOperatingCosts(rows.expenseRows);
 
   return {
@@ -266,8 +264,8 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     `  • Коммунальные услуги: ${money(input.utilitiesCosts)}`,
     `  • Прочие расходы: ${money(input.otherOperatingCosts)}`,
     '',
-    `🗓 Выручка с начала месяца: ${money(input.monthToDateRevenue)}`,
-    `📊 Средняя выручка в день: ${money(input.averageDailyRevenue)}`,
+    `🗓 Доход клуба с начала месяца: ${money(input.monthToDateRevenue)}`,
+    `📊 Средний доход клуба в день: ${money(input.averageDailyRevenue)}`,
     `💰 Остаток денег клуба за месяц: ${money(input.gameClubMoneyLeft)}`,
     `📈 Средний дневной доход клуба за месяц: ${money(input.averageDailyGameClubIncome)}`,
     `🧾 Остаток денег бара за месяц: ${money(input.barMoneyLeft)}`,
