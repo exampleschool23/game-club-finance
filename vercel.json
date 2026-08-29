@@ -3,7 +3,7 @@
   "regions": ["syd1"],
   "functions": {
     "src/app/api/cron/daily-finance-report/route.ts": {
-      "includeFiles": "{node_modules/@img/sharp-libvips-linux-x64/**,node_modules/notosans-fontface/fonts/*.ttf}"
+      "includeFiles": "{node_modules/@img/sharp-libvips-linux-x64/**,src/assets/fonts/*.ttf}"
     }
   }
 }

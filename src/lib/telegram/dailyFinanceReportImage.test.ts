@@ -48,13 +48,47 @@ function reportInput(): DailyFinanceReportInput {
   };
 }
 
+function fontHasCodePoint(font: Buffer, codePoint: number): boolean {
+  const tableCount = font.readUInt16BE(4);
+  let cmapOffset = -1;
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const tableOffset = 12 + index * 16;
+    if (font.toString('ascii', tableOffset, tableOffset + 4) === 'cmap') {
+      cmapOffset = font.readUInt32BE(tableOffset + 8);
+      break;
+    }
+  }
+
+  if (cmapOffset < 0) return false;
+  const encodingCount = font.readUInt16BE(cmapOffset + 2);
+
+  for (let index = 0; index < encodingCount; index += 1) {
+    const subtableOffset = cmapOffset + font.readUInt32BE(cmapOffset + 8 + index * 8);
+    if (font.readUInt16BE(subtableOffset) !== 4) continue;
+    const segmentCount = font.readUInt16BE(subtableOffset + 6) / 2;
+    const endCodesOffset = subtableOffset + 14;
+    const startCodesOffset = endCodesOffset + segmentCount * 2 + 2;
+
+    for (let segment = 0; segment < segmentCount; segment += 1) {
+      const start = font.readUInt16BE(startCodesOffset + segment * 2);
+      const end = font.readUInt16BE(endCodesOffset + segment * 2);
+      if (codePoint >= start && codePoint <= end) return true;
+    }
+  }
+
+  return false;
+}
+
 describe('daily finance report image', () => {
   it('builds deterministic SVG with escaped labels and exact calculated values', () => {
     const svg = buildDailyFinanceReportSvg(reportInput());
 
     expect(svg).toContain('width="1200"');
-    expect(svg).toContain('GAME CLUB · ФИНАНСОВЫЙ ОТЧЁТ');
-    expect(svg).toContain('Рабочий день: 27 августа 2026');
+    expect(svg).toContain('height="1328"');
+    expect(svg).not.toContain('GAME CLUB · ФИНАНСОВЫЙ ОТЧЁТ');
+    expect(svg).not.toContain('Рабочий день: 27 августа 2026');
+    expect(svg).not.toContain('url(#header)');
     expect(svg).toContain('ВЫРУЧКА ЗА ДЕНЬ');
     expect(svg).toContain('1 806 500 UZS');
     expect(svg).toContain('KPI и бонусы');
@@ -78,14 +112,38 @@ describe('daily finance report image', () => {
       width: 1200,
       channels: 4,
     });
-    expect(metadata.height).toBe(1540);
+    expect(metadata.height).toBe(1328);
   });
 
-  it('configures the bundled Noto Sans directory through FONTCONFIG_FILE', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/lib/telegram/dailyFinanceReportImage.ts'), 'utf8');
+  it('configures application-owned Noto Sans before the static Sharp import', () => {
+    const rendererSource = readFileSync(
+      resolve(process.cwd(), 'src/lib/telegram/dailyFinanceReportImage.ts'),
+      'utf8',
+    );
+    const fontConfigSource = readFileSync(
+      resolve(process.cwd(), 'src/lib/telegram/reportFontConfig.ts'),
+      'utf8',
+    );
 
-    expect(source).toContain("'notosans-fontface', 'fonts'");
-    expect(source).toContain('process.env.FONTCONFIG_FILE = configPath');
-    expect(source).toMatch(/configureReportFonts\(\);[\s\S]*sharp\(Buffer\.from\(svg\)\)/);
+    expect(rendererSource.indexOf("import './reportFontConfig';"))
+      .toBeLessThan(rendererSource.indexOf("import sharp from 'sharp';"));
+    expect(fontConfigSource).toContain("'src', 'assets', 'fonts'");
+    expect(fontConfigSource).toContain('process.env.FONTCONFIG_FILE = configPath');
+    expect(fontConfigSource).toContain('process.env.FONTCONFIG_PATH = configDirectory');
+    expect(rendererSource).toContain('assertReportFontsAvailable();');
+  });
+
+  it('bundles real TrueType Noto Sans files instead of relying on host fonts', () => {
+    for (const fileName of [
+      'NotoSans-Regular.ttf',
+      'NotoSans-Bold.ttf',
+      'NotoSans-ExtraBold.ttf',
+    ]) {
+      const font = readFileSync(resolve(process.cwd(), 'src/assets/fonts', fileName));
+      expect(font.subarray(0, 4)).toEqual(Buffer.from([0x00, 0x01, 0x00, 0x00]));
+      expect(font.byteLength).toBeGreaterThan(500_000);
+      expect(fontHasCodePoint(font, 'Ё'.codePointAt(0)!)).toBe(true);
+      expect(fontHasCodePoint(font, 'я'.codePointAt(0)!)).toBe(true);
+    }
   });
 });
