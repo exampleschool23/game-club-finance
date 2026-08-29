@@ -10,6 +10,7 @@ import { renderDailyFinanceReportPng } from './dailyFinanceReportImage';
 import type {
   DailyCashRow,
   ExpenseRow,
+  InventorySnapshotRow,
   ProductValueRow,
   StockCountRow,
   StockPurchaseCostRow,
@@ -78,6 +79,17 @@ export function monthStartIso(date: string): string {
   return `${date.slice(0, 7)}-01`;
 }
 
+export function previousComparableMonthRangeIso(date: string): { from: string; to: string } {
+  const [year, month, day] = date.split('-').map(Number);
+  const start = new Date(Date.UTC(year, month - 2, 1));
+  const lastDay = new Date(Date.UTC(year, month - 1, 0)).getUTCDate();
+  const prefix = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`;
+  return {
+    from: `${prefix}-01`,
+    to: `${prefix}-${String(Math.min(day, lastDay)).padStart(2, '0')}`,
+  };
+}
+
 async function getClub(supabase: SupabaseClient, clubId: string): Promise<ClubRow> {
   const { data, error } = await supabase
     .from('clubs')
@@ -103,7 +115,8 @@ export async function buildDailyFinanceTelegramReport(
   },
 ): Promise<DailyFinanceReportBuildResult> {
   const monthStart = monthStartIso(businessDate);
-  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes] = await Promise.all([
+  const previousMonthRange = previousComparableMonthRangeIso(businessDate);
+  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes, previousCashRes, previousStockRes, previousPurchaseRes, previousExpenseRes, previousDebtPaymentRes, previousInventoryRes] = await Promise.all([
     getClub(supabase, clubId),
     fetchAllRows<DailyCashRow>(() =>
       supabase
@@ -204,6 +217,65 @@ export async function buildDailyFinanceTelegramReport(
         .order('date', { ascending: true })
         .order('id', { ascending: true }),
     ),
+    fetchAllRows<DailyCashRow>(() =>
+      supabase
+        .from('daily_cash_entries')
+        .select('date,cash_income,terminal_income,card_income,playstation_income')
+        .eq('club_id', clubId)
+        .gte('date', previousMonthRange.from)
+        .lte('date', previousMonthRange.to)
+        .order('date', { ascending: true }),
+    ),
+    fetchAllRows<StockCountRow>(() =>
+      supabase
+        .from('daily_stock_counts')
+        .select('product_id,date,bar_income,bar_profit,bar_cost,sold_quantity')
+        .eq('club_id', clubId)
+        .gte('date', previousMonthRange.from)
+        .lte('date', previousMonthRange.to)
+        .order('date', { ascending: true })
+        .order('product_id', { ascending: true }),
+    ),
+    fetchAllRows<StockPurchaseCostRow>(() =>
+      supabase
+        .from('stock_purchases')
+        .select('id,date,quantity,cost_price')
+        .eq('club_id', clubId)
+        .gte('date', previousMonthRange.from)
+        .lte('date', previousMonthRange.to)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<ExpenseRow>(() =>
+      supabase
+        .from('expenses')
+        .select('id,date,amount,category,payment_source,comment,created_at')
+        .eq('club_id', clubId)
+        .gte('date', previousMonthRange.from)
+        .lte('date', previousMonthRange.to)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<DailyFinanceReportDebtPaymentRow>(() =>
+      supabase
+        .from('debt_payments')
+        .select('id,date,amount,payment_method')
+        .eq('club_id', clubId)
+        .gte('date', previousMonthRange.from)
+        .lte('date', previousMonthRange.to)
+        .order('date', { ascending: true })
+        .order('id', { ascending: true }),
+    ),
+    fetchAllRows<InventorySnapshotRow>(() =>
+      supabase
+        .from('daily_stock_counts')
+        .select('product_id,date,closing_stock,cost_price,products(tracks_inventory)')
+        .eq('club_id', clubId)
+        .gte('date', previousMonthRange.from)
+        .lte('date', previousMonthRange.to)
+        .order('date', { ascending: true })
+        .order('product_id', { ascending: true }),
+    ),
   ]);
 
   const firstError = [
@@ -218,6 +290,12 @@ export async function buildDailyFinanceTelegramReport(
     monthStockRes.error,
     monthPurchaseRes.error,
     monthExpenseRes.error,
+    previousCashRes.error,
+    previousStockRes.error,
+    previousPurchaseRes.error,
+    previousExpenseRes.error,
+    previousDebtPaymentRes.error,
+    previousInventoryRes.error,
   ].find(Boolean);
 
   if (firstError) throw firstError;
@@ -234,6 +312,12 @@ export async function buildDailyFinanceTelegramReport(
     monthStockRows: (monthStockRes.data ?? []) as StockCountRow[],
     monthStockPurchaseRows: (monthPurchaseRes.data ?? []) as StockPurchaseCostRow[],
     monthExpenseRows: (monthExpenseRes.data ?? []) as ExpenseRow[],
+    previousMonthCashRows: (previousCashRes.data ?? []) as DailyCashRow[],
+    previousMonthStockRows: (previousStockRes.data ?? []) as StockCountRow[],
+    previousMonthStockPurchaseRows: (previousPurchaseRes.data ?? []) as StockPurchaseCostRow[],
+    previousMonthExpenseRows: (previousExpenseRes.data ?? []) as ExpenseRow[],
+    previousMonthDebtPaymentRows: (previousDebtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
+    previousMonthInventoryRows: (previousInventoryRes.data ?? []) as InventorySnapshotRow[],
     productRows: (productRes.data ?? []) as ProductValueRow[],
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
     debtPaymentRows: (debtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],

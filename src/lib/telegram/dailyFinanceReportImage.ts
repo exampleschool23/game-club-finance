@@ -45,11 +45,28 @@ function detailRow(label: string, value: number, y: number, color: string, outli
     <text x="1090" y="${y}" text-anchor="end" font-size="29" font-weight="750" fill="${INK}">${escapeXml(money(value))}</text>`;
 }
 
-function summaryCard(x: number, y: number, label: string, value: number, color: string): string {
+function changeLabel(change: number | null | undefined): string {
+  if (change === null || change === undefined) return '—';
+  if (change === 0) return '0%';
+  return `${change > 0 ? '▲' : '▼'} ${Math.abs(change)}%`;
+}
+
+function summaryCard(
+  x: number,
+  y: number,
+  label: string,
+  value: number,
+  color: string,
+  change?: number | null,
+): string {
+  const changeColor = change === null || change === undefined || change === 0
+    ? MUTED
+    : change > 0 ? '#15803D' : RED;
   return `<rect x="${x}" y="${y}" width="517" height="166" rx="28" fill="#FFFFFF" stroke="#DDE8E5" stroke-width="2"/>
     <rect x="${x + 28}" y="${y + 26}" width="10" height="114" rx="5" fill="${color}"/>
     <text x="${x + 62}" y="${y + 52}" font-size="20" font-weight="800" letter-spacing="1" fill="${MUTED}">${escapeXml(label)}</text>
-    <text x="${x + 62}" y="${y + 117}" font-size="31" font-weight="850" fill="${color}">${escapeXml(money(value))}</text>`;
+    <text x="${x + 62}" y="${y + 117}" font-size="31" font-weight="850" fill="${color}">${escapeXml(money(value))}</text>
+    ${change !== undefined ? `<text x="${x + 489}" y="${y + 148}" text-anchor="end" font-size="21" font-weight="800" fill="${changeColor}">${escapeXml(changeLabel(change))} к прошлому месяцу</text>` : ''}`;
 }
 
 export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): string {
@@ -105,9 +122,9 @@ export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): stri
     <text x="108" y="${totalExpensesY + 56}" font-size="31" font-weight="850" fill="${RED}">ОБЩИЕ РАСХОДЫ — ${escapeXml(money(input.totalExpenses))}</text>
 
     ${summaryCard(68, firstSummaryY, 'ОСТАТОК ДЕНЕГ КЛУБА ЗА МЕСЯЦ', input.gameClubMoneyLeft, '#15803D')}
-    ${summaryCard(615, firstSummaryY, 'СРЕДНИЙ ДНЕВНОЙ ДОХОД КЛУБА', input.averageDailyGameClubIncome, PURPLE)}
-    ${summaryCard(68, secondSummaryY, 'ДОХОД БАРА ЗА МЕСЯЦ', input.barMoneyLeft, ORANGE)}
-    ${summaryCard(615, secondSummaryY, 'СТОИМОСТЬ СКЛАДА', input.inventoryValue, INK)}
+    ${summaryCard(615, firstSummaryY, 'СРЕДНИЙ ДНЕВНОЙ ДОХОД КЛУБА', input.averageDailyGameClubIncome, PURPLE, input.averageDailyGameClubIncomeChange)}
+    ${summaryCard(68, secondSummaryY, 'ДОХОД БАРА ЗА МЕСЯЦ', input.barMoneyLeft, ORANGE, input.barMoneyLeftChange)}
+    ${summaryCard(615, secondSummaryY, 'СТОИМОСТЬ СКЛАДА', input.inventoryValue, INK, input.inventoryValueChange)}
 
     <rect x="68" y="${activeDebtsY}" width="1064" height="68" rx="24" fill="${RED}"/>
     <text x="108" y="${activeDebtsY + 45}" font-size="30" font-weight="850" fill="#FFFFFF">АКТИВНЫЕ ДОЛГИ</text>

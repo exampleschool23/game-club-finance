@@ -44,6 +44,9 @@ function reportInput(): DailyFinanceReportInput {
     averageDailyGameClubIncome: 2_323_741,
     barMoneyLeft: 10_086_526,
     inventoryValue: 23_749_204,
+    averageDailyGameClubIncomeChange: 12,
+    barMoneyLeftChange: -5,
+    inventoryValueChange: 20,
     activeDebts: 474_000,
   };
 }
@@ -100,6 +103,9 @@ describe('daily finance report image', () => {
     expect(svg).toContain('ДОХОД БАРА ЗА МЕСЯЦ');
     expect(svg).toContain('СТОИМОСТЬ СКЛАДА');
     expect(svg).toContain('АКТИВНЫЕ ДОЛГИ');
+    expect(svg).toContain('▲ 12% к прошлому месяцу');
+    expect(svg).toContain('▼ 5% к прошлому месяцу');
+    expect(svg).toContain('▲ 20% к прошлому месяцу');
     expect(svg).toContain('474 000 UZS');
     expect(svg).toContain('font-family="Noto Sans"');
     expect(buildDailyFinanceReportSvg(reportInput())).toBe(svg);

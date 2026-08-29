@@ -4,7 +4,11 @@ import {
   formatRussianDailyFinanceReportCaption,
   formatRussianDailyFinanceReport,
 } from './dailyFinanceReport';
-import { monthStartIso, previousTashkentDateIso } from './sendDailyFinanceReport';
+import {
+  monthStartIso,
+  previousComparableMonthRangeIso,
+  previousTashkentDateIso,
+} from './sendDailyFinanceReport';
 
 describe('formatRussianDailyFinanceReport', () => {
   it('formats the two-line photo caption without duplicating the club name', () => {
@@ -328,5 +332,16 @@ describe('previousTashkentDateIso', () => {
 describe('monthStartIso', () => {
   it('returns the first date of the same month', () => {
     expect(monthStartIso('2026-07-04')).toBe('2026-07-01');
+  });
+
+  it('builds a previous comparable month-to-date range', () => {
+    expect(previousComparableMonthRangeIso('2026-08-28')).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-28',
+    });
+    expect(previousComparableMonthRangeIso('2026-03-31')).toEqual({
+      from: '2026-02-01',
+      to: '2026-02-28',
+    });
   });
 });

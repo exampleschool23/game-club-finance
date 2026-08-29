@@ -2,12 +2,15 @@ import { formatCurrency } from '../formatters';
 import {
   calculateAverageDailyIncome,
   calculateDashboardTotals,
+  calculateInventoryValueFromLatestStockCounts,
   countDashboardRangeDaysThroughDate,
   getLatestRowDateInRange,
+  percentChange,
 } from '../calculations/dashboardMetrics';
 import type {
   DailyCashRow,
   ExpenseRow,
+  InventorySnapshotRow,
   StockCountRow,
   StockPurchaseCostRow,
   ProductValueRow,
@@ -42,6 +45,9 @@ export interface DailyFinanceReportInput {
   averageDailyGameClubIncome: number;
   barMoneyLeft: number;
   inventoryValue: number;
+  averageDailyGameClubIncomeChange?: number | null;
+  barMoneyLeftChange?: number | null;
+  inventoryValueChange?: number | null;
   activeDebts: number;
 }
 
@@ -75,6 +81,12 @@ export interface DailyFinanceReportRows {
   monthStockRows?: StockCountRow[];
   monthStockPurchaseRows?: StockPurchaseCostRow[];
   monthExpenseRows?: ExpenseRow[];
+  previousMonthCashRows?: DailyCashRow[];
+  previousMonthStockRows?: StockCountRow[];
+  previousMonthStockPurchaseRows?: StockPurchaseCostRow[];
+  previousMonthExpenseRows?: ExpenseRow[];
+  previousMonthDebtPaymentRows?: DailyFinanceReportDebtPaymentRow[];
+  previousMonthInventoryRows?: InventorySnapshotRow[];
   productRows?: ProductValueRow[];
   debtRows: DailyFinanceReportDebtRow[];
   debtPaymentRows?: DailyFinanceReportDebtPaymentRow[];
@@ -164,9 +176,20 @@ function percent(value: number, total: number): string {
   return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format((value / total) * 100)}%`;
 }
 
+function previousComparableMonthRange(date: string): { from: string; to: string } {
+  const [year, month, day] = date.split('-').map(Number);
+  const previousMonthStart = new Date(Date.UTC(year, month - 2, 1));
+  const previousMonthLastDay = new Date(Date.UTC(year, month - 1, 0)).getUTCDate();
+  const comparableDay = Math.min(day, previousMonthLastDay);
+  const prefix = `${previousMonthStart.getUTCFullYear()}-${String(previousMonthStart.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  return { from: `${prefix}-01`, to: `${prefix}-${String(comparableDay).padStart(2, '0')}` };
+}
+
 export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): DailyFinanceReportInput {
   const monthStart = `${rows.businessDate.slice(0, 7)}-01`;
   const monthRange = { from: monthStart, to: rows.businessDate };
+  const previousMonthRange = previousComparableMonthRange(rows.businessDate);
   const dailyDebtRows = rows.debtRows.filter((row) => row.date === rows.businessDate);
   const monthDebtRows = rows.debtRows.filter(
     (row) => Boolean(row.date && row.date >= monthRange.from && row.date <= monthRange.to),
@@ -197,10 +220,37 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     monthDebtPaymentRows,
     rows.debtRows,
   );
+  const previousMonthDebtRows = rows.debtRows.filter((row) =>
+    Boolean(row.date && row.date >= previousMonthRange.from && row.date <= previousMonthRange.to));
+  const previousMonthTotals = calculateDashboardTotals(
+    rows.previousMonthCashRows ?? [],
+    rows.previousMonthStockRows ?? [],
+    rows.previousMonthStockPurchaseRows ?? [],
+    rows.previousMonthExpenseRows ?? [],
+    [],
+    previousMonthDebtRows,
+    rows.previousMonthDebtPaymentRows ?? [],
+    rows.debtRows,
+  );
   const latestDailyCashEntryDate = getLatestRowDateInRange(rows.monthCashRows ?? rows.cashRows, monthRange);
   const averageRevenueDayCount = countDashboardRangeDaysThroughDate(
     monthRange,
     latestDailyCashEntryDate,
+  );
+  const previousLatestDailyCashEntryDate = getLatestRowDateInRange(
+    rows.previousMonthCashRows ?? [],
+    previousMonthRange,
+  );
+  const previousAverageDayCount = countDashboardRangeDaysThroughDate(
+    previousMonthRange,
+    previousLatestDailyCashEntryDate,
+  );
+  const previousAverageDailyGameClubIncome = calculateAverageDailyIncome(
+    previousMonthTotals.gameClubIncome,
+    previousAverageDayCount,
+  );
+  const previousInventoryValue = calculateInventoryValueFromLatestStockCounts(
+    rows.previousMonthInventoryRows ?? [],
   );
   const dailyRevenue = dailyTotals.gameClubIncome + dailyTotals.barSales;
   const monthToDateRevenue = monthTotals.gameClubIncome;
@@ -231,6 +281,12 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     averageDailyGameClubIncome: calculateAverageDailyIncome(monthTotals.gameClubIncome, averageRevenueDayCount),
     barMoneyLeft: monthTotals.barIncome,
     inventoryValue: dailyTotals.inventoryValue,
+    averageDailyGameClubIncomeChange: percentChange(
+      calculateAverageDailyIncome(monthTotals.gameClubIncome, averageRevenueDayCount),
+      previousAverageDailyGameClubIncome,
+    ),
+    barMoneyLeftChange: percentChange(monthTotals.barIncome, previousMonthTotals.barIncome),
+    inventoryValueChange: percentChange(dailyTotals.inventoryValue, previousInventoryValue),
     activeDebts: dailyTotals.activeDebts,
   };
 }
