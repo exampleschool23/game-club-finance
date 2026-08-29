@@ -20,9 +20,15 @@ import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import {
   calculateAvailableMoney,
-  calculateAvailableMoneyForMonth,
+  calculateAvailableMoneyByMonth,
+  type AvailableMoneyByMonth,
 } from '@/lib/calculations/availableMoney';
+import {
+  buildOwnerProfitSnapshot,
+  type OwnerProfitSnapshotPayload,
+} from '@/lib/calculations/ownerProfitSnapshot';
 import type { StockPurchaseCostRow } from '@/lib/calculations/barMoney';
+import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import type {
   DailyCashRow,
   DebtPaymentValueRow,
@@ -48,15 +54,6 @@ interface AvailableBalances {
   barAvailable: number;
 }
 
-interface LedgerRows {
-  cashRows: DailyCashRow[];
-  stockRows: StockCountRow[];
-  purchaseRows: StockPurchaseCostRow[];
-  expenseRows: ExpenseRow[];
-  debtPaymentRows: DebtPaymentValueRow[];
-  withdrawalRows: OwnerWithdrawal[];
-}
-
 const emptyBalances: AvailableBalances = {
   gameClubEarned: 0,
   barEarned: 0,
@@ -64,15 +61,6 @@ const emptyBalances: AvailableBalances = {
   barTaken: 0,
   gameClubAvailable: 0,
   barAvailable: 0,
-};
-
-const emptyLedgerRows: LedgerRows = {
-  cashRows: [],
-  stockRows: [],
-  purchaseRows: [],
-  expenseRows: [],
-  debtPaymentRows: [],
-  withdrawalRows: [],
 };
 
 export default function MoneyTakenPage() {
@@ -84,7 +72,7 @@ export default function MoneyTakenPage() {
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const currentMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [balances, setBalances] = useState<AvailableBalances>(emptyBalances);
-  const [ledgerRows, setLedgerRows] = useState<LedgerRows>(emptyLedgerRows);
+  const [balancesByMonth, setBalancesByMonth] = useState<AvailableMoneyByMonth>({});
   const [withdrawals, setWithdrawals] = useState<OwnerWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,7 +92,7 @@ export default function MoneyTakenPage() {
   const loadData = useCallback(async () => {
     if (!selectedClubId) {
       setBalances(emptyBalances);
-      setLedgerRows(emptyLedgerRows);
+      setBalancesByMonth({});
       setWithdrawals([]);
       setLoading(false);
       return;
@@ -113,6 +101,34 @@ export default function MoneyTakenPage() {
     setLoading(true);
     setError('');
     const supabase = createClient();
+    const snapshotResult = await supabase.rpc('get_owner_profit_snapshot', {
+      p_club_id: selectedClubId,
+      p_through_date: businessToday,
+    });
+
+    if (!snapshotResult.error) {
+      const snapshot = buildOwnerProfitSnapshot(snapshotResult.data as OwnerProfitSnapshotPayload);
+      setBalancesByMonth(snapshot.byMonth);
+      setWithdrawals(snapshot.withdrawals);
+      setBalances({
+        gameClubEarned: snapshot.total.gameClub.earned,
+        barEarned: snapshot.total.bar.earned,
+        gameClubTaken: snapshot.total.gameClub.withdrawn,
+        barTaken: snapshot.total.bar.withdrawn,
+        gameClubAvailable: snapshot.total.gameClub.available,
+        barAvailable: snapshot.total.bar.available,
+      });
+      setLoading(false);
+      return;
+    }
+
+    if (!isMissingDatabaseFunction(snapshotResult.error, 'get_owner_profit_snapshot')) {
+      setError(snapshotResult.error.message);
+      setLoading(false);
+      return;
+    }
+
+    // Compatibility fallback while the application and migration are deployed separately.
     const [cashRes, stockRes, purchaseRes, expenseRes, debtPaymentRes, withdrawalRes] = await Promise.all([
       fetchAllRows<DailyCashRow>(() => supabase
         .from('daily_cash_entries')
@@ -175,7 +191,10 @@ export default function MoneyTakenPage() {
       ...nextLedgerRows,
       throughDate: businessToday,
     });
-    setLedgerRows(nextLedgerRows);
+    setBalancesByMonth(calculateAvailableMoneyByMonth({
+      ...nextLedgerRows,
+      throughDate: businessToday,
+    }));
     setWithdrawals(withdrawalRows);
     setBalances({
       gameClubEarned: availableMoney.gameClub.earned,
@@ -198,16 +217,14 @@ export default function MoneyTakenPage() {
   const sourceAvailable = useMemo(() => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(form.month)) return 0;
 
-    const availableForMonth = calculateAvailableMoneyForMonth({
-      ...ledgerRows,
-      month: form.month,
-    });
+    const availableForMonth = balancesByMonth[form.month];
+    if (!availableForMonth) return 0;
     const sourceBalance = form.source === 'bar'
       ? availableForMonth.bar.available
       : availableForMonth.gameClub.available;
 
     return Math.max(0, sourceBalance);
-  }, [form.month, form.source, ledgerRows]);
+  }, [balancesByMonth, form.month, form.source]);
   const totalAvailable = balances.gameClubAvailable + balances.barAvailable;
   const totalTaken = balances.gameClubTaken + balances.barTaken;
 

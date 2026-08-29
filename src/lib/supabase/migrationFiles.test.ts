@@ -115,4 +115,19 @@ describe('Supabase migration files', () => {
     expect(migration).not.toContain('playstation_income');
     expect(migration).toContain('update public.monthly_average_income_snapshots snapshots');
   });
+
+  it('returns compact, authorized owner-profit monthly aggregates', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/044_owner_profit_snapshot.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('create or replace function public.get_owner_profit_snapshot');
+    expect(migration).toContain('not public.user_has_club_access(p_club_id)');
+    expect(migration).toContain("purchases.date between date '2026-07-02' and p_through_date");
+    expect(migration).toContain("expenses.payment_source = 'game_club'");
+    expect(migration).toContain("expenses.payment_source = 'bar'");
+    expect(migration).toContain('revoke all on function public.get_owner_profit_snapshot(uuid, date)');
+    expect(migration).toContain('grant execute on function public.get_owner_profit_snapshot(uuid, date) to authenticated');
+  });
 });
