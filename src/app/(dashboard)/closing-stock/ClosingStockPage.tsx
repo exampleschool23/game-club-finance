@@ -14,6 +14,7 @@ import {
 import { useClub } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
+import { BulkStockUpdateModal } from './BulkStockUpdateModal';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
 import { formatCurrency, formatUnitCurrency } from '@/lib/formatters';
 import {
@@ -22,7 +23,9 @@ import {
   calculateStockCountSummary,
 } from '@/lib/calculations/stock';
 import {
+  applyBulkStockOrder,
   applyClosingStockDraft,
+  BulkStockAvailabilityError,
   buildEditableClosingStockRows,
   buildClosingStockUpserts,
   calculatePurchaseCostsByProduct,
@@ -34,7 +37,8 @@ import {
   validateClosingStockRows,
   type ClosingStockExistingCount,
   type ClosingStockRowData,
-  type ClosingStockUpsert,
+  type BulkStockOrderItem,
+  type BulkStockOrderSummary,
   type StorageLike,
 } from '@/lib/closingStock';
 import {
@@ -47,6 +51,7 @@ import {
   Plus,
   Save,
   Search,
+  ShoppingCart,
   TrendingUp,
 } from 'lucide-react';
 import type { Product } from '@/types';
@@ -264,6 +269,7 @@ export default function ClosingStockPage() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const isHistoricalDate = date < today;
@@ -477,6 +483,10 @@ export default function ClosingStockPage() {
   }, [selectedClubId, today]);
 
   useEffect(() => {
+    setBulkUpdateOpen(false);
+  }, [date, selectedClubId]);
+
+  useEffect(() => {
     loadData(date).catch((err) => {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
@@ -651,72 +661,104 @@ export default function ClosingStockPage() {
     setSuccess(t('draftSaved'));
   }
 
-  async function handleSubmitStockCounts() {
+  function validationMessage(validationError: NonNullable<ReturnType<typeof validateClosingStockRows>>) {
+    const validationMessages = {
+      adjustment_reason_required: t('adjustmentReasonRequired', { product: validationError.productName }),
+      closing_exceeds_available: t('closingExceedsAvailable', {
+        product: validationError.productName,
+        available: validationError.availableStock,
+      }),
+      negative_available_stock: t('negativeAvailableStock', { product: validationError.productName }),
+      sold_quantity_mismatch: t('soldQuantityMismatch', { product: validationError.productName }),
+    };
+    return validationMessages[validationError.code];
+  }
+
+  async function persistStockCounts(nextRows: RowData[], successMessage: string): Promise<boolean> {
     if (isReadOnly) {
       setError(t('readOnlyBody'));
-      return;
+      return false;
     }
 
-    if (rows.length === 0) {
+    if (nextRows.length === 0) {
       setError(tc('noData'));
-      return;
+      return false;
     }
 
     if (!selectedClubId) {
       setError(tc('error'));
-      return;
+      return false;
     }
 
-    const validationError = validateClosingStockRows(rows);
+    const validationError = validateClosingStockRows(nextRows);
     if (validationError) {
-      const validationMessages = {
-        adjustment_reason_required: t('adjustmentReasonRequired', { product: validationError.productName }),
-        closing_exceeds_available: t('closingExceedsAvailable', {
-          product: validationError.productName,
-          available: validationError.availableStock,
-        }),
-        negative_available_stock: t('negativeAvailableStock', { product: validationError.productName }),
-        sold_quantity_mismatch: t('soldQuantityMismatch', { product: validationError.productName }),
-      };
-      setError(validationMessages[validationError.code]);
-      return;
+      setError(validationMessage(validationError));
+      return false;
     }
 
     setSaving(true);
     setError('');
     setSuccess('');
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    let upserts: ClosingStockUpsert[];
     try {
-      ({ upserts } = buildClosingStockUpserts({
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const { upserts } = buildClosingStockUpserts({
         date,
-        rows,
+        rows: nextRows,
         createdBy: session?.user?.id ?? null,
-      }));
-    } catch (buildError) {
+      });
+
+      const { error: err } = await supabase.rpc('save_closing_stock_counts', {
+        p_club_id: selectedClubId,
+        p_date: date,
+        p_counts: upserts,
+      });
+
+      if (err) {
+        setError(err.message);
+        return false;
+      }
+
+      clearClosingStockDraft(getBrowserStorage(), date, selectedClubId);
+      await loadData(date);
+      setSuccess(successMessage);
+      return true;
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : tc('error'));
+      return false;
+    } finally {
       setSaving(false);
-      setError(buildError instanceof Error ? buildError.message : tc('error'));
-      return;
+    }
+  }
+
+  async function handleSubmitStockCounts() {
+    await persistStockCounts(rows, t('success'));
+  }
+
+  async function handleBulkStockSave(
+    items: BulkStockOrderItem[],
+    summary: BulkStockOrderSummary,
+  ): Promise<boolean> {
+    let nextRows: RowData[];
+    try {
+      nextRows = applyBulkStockOrder(rows, items);
+    } catch (bulkError) {
+      if (bulkError instanceof BulkStockAvailabilityError) {
+        setError(t('bulkInsufficientStock', {
+          product: bulkError.productName,
+          available: bulkError.availableQuantity,
+        }));
+      } else {
+        setError(bulkError instanceof Error ? bulkError.message : tc('error'));
+      }
+      return false;
     }
 
-    const { error: err } = await supabase.rpc('save_closing_stock_counts', {
-      p_club_id: selectedClubId,
-      p_date: date,
-      p_counts: upserts,
-    });
-
-    if (err) {
-      setSaving(false);
-      setError(err.message);
-      return;
-    }
-
-    setSaving(false);
-
-    clearClosingStockDraft(getBrowserStorage(), date, selectedClubId);
-    await loadData(date);
-    setSuccess(t('success'));
+    return persistStockCounts(nextRows, t('bulkSuccess', {
+      items: summary.totalQuantity,
+      total: formatCurrency(summary.totalPrice),
+      currency: tc('currency'),
+    }));
   }
 
   const kpis = [
@@ -730,6 +772,14 @@ export default function ClosingStockPage() {
 
   return (
     <div className="space-y-5">
+      <BulkStockUpdateModal
+        open={bulkUpdateOpen}
+        rows={rows}
+        saving={saving}
+        onClose={() => setBulkUpdateOpen(false)}
+        onSave={handleBulkStockSave}
+      />
+
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-950">{t('title')}</h1>
@@ -751,6 +801,19 @@ export default function ClosingStockPage() {
               setError('');
             }}
           />
+          <button
+            type="button"
+            onClick={() => {
+              setError('');
+              setSuccess('');
+              setBulkUpdateOpen(true);
+            }}
+            disabled={saving || loading || isReadOnly || rows.length === 0}
+            className="btn-secondary min-h-11 w-full border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 sm:w-auto"
+          >
+            <ShoppingCart size={17} />
+            {t('bulkUpdate')}
+          </button>
           <button
             type="button"
             onClick={handleSaveDraft}

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/types';
 import {
+  applyBulkStockOrder,
   applyClosingStockDraft,
   applyClosingStockImport,
   buildEditableClosingStockRows,
   buildClosingStockUpserts,
+  calculateBulkStockOrderSummary,
   calculatePurchaseCostsByProduct,
   clearClosingStockDraft,
   closingStockDraftKey,
@@ -18,6 +20,76 @@ import {
   type ClosingStockRowData,
   type StorageLike,
 } from './closingStock';
+
+describe('closing stock bulk orders', () => {
+  it('adds a group order to sold quantities and reduces tracked closing stock', () => {
+    const rows = [
+      row({
+        product: product({ id: 'coke', name: 'Coke', sale_price: 12_000 }),
+        previousStock: '10',
+        addedToday: '2',
+        closingStock: '9',
+        soldQuantity: '3',
+      }),
+      row({
+        product: product({ id: 'snickers', name: 'Snickers', sale_price: 9_000 }),
+        previousStock: '8',
+        addedToday: '0',
+        closingStock: '7',
+        soldQuantity: '1',
+      }),
+    ];
+
+    const updated = applyBulkStockOrder(rows, [
+      { productId: 'coke', quantity: 1 },
+      { productId: 'snickers', quantity: 2 },
+    ]);
+
+    expect(updated[0]).toMatchObject({ soldQuantity: '4', closingStock: '8' });
+    expect(updated[1]).toMatchObject({ soldQuantity: '3', closingStock: '5' });
+    expect(validateClosingStockRows(updated)).toBeNull();
+  });
+
+  it('adds made-to-order products without creating a stock balance', () => {
+    const updated = applyBulkStockOrder([
+      row({
+        product: product({ id: 'hot-dog', name: 'Hot dog', tracks_inventory: false }),
+        previousStock: '0',
+        addedToday: '0',
+        closingStock: '0',
+        soldQuantity: '4',
+      }),
+    ], [{ productId: 'hot-dog', quantity: 3 }]);
+
+    expect(updated[0]).toMatchObject({ soldQuantity: '7', closingStock: '0' });
+  });
+
+  it('rejects a bulk quantity above the remaining closing stock', () => {
+    expect(() => applyBulkStockOrder([
+      row({
+        product: product({ id: 'fanta', name: 'Fanta' }),
+        closingStock: '2',
+        soldQuantity: '3',
+      }),
+    ], [{ productId: 'fanta', quantity: 3 }])).toThrow(/only 2 units are available/i);
+  });
+
+  it('calculates the customer total across products and merged lines', () => {
+    const rows = [
+      row({ product: product({ id: 'coke', sale_price: 12_000 }) }),
+      row({ product: product({ id: 'adrenalin', sale_price: 18_000 }) }),
+    ];
+
+    expect(calculateBulkStockOrderSummary(rows, [
+      { productId: 'coke', quantity: 1 },
+      { productId: 'adrenalin', quantity: 2 },
+      { productId: 'coke', quantity: 2 },
+    ])).toEqual({
+      totalQuantity: 5,
+      totalPrice: 72_000,
+    });
+  });
+});
 
 describe('closing stock purchase costs', () => {
   it('totals actual ledger cost by product across multiple purchases', () => {

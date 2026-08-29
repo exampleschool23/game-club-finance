@@ -100,6 +100,28 @@ export interface ClosingStockExistingCount {
   sold_quantity?: number | string | null;
 }
 
+export interface BulkStockOrderItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface BulkStockOrderSummary {
+  totalQuantity: number;
+  totalPrice: number;
+}
+
+export class BulkStockAvailabilityError extends Error {
+  constructor(
+    public readonly productId: string,
+    public readonly productName: string,
+    public readonly requestedQuantity: number,
+    public readonly availableQuantity: number,
+  ) {
+    super(`${productName}: requested ${requestedQuantity}, but only ${availableQuantity} units are available.`);
+    this.name = 'BulkStockAvailabilityError';
+  }
+}
+
 export interface ClosingStockPurchaseQuantity {
   product_id: string;
   quantity: number | string | null;
@@ -294,6 +316,82 @@ export function normalizeStockCount(value: unknown): number {
 export function normalizeStockAdjustment(value: unknown): number {
   const parsed = parseClosingStockNumber(value);
   return parsed === null ? 0 : Math.trunc(parsed);
+}
+
+export function getBulkStockAvailableQuantity(row: ClosingStockRowData): number | null {
+  return row.product.tracks_inventory === false
+    ? null
+    : normalizeStockCount(row.closingStock);
+}
+
+function normalizeBulkOrderItems(items: BulkStockOrderItem[]): Map<string, number> {
+  return items.reduce<Map<string, number>>((quantities, item) => {
+    const quantity = normalizeStockCount(item.quantity);
+    if (quantity > 0) {
+      quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + quantity);
+    }
+    return quantities;
+  }, new Map());
+}
+
+export function calculateBulkStockOrderSummary(
+  rows: ClosingStockRowData[],
+  items: BulkStockOrderItem[],
+): BulkStockOrderSummary {
+  const quantities = normalizeBulkOrderItems(items);
+
+  return rows.reduce<BulkStockOrderSummary>((summary, row) => {
+    const quantity = quantities.get(row.product.id) ?? 0;
+    summary.totalQuantity += quantity;
+    summary.totalPrice += quantity * Number(row.product.sale_price ?? 0);
+    return summary;
+  }, { totalQuantity: 0, totalPrice: 0 });
+}
+
+export function applyBulkStockOrder(
+  rows: ClosingStockRowData[],
+  items: BulkStockOrderItem[],
+): ClosingStockRowData[] {
+  const quantities = normalizeBulkOrderItems(items);
+
+  return rows.map((row) => {
+    const quantity = quantities.get(row.product.id) ?? 0;
+    if (quantity === 0) return row;
+
+    if (row.product.tracks_inventory === false) {
+      return {
+        ...row,
+        previousStock: '0',
+        addedToday: '0',
+        closingStock: '0',
+        soldQuantity: String(normalizeStockCount(row.soldQuantity) + quantity),
+      };
+    }
+
+    const availableQuantity = getBulkStockAvailableQuantity(row) ?? 0;
+    if (quantity > availableQuantity) {
+      throw new BulkStockAvailabilityError(
+        row.product.id,
+        row.product.name,
+        quantity,
+        availableQuantity,
+      );
+    }
+
+    const soldQuantity = normalizeStockCount(row.soldQuantity) + quantity;
+    const closingStock = calculateClosingStockFromSold(
+      normalizeStockCount(row.previousStock),
+      normalizeStockCount(row.addedToday),
+      soldQuantity,
+      normalizeStockAdjustment(row.adjustmentQuantity),
+    );
+
+    return {
+      ...row,
+      closingStock: String(closingStock),
+      soldQuantity: String(soldQuantity),
+    };
+  });
 }
 
 function formatStockValue(value: unknown): string {
