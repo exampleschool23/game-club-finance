@@ -85,7 +85,7 @@ describe('daily finance report image', () => {
     const svg = buildDailyFinanceReportSvg(reportInput());
 
     expect(svg).toContain('width="1200"');
-    expect(svg).toContain('height="1600"');
+    expect(svg).toContain('height="1468"');
     expect(svg).not.toContain('GAME CLUB · ФИНАНСОВЫЙ ОТЧЁТ');
     expect(svg).not.toContain('Рабочий день: 27 августа 2026');
     expect(svg).not.toContain('url(#header)');
@@ -117,7 +117,7 @@ describe('daily finance report image', () => {
       width: 1200,
       channels: 4,
     });
-    expect(metadata.height).toBe(1600);
+    expect(metadata.height).toBe(1468);
   });
 
   it('configures application-owned Noto Sans before the static Sharp import', () => {
