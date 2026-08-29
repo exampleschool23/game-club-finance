@@ -27,6 +27,7 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { DateRangePicker } from '@/components/ui/CalendarPicker';
 import {
   buildPeriodTrend,
+  buildMonthlyAverageGameClubIncome,
   calculateAverageDailyIncome,
   calculateDashboardInventoryValue,
   calculateDashboardTotals,
@@ -526,19 +527,24 @@ export default function DashboardPage({
     let cancelled = false;
     const supabase = createClient();
     async function loadMonthlyAverageIncome() {
-      const result = await supabase.rpc('get_monthly_average_income_chart', {
-        p_club_id: selectedClubId,
-        p_business_date: businessToday,
-      });
+      const currentMonth = businessToday.slice(0, 7);
+      const [year, month] = currentMonth.split('-').map(Number);
+      const firstMonthDate = new Date(year, month - 12, 1);
+      const firstMonth = `${firstMonthDate.getFullYear()}-${String(firstMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
+      const result = await fetchAllRows<DailyCashRow>(() => supabase
+        .from('daily_cash_entries')
+        .select('date,cash_income,terminal_income,card_income')
+        .eq('club_id', selectedClubId)
+        .gte('date', firstMonth)
+        .lte('date', businessToday)
+        .order('date', { ascending: true }));
       if (cancelled) return;
       if (result.error) {
-        if (!isMissingDatabaseFunction(result.error, 'get_monthly_average_income_chart')) {
-          setError(result.error.message);
-        }
+        setError(result.error.message);
         setMonthlyAverageIncome([]);
         return;
       }
-      setMonthlyAverageIncome((result.data ?? []) as MonthlyAverageIncomePoint[]);
+      setMonthlyAverageIncome(buildMonthlyAverageGameClubIncome(result.data ?? [], businessToday));
     }
 
     loadMonthlyAverageIncome().catch((loadError) => {

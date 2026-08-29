@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildIncomeTrend,
+  buildMonthlyAverageGameClubIncome,
   buildPeriodTrend,
   calculateAverageDailyIncome,
   calculateDashboardInventoryValue,
@@ -516,5 +517,26 @@ describe('dashboard metrics', () => {
     expect(latestCashierEntryDate).toBe('2026-07-04');
     expect(countDashboardRangeDaysThroughDate(range, latestCashierEntryDate)).toBe(4);
     expect(calculateAverageDailyIncome(10_254_000, 4)).toBe(2_563_500);
+  });
+
+  it('builds monthly averages from computer income only', () => {
+    const points = buildMonthlyAverageGameClubIncome(
+      [
+        { date: '2026-07-01', cash_income: 31_000, terminal_income: 31_000, card_income: 31_000, playstation_income: 900_000 },
+        { date: '2026-08-01', cash_income: 29_000, terminal_income: 29_000, card_income: 29_000, playstation_income: 900_000 },
+      ],
+      '2026-08-29',
+    );
+
+    expect(points.at(-2)).toEqual({
+      month: '2026-07-01',
+      average_daily_income: 3_000,
+      is_current: false,
+    });
+    expect(points.at(-1)).toEqual({
+      month: '2026-08-01',
+      average_daily_income: 3_000,
+      is_current: true,
+    });
   });
 });

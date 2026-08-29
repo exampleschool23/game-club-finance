@@ -100,4 +100,19 @@ describe('Supabase migration files', () => {
     expect(migration).toContain('else coalesce(snapshots.average_daily_income, 0)');
     expect(migration).toContain('grant execute on function public.get_monthly_average_income_chart(uuid, date)');
   });
+
+  it('limits monthly average income snapshots and live totals to game-club income', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/043_game_club_only_monthly_average_income.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('create or replace function public.refresh_monthly_average_income_snapshot');
+    expect(migration).toContain('create or replace function public.get_monthly_average_income_chart');
+    expect(migration).toContain('from public.daily_cash_entries entries');
+    expect(migration).not.toContain('public.daily_stock_counts');
+    expect(migration).not.toContain('public.new_debts');
+    expect(migration).not.toContain('playstation_income');
+    expect(migration).toContain('update public.monthly_average_income_snapshots snapshots');
+  });
 });

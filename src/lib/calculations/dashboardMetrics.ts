@@ -301,6 +301,42 @@ export function calculateAverageDailyIncome(total: number, days: number): number
   return Math.round(total / Math.max(1, days));
 }
 
+export interface MonthlyAverageGameClubIncomePoint {
+  month: string;
+  average_daily_income: number;
+  is_current: boolean;
+}
+
+export function buildMonthlyAverageGameClubIncome(
+  rows: DailyCashRow[],
+  businessDate: string,
+): MonthlyAverageGameClubIncomePoint[] {
+  const [year, month, currentDay] = businessDate.split('-').map(Number);
+  const currentMonthIndex = year * 12 + month - 1;
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const absoluteMonth = currentMonthIndex - 11 + index;
+    const pointYear = Math.floor(absoluteMonth / 12);
+    const pointMonth = absoluteMonth % 12 + 1;
+    const monthKey = `${pointYear}-${String(pointMonth).padStart(2, '0')}`;
+    const total = rows.reduce((sum, row) => {
+      if (!row.date.startsWith(monthKey)) return sum;
+      return sum
+        + Number(row.cash_income ?? 0)
+        + Number(row.terminal_income ?? 0)
+        + Number(row.card_income ?? 0);
+    }, 0);
+    const isCurrent = absoluteMonth === currentMonthIndex;
+    const dayCount = isCurrent ? currentDay : new Date(pointYear, pointMonth, 0).getDate();
+
+    return {
+      month: `${monthKey}-01`,
+      average_daily_income: calculateAverageDailyIncome(total, dayCount),
+      is_current: isCurrent,
+    };
+  });
+}
+
 export function sumGameClubRows(rows: DailyCashRow[]): Pick<
   DashboardTotals,
   | 'cashIncome'
