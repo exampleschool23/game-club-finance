@@ -85,18 +85,21 @@ describe('daily finance report image', () => {
     const svg = buildDailyFinanceReportSvg(reportInput());
 
     expect(svg).toContain('width="1200"');
-    expect(svg).toContain('height="1328"');
+    expect(svg).toContain('height="1600"');
     expect(svg).not.toContain('GAME CLUB · ФИНАНСОВЫЙ ОТЧЁТ');
     expect(svg).not.toContain('Рабочий день: 27 августа 2026');
     expect(svg).not.toContain('url(#header)');
-    expect(svg).toContain('ВЫРУЧКА ЗА ДЕНЬ');
-    expect(svg).toContain('1 806 500 UZS');
-    expect(svg).toContain('KPI и бонусы');
-    expect(svg).toContain('ВАЛОВАЯ ПРИБЫЛЬ');
-    expect(svg).toContain('ЧИСТАЯ ПРИБЫЛЬ');
-    expect(svg).toContain('МЕСЯЦ НА ТЕКУЩУЮ ДАТУ');
-    expect(svg).toContain('Доход клуба с начала месяца');
-    expect(svg).toContain('Средний доход клуба в день');
+    expect(svg).toContain('ДОХОД КЛУБА — 1 431 000 UZS');
+    expect(svg).toContain('ДОХОД БАРА — 375 500 UZS');
+    expect(svg).toContain('РАСХОДЫ КЛУБА — 526 000 UZS');
+    expect(svg).toContain('РАСХОДЫ БАРА — 161 000 UZS');
+    expect(svg).toContain('ОБЩИЕ РАСХОДЫ — 687 000 UZS');
+    expect(svg).toContain('SKIDKA &amp; bonus');
+    expect(svg).toContain('ОСТАТОК ДЕНЕГ КЛУБА ЗА МЕСЯЦ');
+    expect(svg).toContain('СРЕДНИЙ ДНЕВНОЙ ДОХОД КЛУБА');
+    expect(svg).toContain('ДОХОД БАРА ЗА МЕСЯЦ');
+    expect(svg).toContain('СТОИМОСТЬ СКЛАДА');
+    expect(svg).toContain('АКТИВНЫЕ ДОЛГИ');
     expect(svg).toContain('474 000 UZS');
     expect(svg).toContain('font-family="Noto Sans"');
     expect(buildDailyFinanceReportSvg(reportInput())).toBe(svg);
@@ -114,7 +117,7 @@ describe('daily finance report image', () => {
       width: 1200,
       channels: 4,
     });
-    expect(metadata.height).toBe(1328);
+    expect(metadata.height).toBe(1600);
   });
 
   it('configures application-owned Noto Sans before the static Sharp import', () => {
