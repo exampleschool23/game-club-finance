@@ -685,6 +685,8 @@
     "gameClubAvailable": "O'yin klubi foydasi mavjud",
     "barAvailable": "Bar foydasi mavjud",
     "totalTaken": "Jami olingan foyda",
+    "paymentMethodBalancesTitle": "To'lov usuli bo'yicha o'yin klubi daromadi qoldig'i",
+    "paymentMethodBalancesDescription": "Undirilgan qarz to'lovlarini ham o'z ichiga olgan tushumdan ayni usulda to'langan o'yin klubi xarajatlari ayriladi. Owner olgan pullar to'lov usuliga biriktirilmaydi va yuqorida alohida ko'rsatiladi.",
     "source": "Foyda manbasi",
     "sources": {
       "game_club": "O'yin klubi",

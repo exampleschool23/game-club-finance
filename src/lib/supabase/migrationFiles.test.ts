@@ -130,4 +130,16 @@ describe('Supabase migration files', () => {
     expect(migration).toContain('revoke all on function public.get_owner_profit_snapshot(uuid, date)');
     expect(migration).toContain('grant execute on function public.get_owner_profit_snapshot(uuid, date) to authenticated');
   });
+
+  it('adds payment-method balances to the owner-profit snapshot', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/045_owner_profit_payment_method_balances.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain("'paymentMethodBalances', jsonb_build_object(");
+    expect(migration).toContain("payments.payment_method = 'cash'");
+    expect(migration).toContain("expenses.payment_source = 'game_club'");
+    expect(migration).toContain('not public.user_has_club_access(p_club_id)');
+  });
 });

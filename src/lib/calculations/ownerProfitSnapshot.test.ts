@@ -21,6 +21,7 @@ describe('owner profit snapshot', () => {
         },
       ],
       withdrawalRows: [],
+      paymentMethodBalances: { cash: 700, terminal: 250, card: 50, playstation: 100 },
     });
 
     expect(result.byMonth['2026-07'].gameClub.available).toBe(800);
@@ -28,5 +29,17 @@ describe('owner profit snapshot', () => {
     expect(result.total.gameClub.available).toBe(800);
     expect(result.total.bar.available).toBe(200);
     expect(result.total.totalAvailable).toBe(1_000);
+    expect(result.paymentMethodBalances).toEqual({
+      cash: 700,
+      terminal: 250,
+      card: 50,
+      playstation: 100,
+    });
+  });
+
+  it('defaults payment-method balances for compatibility with the previous RPC payload', () => {
+    const result = buildOwnerProfitSnapshot({ monthlyBalances: [], withdrawalRows: [] });
+
+    expect(result.paymentMethodBalances).toEqual({ cash: 0, terminal: 0, card: 0, playstation: 0 });
   });
 });

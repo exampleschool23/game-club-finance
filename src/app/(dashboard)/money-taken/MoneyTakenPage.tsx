@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine,
+  Banknote,
   CircleDollarSign,
+  CreditCard,
   Gamepad2,
   GlassWater,
+  Landmark,
   Trash2,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -29,10 +32,13 @@ import {
 } from '@/lib/calculations/ownerProfitSnapshot';
 import type { StockPurchaseCostRow } from '@/lib/calculations/barMoney';
 import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
-import type {
+import {
+  calculateGameClubMoneyLeftByPaymentMethod,
   DailyCashRow,
   DebtPaymentValueRow,
+  emptyMoneyLeftByPaymentMethod,
   ExpenseRow,
+  type MoneyLeftByPaymentMethod,
   StockCountRow,
 } from '@/lib/calculations/dashboardMetrics';
 import {
@@ -73,6 +79,7 @@ export default function MoneyTakenPage() {
   const currentMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [balances, setBalances] = useState<AvailableBalances>(emptyBalances);
   const [balancesByMonth, setBalancesByMonth] = useState<AvailableMoneyByMonth>({});
+  const [paymentMethodBalances, setPaymentMethodBalances] = useState<MoneyLeftByPaymentMethod>(emptyMoneyLeftByPaymentMethod);
   const [withdrawals, setWithdrawals] = useState<OwnerWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,6 +100,7 @@ export default function MoneyTakenPage() {
     if (!selectedClubId) {
       setBalances(emptyBalances);
       setBalancesByMonth({});
+      setPaymentMethodBalances(emptyMoneyLeftByPaymentMethod);
       setWithdrawals([]);
       setLoading(false);
       return;
@@ -110,6 +118,7 @@ export default function MoneyTakenPage() {
       const snapshot = buildOwnerProfitSnapshot(snapshotResult.data as OwnerProfitSnapshotPayload);
       setBalancesByMonth(snapshot.byMonth);
       setWithdrawals(snapshot.withdrawals);
+      setPaymentMethodBalances(snapshot.paymentMethodBalances);
       setBalances({
         gameClubEarned: snapshot.total.gameClub.earned,
         barEarned: snapshot.total.bar.earned,
@@ -196,6 +205,11 @@ export default function MoneyTakenPage() {
       throughDate: businessToday,
     }));
     setWithdrawals(withdrawalRows);
+    setPaymentMethodBalances(calculateGameClubMoneyLeftByPaymentMethod(
+      cashRes.data ?? [],
+      expenseRes.data ?? [],
+      debtPaymentRes.data ?? [],
+    ));
     setBalances({
       gameClubEarned: availableMoney.gameClub.earned,
       barEarned: availableMoney.bar.earned,
@@ -325,6 +339,29 @@ export default function MoneyTakenPage() {
           icon={ArrowDownToLine}
         />
       </div>
+
+      <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="font-bold text-gray-950">{t('paymentMethodBalancesTitle')}</h2>
+          <p className="mt-0.5 text-sm text-gray-500">{t('paymentMethodBalancesDescription')}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ['cash', Banknote],
+            ['terminal', Landmark],
+            ['card', CreditCard],
+          ] as const).map(([method, Icon]) => (
+            <MetricCard
+              key={method}
+              loading={loading}
+              label={tc(`paymentMethods.${method}`)}
+              value={`${formatCurrency(paymentMethodBalances[method], locale)} ${tc('currency')}`}
+              icon={Icon}
+              valueClassName={paymentMethodBalances[method] < 0 ? 'text-red-600' : 'text-emerald-700'}
+            />
+          ))}
+        </div>
+      </section>
 
       {loading ? (
         <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>

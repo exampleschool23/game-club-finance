@@ -685,6 +685,8 @@
     "gameClubAvailable": "Game Club profit available",
     "barAvailable": "Bar profit available",
     "totalTaken": "Total profit withdrawn",
+    "paymentMethodBalancesTitle": "Game Club income left by payment method",
+    "paymentMethodBalancesDescription": "Collected income, including debt payments received, minus Game Club expenses paid by the same method. Owner withdrawals are not assigned to a payment method and are shown separately above.",
     "source": "Profit source",
     "sources": {
       "game_club": "Game Club",
