@@ -4,6 +4,7 @@ import { buildExpenseNotification } from './expenseNotification';
 describe('buildExpenseNotification', () => {
   it('formats the saved expense for its club Telegram group', () => {
     expect(buildExpenseNotification({
+      addedBy: 'Mehrinoz Amondullayeva',
       amount: 125000,
       category: 'repair',
       comment: 'Замена кабеля',
@@ -14,16 +15,18 @@ describe('buildExpenseNotification', () => {
       '💸 Добавлен расход',
       '',
       'Сумма: 125 000 сум',
-      'Категория: repair',
+      'Категория: Ремонт',
       'Источник: Игровой клуб',
       'Способ оплаты: Наличные',
       'Дата: 2026-09-01',
+      'Добавил(а): Mehrinoz Amondullayeva',
       'Комментарий: Замена кабеля',
     ].join('\n'));
   });
 
   it('omits an absent comment and labels bar/card payments', () => {
     const message = buildExpenseNotification({
+      addedBy: 'Алишер',
       amount: 50000,
       category: 'food_drinks',
       comment: null,
@@ -34,7 +37,7 @@ describe('buildExpenseNotification', () => {
 
     expect(message).toContain('Источник: Бар');
     expect(message).toContain('Способ оплаты: Карта');
+    expect(message).toContain('Категория: Еда / Напитки');
     expect(message).not.toContain('Комментарий:');
   });
 });
-

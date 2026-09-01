@@ -76,6 +76,15 @@ export async function POST(request: Request) {
   if (error) return Response.json({ error: error.message }, { status: 400 });
 
   const expense = data as Expense;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .maybeSingle();
+  const addedBy = profile?.full_name?.trim()
+    || (typeof user.user_metadata.full_name === 'string' ? user.user_metadata.full_name.trim() : '')
+    || user.email
+    || user.id;
   const chatId = targetChatId(expense.club_id);
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   let notificationSent = false;
@@ -86,6 +95,7 @@ export async function POST(request: Request) {
         botToken,
         chatId,
         text: buildExpenseNotification({
+          addedBy,
           amount: Number(expense.amount),
           category: expense.category,
           comment: expense.comment,
