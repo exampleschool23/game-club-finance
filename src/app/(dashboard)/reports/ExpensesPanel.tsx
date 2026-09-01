@@ -126,21 +126,23 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     setSaving(true);
     setError('');
 
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error: saveError } = await supabase.from('expenses').insert({
-      club_id: selectedClubId,
-      date: form.date,
-      amount,
-      category,
-      payment_method: form.payment_method,
-      payment_source: form.payment_source,
-      comment: form.comment || null,
-      created_by: session?.user?.id ?? null,
+    const response = await fetch('/api/expenses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clubId: selectedClubId,
+        date: form.date,
+        amount,
+        category,
+        paymentMethod: form.payment_method,
+        paymentSource: form.payment_source,
+        comment: form.comment || null,
+      }),
     });
 
-    if (saveError) {
-      setError(saveError.message);
+    if (!response.ok) {
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      setError(result?.error ?? tc('error'));
       setSaving(false);
       return;
     }
