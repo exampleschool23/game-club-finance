@@ -41,7 +41,7 @@ export function buildExpenseNotification(input: ExpenseNotificationInput): strin
     `Категория: ${category}`,
     `Источник: ${source}`,
     `Способ оплаты: ${method}`,
-    `Дата: ${formatDateShort(input.date, 'uz')}`,
+    `Дата: ${formatDateShort(input.date, 'ru')}`,
     `Добавил(а): ${input.addedBy}`,
   ];
 
