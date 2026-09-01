@@ -1,4 +1,4 @@
-import { formatCurrency } from '../formatters';
+import { formatCurrency, formatDateShort } from '../formatters';
 
 export interface ExpenseNotificationInput {
   addedBy: string;
@@ -41,7 +41,7 @@ export function buildExpenseNotification(input: ExpenseNotificationInput): strin
     `Категория: ${category}`,
     `Источник: ${source}`,
     `Способ оплаты: ${method}`,
-    `Дата: ${input.date}`,
+    `Дата: ${formatDateShort(input.date, 'uz')}`,
     `Добавил(а): ${input.addedBy}`,
   ];
 
