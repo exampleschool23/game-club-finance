@@ -100,7 +100,7 @@ describe('money report', () => {
         playstation: 200_000,
         total: 3_150_000,
         income: 3_550_000,
-        expenses: 400_000,
+        expenses: 1_300_000,
         activities: [
           {
             id: null,
@@ -135,6 +135,7 @@ describe('money report', () => {
             category: 'other',
             amount: -150_000,
             paymentMethod: 'cash',
+            paymentSource: 'game_club',
             comment: null,
             createdAt: '2026-08-25T10:00:00Z',
           },
@@ -145,8 +146,20 @@ describe('money report', () => {
             category: 'other',
             amount: -250_000,
             paymentMethod: 'terminal',
+            paymentSource: 'game_club',
             comment: null,
             createdAt: '2026-08-25T11:00:00Z',
+          },
+          {
+            id: 'bar-expense',
+            source: 'expense',
+            kind: 'expense',
+            category: 'other',
+            amount: -900_000,
+            paymentMethod: 'cash',
+            paymentSource: 'bar',
+            comment: null,
+            createdAt: '2026-08-25T12:00:00Z',
           },
         ],
       },
@@ -178,6 +191,7 @@ describe('money report', () => {
         category: 'other',
         amount: -40,
         paymentMethod: 'cash',
+        paymentSource: 'game_club',
         comment: null,
         createdAt: '2026-08-25T10:00:00Z',
       },
@@ -195,6 +209,33 @@ describe('money report', () => {
         paymentBreakdown: { cash: 100, terminal: 0, card: 0, playstation: 0 },
       },
     ]);
+  });
+
+  it('includes bar expenses in daily closeouts without deducting them from game-club balances', () => {
+    const report = buildMoneyReport([], [{
+      id: 'bar-expense',
+      date: '2026-08-26',
+      amount: 75_000,
+      category: 'food_drinks',
+      payment_method: 'cash',
+      payment_source: 'bar',
+      comment: 'Bar supplies',
+      created_at: '2026-08-26T09:00:00Z',
+    }]);
+
+    expect(report.totalExpenses).toBe(0);
+    expect(report.totalLeft).toBe(0);
+    expect(report.days).toHaveLength(1);
+    expect(report.days[0]).toMatchObject({
+      date: '2026-08-26',
+      expenses: 75_000,
+      total: 0,
+    });
+    expect(report.days[0].activities[0]).toMatchObject({
+      id: 'bar-expense',
+      paymentSource: 'bar',
+      amount: -75_000,
+    });
   });
 
   it('filters the complete report by activity and expense category', () => {

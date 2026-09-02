@@ -20,6 +20,7 @@ export interface MoneyReportActivity {
   /** Positive values are collections; negative values are deductions. */
   amount: number;
   paymentMethod: string | null;
+  paymentSource?: 'game_club' | 'bar' | null;
   comment: string | null;
   createdAt: string | null;
   createdByName?: string | null;
@@ -161,7 +162,6 @@ function buildDailyActivities(
   });
 
   expenseRows
-    .filter((row) => row.payment_source !== 'bar')
     .sort((rowA, rowB) => rowA.created_at.localeCompare(rowB.created_at))
     .forEach((row) => {
       activities.push({
@@ -171,6 +171,7 @@ function buildDailyActivities(
         category: row.category || 'other',
         amount: -Number(row.amount ?? 0),
         paymentMethod: row.payment_method ?? null,
+        paymentSource: row.payment_source ?? null,
         comment: row.comment,
         createdAt: row.created_at,
         ...(row.creator_name !== undefined ? { createdByName: row.creator_name } : {}),
@@ -194,7 +195,7 @@ export function buildMoneyReport(
     .reduce((sum, method) => sum + method.left, 0);
   const dates = Array.from(new Set([
     ...cashRows.map((row) => row.date),
-    ...expenseRows.filter((row) => row.payment_source !== 'bar').map((row) => row.date),
+    ...expenseRows.map((row) => row.date),
     ...debtPaymentRows.map((row) => row.date),
   ])).sort((a, b) => b.localeCompare(a));
 

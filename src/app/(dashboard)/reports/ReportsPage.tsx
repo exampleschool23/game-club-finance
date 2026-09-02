@@ -229,7 +229,6 @@ export default function ReportsPage() {
     const knownCategories = new Set<string>(knownExpenseCategories);
     return Array.from(new Set(
       reportRows.expenses
-        .filter((expense) => expense.payment_source !== 'bar')
         .map((expense) => expense.category)
         .filter((category) => category && !knownCategories.has(category)),
     )).sort((a, b) => a.localeCompare(b));
@@ -390,7 +389,8 @@ export default function ReportsPage() {
     if (activity.kind === 'income') return t('dailyClubIncome');
     if (activity.kind === 'debt_payment') return t('debtPayment');
     const category = activity.category ?? 'other';
-    return isKnownExpenseCategory(category) ? te(category) : category;
+    const label = isKnownExpenseCategory(category) ? te(category) : category;
+    return activity.paymentSource === 'bar' ? `${t('bar')} · ${label}` : label;
   }
 
   function activityTypeLabel(activity: MoneyReportActivity): string {
