@@ -154,6 +154,7 @@
     "to": "По",
     "totalCollected": "Всего получено",
     "expenses": "Расходы",
+    "bar": "Бар",
     "barCashLeft": "Остаток денег бара",
     "totalLeft": "Всего осталось",
     "moneyLeftByPaymentMethod": "Остаток по способу оплаты",
