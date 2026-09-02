@@ -154,6 +154,7 @@
     "to": "Gacha",
     "totalCollected": "Jami yig'ildi",
     "expenses": "Xarajatlar",
+    "barCashLeft": "Barda qolgan pul",
     "totalLeft": "Jami qoldi",
     "moneyLeftByPaymentMethod": "To'lov usuli bo'yicha qolgan pul",
     "moneyLeftDescription": "Yig'ilgan puldan xuddi shu to'lov usulidagi klub xarajatlari ayriladi.",
@@ -689,6 +690,7 @@
     "paymentMethodBalancesDescription": "Undirilgan qarz to'lovlarini ham o'z ichiga olgan tushumdan ayni usulda to'langan o'yin klubi xarajatlari ayriladi. Owner olgan pullar to'lov usuliga biriktirilmaydi va yuqorida alohida ko'rsatiladi.",
     "source": "Foyda manbasi",
     "sources": {
+      "all": "Barchasi",
       "game_club": "O'yin klubi",
       "bar": "Bar"
     },

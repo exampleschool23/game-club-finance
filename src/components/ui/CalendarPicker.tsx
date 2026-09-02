@@ -475,12 +475,10 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
   const t = useTranslations('calendar');
   const { locale } = useAppLocale();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
   const [year, setYear] = useState(() => Number(value.slice(0, 4)) || new Date().getFullYear());
 
   useEffect(() => {
     if (!open) return;
-    setDraft(value);
     setYear(Number(value.slice(0, 4)) || new Date().getFullYear());
   }, [open, value]);
 
@@ -527,10 +525,13 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
                       key={month}
                       type="button"
                       disabled={unavailable}
-                      onClick={() => setDraft(month)}
+                      onClick={() => {
+                        onChange(month);
+                        setOpen(false);
+                      }}
                       className={cn(
                         'min-h-12 rounded-xl px-3 text-sm font-bold capitalize transition',
-                        draft === month ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-primary-50 hover:text-primary-700',
+                        value === month ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-primary-50 hover:text-primary-700',
                         unavailable && 'cursor-not-allowed bg-gray-50 text-gray-300 hover:bg-gray-50 hover:text-gray-300',
                       )}
                     >
@@ -542,7 +543,6 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
             </div>
             <footer className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
               <button type="button" onClick={() => setOpen(false)} className="btn-secondary min-h-10">{t('cancel')}</button>
-              <button type="button" onClick={() => { onChange(draft); setOpen(false); }} className="btn-primary min-h-10">{t('applyMonth')}</button>
             </footer>
           </section>
         </div>

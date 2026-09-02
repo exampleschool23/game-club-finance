@@ -90,7 +90,8 @@ describe('money report', () => {
     expect(report.paymentMethods.playstation.left).toBe(200_000);
     expect(report.totalCollected).toBe(3_550_000);
     expect(report.totalExpenses).toBe(400_000);
-    expect(report.totalLeft).toBe(3_150_000);
+    expect(report.barLeft).toBe(-900_000);
+    expect(report.totalLeft).toBe(2_250_000);
     expect(report.days).toEqual([
       {
         date: '2026-08-25',
@@ -224,7 +225,8 @@ describe('money report', () => {
     }]);
 
     expect(report.totalExpenses).toBe(0);
-    expect(report.totalLeft).toBe(0);
+    expect(report.barLeft).toBe(-75_000);
+    expect(report.totalLeft).toBe(-75_000);
     expect(report.days).toHaveLength(1);
     expect(report.days[0]).toMatchObject({
       date: '2026-08-26',
@@ -236,6 +238,28 @@ describe('money report', () => {
       paymentSource: 'bar',
       amount: -75_000,
     });
+  });
+
+  it('adds bar cash left to the report total using sales, purchases, and bar expenses', () => {
+    const report = buildMoneyReport(
+      [{ date: '2026-08-26', cash_income: 1_000, terminal_income: 0, card_income: 0 }],
+      [{
+        id: 'bar-expense',
+        date: '2026-08-26',
+        amount: 100,
+        category: 'food_drinks',
+        payment_method: 'cash',
+        payment_source: 'bar',
+        comment: null,
+        created_at: '2026-08-26T09:00:00Z',
+      }],
+      [],
+      [{ date: '2026-08-26', bar_income: 800 }],
+      [{ date: '2026-08-26', quantity: 2, cost_price: 150 }],
+    );
+
+    expect(report.barLeft).toBe(400);
+    expect(report.totalLeft).toBe(1_400);
   });
 
   it('filters the complete report by activity and expense category', () => {

@@ -27,9 +27,11 @@ import {
   type MoneyReportActivity,
   type MoneyReportCategoryFilter,
   type MoneyReportCashRow,
+  type MoneyReportBarSalesRow,
   type MoneyReportDebtPaymentRow,
   type MoneyReportPaymentBreakdown,
 } from '@/lib/calculations/moneyReport';
+import type { StockPurchaseCostRow } from '@/lib/calculations/barMoney';
 import {
   getDashboardRange,
   type ExpenseRow,
@@ -46,6 +48,8 @@ const emptyReportRows = {
   cash: [] as MoneyReportCashRow[],
   expenses: [] as ExpenseRow[],
   debtPayments: [] as MoneyReportDebtPaymentRow[],
+  barSales: [] as MoneyReportBarSalesRow[],
+  stockPurchases: [] as StockPurchaseCostRow[],
 };
 
 interface ReportProfileRow {
@@ -224,6 +228,8 @@ export default function ReportsPage() {
     reportRows.expenses,
     reportRows.debtPayments,
     categoryFilter,
+    reportRows.barSales,
+    reportRows.stockPurchases,
   ), [categoryFilter, reportRows]);
   const customExpenseCategories = useMemo(() => {
     const knownCategories = new Set<string>(knownExpenseCategories);
@@ -254,7 +260,7 @@ export default function ReportsPage() {
     setLoading(true);
     setError('');
     const supabase = createClient();
-    const [cashResult, expenseResult, debtPaymentResult] = await Promise.all([
+    const [cashResult, expenseResult, debtPaymentResult, barSalesResult, stockPurchaseResult] = await Promise.all([
       fetchAllRows<MoneyReportCashRow>(() => supabase
         .from('daily_cash_entries')
         .select('id,date,cash_income,terminal_income,card_income,playstation_income,comment,created_by,created_at')
@@ -279,11 +285,29 @@ export default function ReportsPage() {
         .lte('date', range.to)
         .order('date', { ascending: true })
         .order('id', { ascending: true })),
+      fetchAllRows<MoneyReportBarSalesRow>(() => supabase
+        .from('daily_stock_counts')
+        .select('date,bar_income')
+        .eq('club_id', selectedClubId)
+        .gte('date', range.from)
+        .lte('date', range.to)),
+      fetchAllRows<StockPurchaseCostRow>(() => supabase
+        .from('stock_purchases')
+        .select('date,quantity,cost_price')
+        .eq('club_id', selectedClubId)
+        .gte('date', range.from)
+        .lte('date', range.to)),
     ]);
 
     if (requestId !== requestSequence.current) return;
 
-    const firstError = [cashResult.error, expenseResult.error, debtPaymentResult.error].find(Boolean);
+    const firstError = [
+      cashResult.error,
+      expenseResult.error,
+      debtPaymentResult.error,
+      barSalesResult.error,
+      stockPurchaseResult.error,
+    ].find(Boolean);
     if (firstError) {
       setReportRows(emptyReportRows);
       setError(firstError.message);
@@ -324,6 +348,8 @@ export default function ReportsPage() {
         creator_name: row.created_by ? creatorNames.get(row.created_by) ?? null : null,
       })),
       debtPayments: (debtPaymentResult.data ?? []) as MoneyReportDebtPaymentRow[],
+      barSales: (barSalesResult.data ?? []) as MoneyReportBarSalesRow[],
+      stockPurchases: (stockPurchaseResult.data ?? []) as StockPurchaseCostRow[],
     });
     setLoading(false);
   }, [hasReportsAccess, range.from, range.to, selectedClubId]);
@@ -510,7 +536,7 @@ export default function ReportsPage() {
         </label>
       </div>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           loading={loading}
           label={t('totalCollected')}
@@ -526,6 +552,14 @@ export default function ReportsPage() {
           icon={ReceiptText}
           iconClassName="text-red-600"
           iconBackground="bg-red-50"
+        />
+        <SummaryCard
+          loading={loading}
+          label={t('barCashLeft')}
+          value={report.barLeft}
+          icon={Banknote}
+          iconClassName="text-amber-600"
+          iconBackground="bg-amber-50"
         />
         <SummaryCard
           loading={loading}

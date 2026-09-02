@@ -5,6 +5,11 @@ import {
   type ExpenseRow,
   type MoneyLeftByPaymentMethod,
 } from './dashboardMetrics';
+import {
+  calculateBarMoney,
+  type BarSalesRow,
+  type StockPurchaseCostRow,
+} from './barMoney';
 
 export interface MoneyReportPaymentBreakdown {
   collected: number;
@@ -47,6 +52,7 @@ export interface MoneyReportDay {
 export interface MoneyReport {
   totalCollected: number;
   totalExpenses: number;
+  barLeft: number;
   totalLeft: number;
   paymentMethods: Record<keyof MoneyLeftByPaymentMethod, MoneyReportPaymentBreakdown>;
   days: MoneyReportDay[];
@@ -61,6 +67,10 @@ export interface MoneyReportDebtPaymentRow extends DebtPaymentValueRow {
   id?: string;
   comment?: string | null;
   created_at?: string;
+}
+
+export interface MoneyReportBarSalesRow extends BarSalesRow {
+  date: string;
 }
 
 export type MoneyReportCategoryFilter =
@@ -185,14 +195,22 @@ export function buildMoneyReport(
   cashRows: MoneyReportCashRow[],
   expenseRows: ExpenseRow[],
   debtPaymentRows: MoneyReportDebtPaymentRow[] = [],
+  barSalesRows: MoneyReportBarSalesRow[] = [],
+  stockPurchaseRows: StockPurchaseCostRow[] = [],
 ): MoneyReport {
   const paymentMethods = buildPaymentMethods(cashRows, expenseRows, debtPaymentRows);
   const totalCollected = Object.values(paymentMethods)
     .reduce((sum, method) => sum + method.collected, 0);
   const totalExpenses = Object.values(paymentMethods)
     .reduce((sum, method) => sum + method.expenses, 0);
-  const totalLeft = Object.values(paymentMethods)
+  const gameClubLeft = Object.values(paymentMethods)
     .reduce((sum, method) => sum + method.left, 0);
+  const barExpenses = expenseRows.reduce(
+    (sum, row) => row.payment_source === 'bar' ? sum + Number(row.amount ?? 0) : sum,
+    0,
+  );
+  const barLeft = calculateBarMoney(barSalesRows, stockPurchaseRows).barMoney - barExpenses;
+  const totalLeft = gameClubLeft + barLeft;
   const dates = Array.from(new Set([
     ...cashRows.map((row) => row.date),
     ...expenseRows.map((row) => row.date),
@@ -229,7 +247,7 @@ export function buildMoneyReport(
     return day;
   });
 
-  return { totalCollected, totalExpenses, totalLeft, paymentMethods, days };
+  return { totalCollected, totalExpenses, barLeft, totalLeft, paymentMethods, days };
 }
 
 export function buildFilteredMoneyReport(
@@ -237,6 +255,8 @@ export function buildFilteredMoneyReport(
   expenseRows: ExpenseRow[],
   debtPaymentRows: MoneyReportDebtPaymentRow[] = [],
   categoryFilter: MoneyReportCategoryFilter = 'all',
+  barSalesRows: MoneyReportBarSalesRow[] = [],
+  stockPurchaseRows: StockPurchaseCostRow[] = [],
 ): MoneyReport {
   if (categoryFilter === 'income') {
     return buildMoneyReport(cashRows, [], []);
@@ -256,5 +276,5 @@ export function buildFilteredMoneyReport(
     );
   }
 
-  return buildMoneyReport(cashRows, expenseRows, debtPaymentRows);
+  return buildMoneyReport(cashRows, expenseRows, debtPaymentRows, barSalesRows, stockPurchaseRows);
 }

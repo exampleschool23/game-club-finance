@@ -156,6 +156,7 @@
     "to": "To",
     "totalCollected": "Total collected",
     "expenses": "Expenses",
+    "barCashLeft": "Bar cash left",
     "totalLeft": "Total left",
     "moneyLeftByPaymentMethod": "Money left by payment method",
     "moneyLeftDescription": "Collected money minus game-club expenses paid from the same payment method.",
@@ -689,6 +690,7 @@
     "paymentMethodBalancesDescription": "Collected income, including debt payments received, minus Game Club expenses paid by the same method. Owner withdrawals are not assigned to a payment method and are shown separately above.",
     "source": "Profit source",
     "sources": {
+      "all": "All",
       "game_club": "Game Club",
       "bar": "Bar"
     },

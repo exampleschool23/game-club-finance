@@ -49,7 +49,9 @@ import {
 import { currentYearMonth, todayIso } from '@/lib/utils';
 import { OWNER_WITHDRAWAL_SOURCES, type OwnerWithdrawal, type OwnerWithdrawalSource } from '@/types';
 
-type MoneySource = OwnerWithdrawalSource;
+type MoneySource = OwnerWithdrawalSource | 'all';
+
+const PROFIT_SOURCES: readonly MoneySource[] = ['all', ...OWNER_WITHDRAWAL_SOURCES];
 
 interface AvailableBalances {
   gameClubEarned: number;
@@ -233,9 +235,13 @@ export default function MoneyTakenPage() {
 
     const availableForMonth = balancesByMonth[form.month];
     if (!availableForMonth) return 0;
-    const sourceBalance = form.source === 'bar'
-      ? availableForMonth.bar.available
-      : availableForMonth.gameClub.available;
+    const gameClubAvailable = Math.max(0, availableForMonth.gameClub.available);
+    const barAvailable = Math.max(0, availableForMonth.bar.available);
+    const sourceBalance = form.source === 'all'
+      ? gameClubAvailable + barAvailable
+      : form.source === 'bar'
+        ? barAvailable
+        : gameClubAvailable;
 
     return Math.max(0, sourceBalance);
   }, [balancesByMonth, form.month, form.source]);
@@ -261,16 +267,30 @@ export default function MoneyTakenPage() {
 
     setSaving(true);
     const supabase = createClient();
-    const { error: insertError } = await supabase.rpc('take_all_owner_money_for_month', {
-      p_club_id: selectedClubId,
-      p_period_month: `${form.month}-01`,
-      p_source: form.source,
-      p_comment: form.comment.trim() || null,
-    });
+    const availableForMonth = balancesByMonth[form.month];
+    const sources: OwnerWithdrawalSource[] = form.source === 'all'
+      ? OWNER_WITHDRAWAL_SOURCES.filter((source) => {
+        if (!availableForMonth) return false;
+        return source === 'bar'
+          ? availableForMonth.bar.available > 0
+          : availableForMonth.gameClub.available > 0;
+      })
+      : [form.source];
+    const results = await Promise.all(sources.map((source) => supabase.rpc(
+      'take_all_owner_money_for_month',
+      {
+        p_club_id: selectedClubId,
+        p_period_month: `${form.month}-01`,
+        p_source: source,
+        p_comment: form.comment.trim() || null,
+      },
+    )));
     setSaving(false);
 
+    const insertError = results.find((result) => result.error)?.error;
     if (insertError) {
       showToast(insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
+      await loadData();
       return;
     }
 
@@ -385,8 +405,8 @@ export default function MoneyTakenPage() {
             <div className="space-y-4">
               <div>
                 <label className="label">{t('source')}</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {OWNER_WITHDRAWAL_SOURCES.map((source) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {PROFIT_SOURCES.map((source) => (
                     <button
                       key={source}
                       type="button"
