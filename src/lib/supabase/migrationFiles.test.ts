@@ -142,4 +142,16 @@ describe('Supabase migration files', () => {
     expect(migration).toContain("expenses.payment_source = 'game_club'");
     expect(migration).toContain('not public.user_has_club_access(p_club_id)');
   });
+
+  it('stores complete Telegram coordinates for expense notifications', () => {
+    const migration = readFileSync(
+      resolve(process.cwd(), 'supabase/migrations/046_expense_telegram_message_coordinates.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('add column if not exists telegram_chat_id text');
+    expect(migration).toContain('add column if not exists telegram_message_id bigint');
+    expect(migration).toContain('expenses_telegram_message_coordinates_check');
+    expect(migration).toContain('(telegram_chat_id is null and telegram_message_id is null)');
+  });
 });

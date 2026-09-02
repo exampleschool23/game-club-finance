@@ -349,18 +349,31 @@ export default function ReportsPage() {
     if (!isOwner || !selectedClubId || !activity.id || activity.source === 'debt_payment') return;
     if (!window.confirm(t('deleteEntryConfirm'))) return;
 
-    const table = activity.source === 'daily_cash' ? 'daily_cash_entries' : 'expenses';
     const key = `${activity.source}:${activity.id}`;
     setDeletingKey(key);
     setError('');
     setSuccess('');
 
-    const supabase = createClient();
-    const { error: deleteError } = await supabase
-      .from(table)
-      .delete()
-      .eq('club_id', selectedClubId)
-      .eq('id', activity.id);
+    let deleteError: { message: string } | null = null;
+    if (activity.source === 'expense') {
+      const response = await fetch('/api/expenses', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clubId: selectedClubId, expenseId: activity.id }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        deleteError = { message: result?.error ?? 'Could not delete expense' };
+      }
+    } else {
+      const supabase = createClient();
+      const result = await supabase
+        .from('daily_cash_entries')
+        .delete()
+        .eq('club_id', selectedClubId)
+        .eq('id', activity.id);
+      deleteError = result.error;
+    }
 
     setDeletingKey(null);
 

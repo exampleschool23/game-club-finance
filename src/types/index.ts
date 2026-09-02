@@ -177,6 +177,8 @@ export interface Expense {
   payment_source: ExpensePaymentSource;
   category: string;
   comment: string | null;
+  telegram_chat_id: string | null;
+  telegram_message_id: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

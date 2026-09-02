@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { buildExpenseNotification } from '@/lib/telegram/expenseNotification';
+import { deleteTelegramMessage } from '@/lib/telegram/deleteTelegramMessage';
 import { sendTelegramMessage } from '@/lib/telegram/sendDailyFinanceReport';
 import { PAYMENT_METHODS, type Expense } from '@/types';
 
@@ -23,6 +24,11 @@ interface ValidExpenseRequestBody {
   paymentMethod: (typeof PAYMENT_METHODS)[number];
   paymentSource: (typeof PAYMENT_SOURCES)[number];
   comment?: string | null;
+}
+
+interface DeleteExpenseRequestBody {
+  clubId?: unknown;
+  expenseId?: unknown;
 }
 
 function targetChatId(clubId: string): string | null {
@@ -91,7 +97,7 @@ export async function POST(request: Request) {
 
   if (chatId && botToken) {
     try {
-      await sendTelegramMessage({
+      const telegram = await sendTelegramMessage({
         botToken,
         chatId,
         text: buildExpenseNotification({
@@ -104,7 +110,24 @@ export async function POST(request: Request) {
           paymentSource: expense.payment_source,
         }),
       });
-      notificationSent = true;
+      const { error: coordinateError } = await supabase
+        .from('expenses')
+        .update({
+          telegram_chat_id: String(telegram.result.chat.id),
+          telegram_message_id: telegram.result.message_id,
+        })
+        .eq('club_id', expense.club_id)
+        .eq('id', expense.id);
+
+      if (coordinateError) {
+        console.error('[telegram/expense] message coordinates were not saved', {
+          clubId: expense.club_id,
+          expenseId: expense.id,
+          error: coordinateError.message,
+        });
+      } else {
+        notificationSent = true;
+      }
     } catch (notificationError) {
       console.error('[telegram/expense] notification failed', {
         clubId: expense.club_id,
@@ -115,4 +138,66 @@ export async function POST(request: Request) {
   }
 
   return Response.json({ expense, notificationSent }, { status: 201 });
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = await request.json().catch(() => null) as DeleteExpenseRequestBody | null;
+  if (!body || typeof body.clubId !== 'string' || typeof body.expenseId !== 'string') {
+    return Response.json({ error: 'Invalid expense deletion data' }, { status: 400 });
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from('club_memberships')
+    .select('role')
+    .eq('club_id', body.clubId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (membershipError) return Response.json({ error: membershipError.message }, { status: 400 });
+  if (membership?.role !== 'owner') return Response.json({ error: 'Forbidden' }, { status: 403 });
+
+  const { data: expense, error: expenseError } = await supabase
+    .from('expenses')
+    .select('id,telegram_chat_id,telegram_message_id')
+    .eq('club_id', body.clubId)
+    .eq('id', body.expenseId)
+    .maybeSingle();
+
+  if (expenseError) return Response.json({ error: expenseError.message }, { status: 400 });
+  if (!expense) return Response.json({ error: 'Expense not found' }, { status: 404 });
+
+  if (expense.telegram_chat_id && expense.telegram_message_id) {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      return Response.json({ error: 'Telegram deletion is not configured' }, { status: 503 });
+    }
+
+    try {
+      await deleteTelegramMessage({
+        botToken,
+        chatId: expense.telegram_chat_id,
+        messageId: Number(expense.telegram_message_id),
+      });
+    } catch (telegramError) {
+      console.error('[telegram/expense] message deletion failed', {
+        clubId: body.clubId,
+        expenseId: body.expenseId,
+        error: telegramError instanceof Error ? telegramError.message : String(telegramError),
+      });
+      return Response.json({ error: 'Could not delete the corresponding Telegram message' }, { status: 502 });
+    }
+  }
+
+  const { error: deleteError } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('club_id', body.clubId)
+    .eq('id', body.expenseId);
+
+  if (deleteError) return Response.json({ error: deleteError.message }, { status: 400 });
+  return Response.json({ deleted: true });
 }
