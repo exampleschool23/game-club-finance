@@ -5,6 +5,7 @@ const READ_ONLY_RPCS = new Set([
   'get_dashboard_snapshot',
   'get_latest_stock_closings',
   'get_owner_profit_snapshot',
+  'get_money_report_snapshot',
 ]);
 
 interface CachedResponse {

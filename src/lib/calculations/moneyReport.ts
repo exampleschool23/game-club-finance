@@ -217,16 +217,38 @@ export function buildMoneyReport(
     ...debtPaymentRows.map((row) => row.date),
   ])).sort((a, b) => b.localeCompare(a));
 
+  const cashByDate = new Map<string, MoneyReportCashRow[]>();
+  const expensesByDate = new Map<string, ExpenseRow[]>();
+  const debtPaymentsByDate = new Map<string, MoneyReportDebtPaymentRow[]>();
+  for (const row of cashRows) {
+    const rows = cashByDate.get(row.date) ?? [];
+    rows.push(row);
+    cashByDate.set(row.date, rows);
+  }
+  for (const row of expenseRows) {
+    const rows = expensesByDate.get(row.date) ?? [];
+    rows.push(row);
+    expensesByDate.set(row.date, rows);
+  }
+  for (const row of debtPaymentRows) {
+    const rows = debtPaymentsByDate.get(row.date) ?? [];
+    rows.push(row);
+    debtPaymentsByDate.set(row.date, rows);
+  }
+
   const days = dates.map((date) => {
+    const dayCashRows = cashByDate.get(date) ?? [];
+    const dayExpenseRows = expensesByDate.get(date) ?? [];
+    const dayDebtPaymentRows = debtPaymentsByDate.get(date) ?? [];
     const dayMethods = buildPaymentMethods(
-      cashRows.filter((row) => row.date === date),
-      expenseRows.filter((row) => row.date === date),
-      debtPaymentRows.filter((row) => row.date === date),
+      dayCashRows,
+      dayExpenseRows,
+      dayDebtPaymentRows,
     );
     const activities = buildDailyActivities(
-      cashRows.filter((row) => row.date === date),
-      expenseRows.filter((row) => row.date === date),
-      debtPaymentRows.filter((row) => row.date === date),
+      dayCashRows,
+      dayExpenseRows,
+      dayDebtPaymentRows,
     );
     const day = {
       date,

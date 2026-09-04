@@ -80,6 +80,17 @@ describe('createSupabaseReadFetch', () => {
     expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('caches the money-report snapshot RPC', async () => {
+    const nativeFetch = vi.fn(async () => jsonResponse({ cash: [] })) as unknown as typeof fetch;
+    const cachedFetch = createSupabaseReadFetch(nativeFetch, SUPABASE_URL);
+    const readRpc = `${SUPABASE_URL}/rest/v1/rpc/get_money_report_snapshot`;
+
+    await cachedFetch(readRpc, { method: 'POST', body: '{"club":"one"}' });
+    await cachedFetch(readRpc, { method: 'POST', body: '{"club":"one"}' });
+
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('invalidates cached table reads before a mutation', async () => {
     const nativeFetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
     const cachedFetch = createSupabaseReadFetch(nativeFetch, SUPABASE_URL);

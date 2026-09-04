@@ -39,6 +39,7 @@ import {
 import { formatCurrency, formatDateOnly, formatTime } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
+import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
 import { canAccessFeature } from '@/lib/permissions';
@@ -55,6 +56,14 @@ const emptyReportRows = {
 interface ReportProfileRow {
   id: string;
   full_name: string;
+}
+
+interface MoneyReportSnapshotPayload {
+  cash: MoneyReportCashRow[];
+  expenses: ExpenseRow[];
+  debtPayments: MoneyReportDebtPaymentRow[];
+  barSales: MoneyReportBarSalesRow[];
+  stockPurchases: StockPurchaseCostRow[];
 }
 
 function Amount({ value, className }: { value: number; className?: string }) {
@@ -260,6 +269,35 @@ export default function ReportsPage() {
     setLoading(true);
     setError('');
     const supabase = createClient();
+    const snapshotResult = await supabase.rpc('get_money_report_snapshot', {
+      p_club_id: selectedClubId,
+      p_range_from: range.from,
+      p_range_to: range.to,
+    });
+
+    if (requestId !== requestSequence.current) return;
+
+    if (!snapshotResult.error) {
+      const snapshot = snapshotResult.data as MoneyReportSnapshotPayload;
+      setReportRows({
+        cash: snapshot.cash ?? [],
+        expenses: snapshot.expenses ?? [],
+        debtPayments: snapshot.debtPayments ?? [],
+        barSales: snapshot.barSales ?? [],
+        stockPurchases: snapshot.stockPurchases ?? [],
+      });
+      setLoading(false);
+      return;
+    }
+
+    if (!isMissingDatabaseFunction(snapshotResult.error, 'get_money_report_snapshot')) {
+      setReportRows(emptyReportRows);
+      setError(snapshotResult.error.message);
+      setLoading(false);
+      return;
+    }
+
+    // Compatibility path while migration 047 is being deployed.
     const [cashResult, expenseResult, debtPaymentResult, barSalesResult, stockPurchaseResult] = await Promise.all([
       fetchAllRows<MoneyReportCashRow>(() => supabase
         .from('daily_cash_entries')
