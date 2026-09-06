@@ -12,6 +12,18 @@ describe('isMissingDatabaseFunction', () => {
 
   it('does not hide unrelated database errors', () => {
     expect(isMissingDatabaseFunction({ code: '42501', message: 'permission denied' }, 'get_dashboard_snapshot')).toBe(false);
+    expect(isMissingDatabaseFunction(
+      { code: '42501', message: 'permission denied for function get_dashboard_snapshot' },
+      'get_dashboard_snapshot',
+    )).toBe(false);
+    expect(isMissingDatabaseFunction(
+      { message: 'permission denied for function get_dashboard_snapshot' },
+      'get_dashboard_snapshot',
+    )).toBe(false);
+    expect(isMissingDatabaseFunction(
+      { code: '57014', message: 'function get_dashboard_snapshot: statement timeout' },
+      'get_dashboard_snapshot',
+    )).toBe(false);
   });
 
   it('recognizes a missing database column without hiding other query failures', () => {

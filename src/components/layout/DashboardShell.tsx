@@ -356,6 +356,15 @@ export function DashboardShell({
     <DateContext.Provider value={{ selectedDate, setSelectedDate }}>
       <ClubContext.Provider value={clubContextValue}>
       <div className="min-h-screen overflow-x-hidden" style={{ backgroundColor: '#f1f5f9' }}>
+        {navigationPending && (
+          <div
+            className="pointer-events-none fixed inset-x-0 top-0 z-[60] h-1 overflow-hidden bg-primary-100"
+            role="status"
+            aria-label={tc('loading')}
+          >
+            <div className="h-full w-full origin-left animate-pulse bg-primary-600" />
+          </div>
+        )}
         <Sidebar
           role={role}
           fullName={fullName}
@@ -391,7 +400,7 @@ export function DashboardShell({
 
           <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="mx-auto w-full max-w-[1680px] px-3 pb-5 pt-16 sm:px-5 md:px-6 xl:px-8 xl:py-6 2xl:px-10">
-              {clubLoading || navigationPending || (!pathAllowed && Boolean(fallbackPath)) ? (
+              {clubLoading || (!pathAllowed && Boolean(fallbackPath)) ? (
                 <DashboardContentLoading />
               ) : memberships.length === 0 ? (
                 <PendingApproval fullName={fullName} />

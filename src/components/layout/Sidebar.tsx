@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { MouseEvent } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -58,6 +58,8 @@ function NavLink({
   active: boolean;
   onNavigate?: (href: string) => void;
 }) {
+  const [prefetchOnIntent, setPrefetchOnIntent] = useState(false);
+
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     if (
       event.defaultPrevented ||
@@ -76,7 +78,13 @@ function NavLink({
   return (
     <Link
       href={href}
+      // The dashboard embeds live totals in its server response. Prefetching
+      // that response could retain totals from before a subsequent edit.
+      prefetch={href !== '/' && prefetchOnIntent}
       onClick={handleClick}
+      onMouseEnter={() => setPrefetchOnIntent(true)}
+      onFocus={() => setPrefetchOnIntent(true)}
+      onTouchStart={() => setPrefetchOnIntent(true)}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',

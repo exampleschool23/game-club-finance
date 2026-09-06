@@ -15,6 +15,7 @@ import { todayIso } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatters';
 import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
+import { fetchFinanceReportSnapshot } from '@/lib/supabase/financeReportSnapshot';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { FileText, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
 import type { DailyCashEntry, DailyStockCount, Expense, StockPurchase } from '@/types';
@@ -61,6 +62,47 @@ export default function DailyReportPage() {
     setLoadError('');
     const supabase = createClient();
 
+    const snapshotResult = await fetchFinanceReportSnapshot(
+      supabase,
+      selectedClubId,
+      selectedDate,
+      selectedDate,
+      ['cash', 'stock_counts', 'purchases', 'expenses', 'debts'],
+    );
+
+    if (requestId !== requestSequence.current) return;
+
+    if (snapshotResult.error) {
+      setCashEntry(null);
+      setStockCounts([]);
+      setStockPurchases([]);
+      setExpenses([]);
+      setDebtIncome(0);
+      setLoadError(snapshotResult.error.message);
+      setLoading(false);
+      return;
+    }
+
+    if (snapshotResult.data) {
+      const snapshot = snapshotResult.data;
+      setCashEntry(snapshot.cashRows[0] ?? null);
+      setStockCounts(snapshot.stockCountRows.map((row) => ({
+        ...row,
+        products: row.product_name
+          ? { name: row.product_name, sort_order: row.sort_order }
+          : null,
+      })));
+      setStockPurchases(snapshot.purchaseRows);
+      setExpenses(snapshot.expenseRows);
+      setDebtIncome(snapshot.debtRows.reduce(
+        (sum, debt) => sum + Number(debt.amount ?? 0),
+        0,
+      ));
+      setLoading(false);
+      return;
+    }
+
+    // Compatibility path while migration 049 is being deployed.
     const [cashRes, initialStockRes, purchaseRes, expRes, debtRes] = await Promise.all([
       supabase
         .from('daily_cash_entries')

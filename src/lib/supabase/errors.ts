@@ -3,9 +3,11 @@ export function isMissingDatabaseFunction(
   functionName: string,
 ): boolean {
   if (!error) return false;
-  return error.code === 'PGRST202'
-    || (error.message?.includes(functionName) && error.message.includes('function'))
-    || false;
+  if (error.code) return error.code === 'PGRST202' || error.code === '42883';
+  const message = error.message ?? '';
+  return message.includes(functionName)
+    && /function/i.test(message)
+    && /could not find|does not exist/i.test(message);
 }
 
 export function isMissingDatabaseColumn(

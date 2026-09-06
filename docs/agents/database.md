@@ -56,6 +56,8 @@ operations. At least one owner must remain in a club.
 | `save_closing_stock_counts` | Save/validate daily counts and historical chain. |
 | `take_all_owner_money_for_month` | Atomically take one month/source remainder. |
 | `get_dashboard_snapshot` | Efficient dashboard payload. |
+| `get_dashboard_bootstrap` | Authenticated profile, memberships, and club configuration in one payload. |
+| `get_finance_report_snapshot` | Selective, date-bounded finance ledgers for report/detail screens. |
 | `get_latest_stock_closings` | Latest product closing values before a date. |
 | Delivery ledger RPCs | Claim, begin dispatch, and complete Telegram delivery. |
 
@@ -93,4 +95,3 @@ Some membership selects retry without newer columns, and performance RPC reads
 temporarily fall back to table queries. These handle application/database
 deployment skew. Removal requires a deliberate cleanup after deployment state
 is known, along with updates to fallback tests.
-

@@ -9,6 +9,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { DetailListSkeleton } from '@/components/ui/LoadingSkeleton';
 import { STOCK_PURCHASE_DEDUCTION_START_DATE } from '@/lib/calculations/barMoney';
 import { formatDateShort, formatNumber } from '@/lib/formatters';
+import { fetchFinanceReportSnapshot } from '@/lib/supabase/financeReportSnapshot';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
@@ -57,46 +58,58 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
 }
 
 function buildDailyRows(stockRows: StockRow[], purchaseRows: PurchaseRow[], expenseRows: ExpenseRow[]): DailyRow[] {
-  const dates = new Set<string>();
-  stockRows.forEach((row) => dates.add(row.date));
-  purchaseRows.forEach((row) => dates.add(row.date));
-  expenseRows.filter((row) => row.payment_source === 'bar').forEach((row) => dates.add(row.date));
-
-  return Array.from(dates).sort().map((date) => {
-    const sales = stockRows
-      .filter((row) => row.date === date)
-      .reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
-    const dayPurchases = purchaseRows.filter(
-      (row) => row.date === date && date >= STOCK_PURCHASE_DEDUCTION_START_DATE,
-    );
-    const dayExpenses = expenseRows.filter(
-      (row) => row.date === date && row.payment_source === 'bar',
-    );
-    const purchases = dayPurchases.reduce(
-      (sum, row) => sum + Number(row.quantity ?? 0) * Number(row.cost_price ?? 0),
-      0,
-    );
-    const expenses = dayExpenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-
-    return {
+  const rowsByDate = new Map<string, DailyRow>();
+  const rowFor = (date: string) => {
+    const existing = rowsByDate.get(date);
+    if (existing) return existing;
+    const row: DailyRow = {
       date,
-      sales,
-      purchases,
-      purchaseDetails: dayPurchases.map((row) => {
-        const product = Array.isArray(row.products) ? row.products[0] : row.products;
-        return {
-          label: `${product?.name ?? row.comment ?? '—'} × ${Number(row.quantity ?? 0)}`,
-          amount: Number(row.quantity ?? 0) * Number(row.cost_price ?? 0),
-        };
-      }),
-      expenses,
-      expenseDetails: dayExpenses.map((row) => ({
-        label: row.comment ? `${row.category}: ${row.comment}` : row.category,
-        amount: Number(row.amount ?? 0),
-      })),
-      moneyLeft: sales - purchases - expenses,
+      sales: 0,
+      purchases: 0,
+      purchaseDetails: [],
+      expenses: 0,
+      expenseDetails: [],
+      moneyLeft: 0,
     };
-  });
+    rowsByDate.set(date, row);
+    return row;
+  };
+
+  for (const stockRow of stockRows) {
+    rowFor(stockRow.date).sales += Number(stockRow.bar_income ?? 0);
+  }
+  for (const purchaseRow of purchaseRows) {
+    const row = rowFor(purchaseRow.date);
+    if (purchaseRow.date < STOCK_PURCHASE_DEDUCTION_START_DATE) continue;
+    const amount = Number(purchaseRow.quantity ?? 0) * Number(purchaseRow.cost_price ?? 0);
+    const product = Array.isArray(purchaseRow.products)
+      ? purchaseRow.products[0]
+      : purchaseRow.products;
+    row.purchases += amount;
+    row.purchaseDetails.push({
+      label: `${product?.name ?? purchaseRow.comment ?? '—'} × ${Number(purchaseRow.quantity ?? 0)}`,
+      amount,
+    });
+  }
+  for (const expenseRow of expenseRows) {
+    if (expenseRow.payment_source !== 'bar') continue;
+    const row = rowFor(expenseRow.date);
+    const amount = Number(expenseRow.amount ?? 0);
+    row.expenses += amount;
+    row.expenseDetails.push({
+      label: expenseRow.comment
+        ? `${expenseRow.category}: ${expenseRow.comment}`
+        : expenseRow.category,
+      amount,
+    });
+  }
+
+  return Array.from(rowsByDate.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => ({
+      ...row,
+      moneyLeft: row.sales - row.purchases - row.expenses,
+    }));
 }
 
 export default function BarMoneyDetailsPage({
@@ -118,7 +131,7 @@ export default function BarMoneyDetailsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchDetails = useCallback(async () => {
+  const fetchDetails = useCallback(async (isCurrent: () => boolean) => {
     if (!selectedClubId) {
       setRows([]);
       setLoading(false);
@@ -128,6 +141,37 @@ export default function BarMoneyDetailsPage({
     setLoading(true);
     setError('');
     const supabase = createClient();
+    const snapshotResult = await fetchFinanceReportSnapshot(
+      supabase,
+      selectedClubId,
+      from,
+      to,
+      ['stock_totals', 'purchases', 'expenses'],
+    );
+
+    if (!isCurrent()) return;
+
+    if (snapshotResult.error) {
+      setError(snapshotResult.error.message);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    if (snapshotResult.data) {
+      setRows(buildDailyRows(
+        snapshotResult.data.stockTotalRows,
+        snapshotResult.data.purchaseRows.map((row) => ({
+          ...row,
+          products: row.product_name ? { name: row.product_name } : null,
+        })),
+        snapshotResult.data.expenseRows,
+      ));
+      setLoading(false);
+      return;
+    }
+
+    // Compatibility path while migration 049 is being deployed.
     const [stockRes, purchaseRes, expenseRes] = await Promise.all([
       fetchAllRows<StockRow>(() =>
         inRangeQuery(
@@ -164,6 +208,8 @@ export default function BarMoneyDetailsPage({
       ),
     ]);
 
+    if (!isCurrent()) return;
+
     const firstError = [stockRes.error, purchaseRes.error, expenseRes.error].find(Boolean);
     if (firstError) {
       setError(firstError.message);
@@ -175,10 +221,13 @@ export default function BarMoneyDetailsPage({
   }, [from, selectedClubId, to]);
 
   useEffect(() => {
-    fetchDetails().catch((fetchError: unknown) => {
+    let cancelled = false;
+    fetchDetails(() => !cancelled).catch((fetchError: unknown) => {
+      if (cancelled) return;
       setError(fetchError instanceof Error ? fetchError.message : 'loadError');
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [fetchDetails]);
 
   const totals = rows.reduce(

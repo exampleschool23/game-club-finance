@@ -93,6 +93,16 @@ export default function MoneyTakenPage() {
     comment: '',
   });
   const isOwner = role === 'owner';
+  const withdrawalMonths = useMemo(() => {
+    const groups = new Map<string, OwnerWithdrawal[]>();
+    for (const withdrawal of withdrawals) {
+      const month = withdrawal.period_month.slice(0, 7);
+      const rows = groups.get(month) ?? [];
+      rows.push(withdrawal);
+      groups.set(month, rows);
+    }
+    return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a));
+  }, [withdrawals]);
 
   useEffect(() => {
     setForm((current) => ({ ...current, month: currentMonth }));
@@ -466,36 +476,44 @@ export default function MoneyTakenPage() {
                 {t('noHistory')}
               </div>
             ) : (
-              <div className="space-y-2">
-                {withdrawals.map((row) => (
-                  <article key={row.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${row.source === 'bar' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
-                            {t(`sources.${row.source}`)}
-                          </span>
-                          <span className="text-xs font-semibold text-gray-500">{formatYearMonth(row.period_month.slice(0, 7), locale)}</span>
-                        </div>
-                        <p className="mt-2 text-lg font-black text-gray-950">− {formatCurrency(row.amount, locale)} {tc('currency')}</p>
-                        {row.comment ? <p className="mt-1 break-words text-sm text-gray-600">{row.comment}</p> : null}
-                        <p className="mt-1 text-xs font-medium text-gray-400">
-                          {t('recordedAt', { date: formatDateTime(row.created_at, locale) })}
-                        </p>
-                      </div>
-                      {isOwner ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(row)}
-                          disabled={deletingId === row.id}
-                          aria-label={tc('delete')}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                        >
-                          <Trash2 size={17} />
-                        </button>
-                      ) : null}
+              <div className="space-y-6">
+                {withdrawalMonths.map(([month, rows]) => (
+                  <section key={month} aria-labelledby={`withdrawal-month-${month}`}>
+                    <h3 id={`withdrawal-month-${month}`} className="mb-3 border-b border-gray-200 pb-2 text-sm font-bold text-gray-700">
+                      {formatYearMonth(month, locale)}
+                    </h3>
+                    <div className="space-y-2">
+                      {rows.map((row) => (
+                        <article key={row.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`rounded-full px-2 py-1 text-xs font-bold ${row.source === 'bar' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
+                                  {t(`sources.${row.source}`)}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-lg font-black text-gray-950">− {formatCurrency(row.amount, locale)} {tc('currency')}</p>
+                              {row.comment ? <p className="mt-1 break-words text-sm text-gray-600">{row.comment}</p> : null}
+                              <p className="mt-1 text-xs font-medium text-gray-400">
+                                {t('recordedAt', { date: formatDateTime(row.created_at, locale) })}
+                              </p>
+                            </div>
+                            {isOwner ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(row)}
+                                disabled={deletingId === row.id}
+                                aria-label={tc('delete')}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                              >
+                                <Trash2 size={17} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </article>
+                      ))}
                     </div>
-                  </article>
+                  </section>
                 ))}
               </div>
             )}

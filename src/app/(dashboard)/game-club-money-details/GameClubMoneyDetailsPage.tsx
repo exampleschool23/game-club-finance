@@ -8,6 +8,7 @@ import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { useClub } from '@/components/layout/DashboardShell';
 import { DetailListSkeleton } from '@/components/ui/LoadingSkeleton';
 import { formatDateShort, formatNumber } from '@/lib/formatters';
+import { fetchFinanceReportSnapshot } from '@/lib/supabase/financeReportSnapshot';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
@@ -59,39 +60,55 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
 }
 
 function buildDailyRows(cashRows: CashRow[], debtRows: DebtPaymentRow[], expenseRows: ExpenseRow[]): DailyRow[] {
-  const dates = new Set<string>();
-  cashRows.forEach((row) => dates.add(row.date));
-  debtRows.forEach((row) => dates.add(row.date));
-  expenseRows.filter((row) => row.payment_source !== 'bar').forEach((row) => dates.add(row.date));
-
-  return Array.from(dates).sort().map((date) => {
-    const dayCash = cashRows.filter((row) => row.date === date);
-    const dayDebtPayments = debtRows.filter((row) => row.date === date);
-    const dayExpenses = expenseRows.filter(
-      (row) => row.date === date && row.payment_source !== 'bar',
-    );
-    const cash = dayCash.reduce((sum, row) => sum + Number(row.cash_income ?? 0), 0);
-    const terminal = dayCash.reduce((sum, row) => sum + Number(row.terminal_income ?? 0), 0);
-    const card = dayCash.reduce((sum, row) => sum + Number(row.card_income ?? 0), 0);
-    const playstation = dayCash.reduce((sum, row) => sum + Number(row.playstation_income ?? 0), 0);
-    const debtPayments = dayDebtPayments.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-    const expenses = dayExpenses.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-
-    return {
+  const rowsByDate = new Map<string, DailyRow>();
+  const rowFor = (date: string) => {
+    const existing = rowsByDate.get(date);
+    if (existing) return existing;
+    const row: DailyRow = {
       date,
-      cash,
-      terminal,
-      card,
-      playstation,
-      debtPayments,
-      expenses,
-      expenseDetails: dayExpenses.map((row) => ({
-        label: row.comment ? `${row.category}: ${row.comment}` : row.category,
-        amount: Number(row.amount ?? 0),
-      })),
-      moneyLeft: cash + terminal + card + playstation + debtPayments - expenses,
+      cash: 0,
+      terminal: 0,
+      card: 0,
+      playstation: 0,
+      debtPayments: 0,
+      expenses: 0,
+      expenseDetails: [],
+      moneyLeft: 0,
     };
-  });
+    rowsByDate.set(date, row);
+    return row;
+  };
+
+  for (const cashRow of cashRows) {
+    const row = rowFor(cashRow.date);
+    row.cash += Number(cashRow.cash_income ?? 0);
+    row.terminal += Number(cashRow.terminal_income ?? 0);
+    row.card += Number(cashRow.card_income ?? 0);
+    row.playstation += Number(cashRow.playstation_income ?? 0);
+  }
+  for (const debtRow of debtRows) {
+    rowFor(debtRow.date).debtPayments += Number(debtRow.amount ?? 0);
+  }
+  for (const expenseRow of expenseRows) {
+    if (expenseRow.payment_source === 'bar') continue;
+    const row = rowFor(expenseRow.date);
+    const amount = Number(expenseRow.amount ?? 0);
+    row.expenses += amount;
+    row.expenseDetails.push({
+      label: expenseRow.comment
+        ? `${expenseRow.category}: ${expenseRow.comment}`
+        : expenseRow.category,
+      amount,
+    });
+  }
+
+  return Array.from(rowsByDate.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => ({
+      ...row,
+      moneyLeft: row.cash + row.terminal + row.card + row.playstation
+        + row.debtPayments - row.expenses,
+    }));
 }
 
 export default function GameClubMoneyDetailsPage({
@@ -113,7 +130,7 @@ export default function GameClubMoneyDetailsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchDetails = useCallback(async () => {
+  const fetchDetails = useCallback(async (isCurrent: () => boolean) => {
     if (!selectedClubId) {
       setRows([]);
       setLoading(false);
@@ -123,6 +140,34 @@ export default function GameClubMoneyDetailsPage({
     setLoading(true);
     setError('');
     const supabase = createClient();
+    const snapshotResult = await fetchFinanceReportSnapshot(
+      supabase,
+      selectedClubId,
+      from,
+      to,
+      ['cash', 'debt_payments', 'expenses'],
+    );
+
+    if (!isCurrent()) return;
+
+    if (snapshotResult.error) {
+      setError(snapshotResult.error.message);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    if (snapshotResult.data) {
+      setRows(buildDailyRows(
+        snapshotResult.data.cashRows,
+        snapshotResult.data.debtPaymentRows,
+        snapshotResult.data.expenseRows,
+      ));
+      setLoading(false);
+      return;
+    }
+
+    // Compatibility path while migration 049 is being deployed.
     const [cashRes, debtRes, expenseRes] = await Promise.all([
       fetchAllRows<CashRow>(() =>
         inRangeQuery(
@@ -159,6 +204,8 @@ export default function GameClubMoneyDetailsPage({
       ),
     ]);
 
+    if (!isCurrent()) return;
+
     const firstError = [cashRes.error, debtRes.error, expenseRes.error].find(Boolean);
     if (firstError) {
       setError(firstError.message);
@@ -170,10 +217,13 @@ export default function GameClubMoneyDetailsPage({
   }, [from, selectedClubId, to]);
 
   useEffect(() => {
-    fetchDetails().catch((fetchError: unknown) => {
+    let cancelled = false;
+    fetchDetails(() => !cancelled).catch((fetchError: unknown) => {
+      if (cancelled) return;
       setError(fetchError instanceof Error ? fetchError.message : 'loadError');
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [fetchDetails]);
 
   const totals = rows.reduce(

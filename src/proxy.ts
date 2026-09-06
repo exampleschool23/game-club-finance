@@ -11,10 +11,18 @@ export async function proxy(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isProtectedPage = !isAuthPage && !isAuthCallback;
+  const hasAuthCookie = hasSupabaseAuthCookie(request);
 
   // The dashboard layout validates the user before rendering. Avoid making the
   // same remote getUser() request in middleware when an auth cookie is present.
-  if (isProtectedPage && hasSupabaseAuthCookie(request)) {
+  if (isProtectedPage && hasAuthCookie) {
+    return NextResponse.next({ request });
+  }
+
+  // Anonymous visitors can render the login page without a Sydney Supabase
+  // Auth round trip. A valid auth cookie still gets checked so signed-in users
+  // are redirected to the dashboard.
+  if (isAuthPage && !hasAuthCookie) {
     return NextResponse.next({ request });
   }
 

@@ -36,7 +36,9 @@ Never import the service client into a client component. Its key is privileged.
 
 `getDashboardBootstrap()` authenticates the user and loads profile,
 memberships, clubs, per-club feature access, business-day start, and enabled
-payment methods. React `cache()` shares that work inside one server request.
+payment methods through `get_dashboard_bootstrap`. React `cache()` shares that
+work inside one server request. A direct-query compatibility fallback remains
+for deployments where migration 048 has not reached the database yet.
 
 `DashboardShell` owns the selected-club client context and refreshes membership
 data. The selected club is remembered in the
@@ -46,6 +48,13 @@ not authorization: queries still require `club_id`, and RLS must authorize it.
 Navigation visibility and redirects use `src/lib/permissions.ts`. Database RLS
 in migration 033 mirrors those feature gates. A new feature or route may require
 changes in both places.
+
+Sidebar routes use intent-based full prefetching. Do not eagerly prefetch every
+dynamic route on mount: that would execute protected server work for pages the
+user may never visit. During an uncached navigation the current page remains
+visible with a slim progress indicator instead of a full-page loading skeleton.
+The dashboard root does not prefetch because its server response embeds live
+financial totals that can change while the user edits another screen.
 
 ## Page and calculation boundaries
 
@@ -58,6 +67,9 @@ changes in both places.
 - The dashboard prefers `get_dashboard_snapshot`; closing stock prefers
   `get_latest_stock_closings`. Both retain temporary direct-query fallbacks for
   deployments where the application arrives before the database migration.
+- Daily/monthly reports and dashboard money-detail routes prefer the selective
+  `get_finance_report_snapshot`. Pass only the ledger sections the screen needs;
+  direct table queries remain only as the migration-049 compatibility path.
 
 Do not copy a financial formula into a page to avoid importing a calculation.
 That creates divergent dashboard, report, and Telegram totals.
@@ -79,4 +91,3 @@ Supabase rows -> financial calculations -> localized report -> SVG/PNG
 ```
 
 Read `docs/runbooks/telegram-report.md` before changing this pipeline.
-
