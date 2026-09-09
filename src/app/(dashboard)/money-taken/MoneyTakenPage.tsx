@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
   Banknote,
@@ -95,6 +95,8 @@ export default function MoneyTakenPage() {
     comment: '',
     amount: '',
   });
+  const requestId = useRef(0);
+  const mutationPending = useRef(false);
   const isOwner = role === 'owner';
   const withdrawalMonths = useMemo(() => {
     const groups = new Map<string, OwnerWithdrawal[]>();
@@ -108,147 +110,166 @@ export default function MoneyTakenPage() {
   }, [withdrawals]);
 
   useEffect(() => {
-    setForm((current) => ({ ...current, month: currentMonth }));
+    setForm({ month: currentMonth, source: 'game_club', amount: '', comment: '' });
   }, [currentMonth, selectedClubId]);
 
   const loadData = useCallback(async () => {
-    if (!selectedClubId) {
-      setBalances(emptyBalances);
-      setBalancesByMonth({});
-      setPaymentMethodBalancesByMonth({});
-      setWithdrawals([]);
-      setLoading(false);
-      return;
-    }
+    const id = ++requestId.current;
+    setBalances(emptyBalances);
+    setBalancesByMonth({});
+    setPaymentMethodBalancesByMonth({});
+    setWithdrawals([]);
+    try {
+      if (!selectedClubId) {
+        setBalances(emptyBalances);
+        setBalancesByMonth({});
+        setPaymentMethodBalancesByMonth({});
+        setWithdrawals([]);
+        setLoading(false);
+        return;
+      }
 
-    setLoading(true);
-    setError('');
-    const supabase = createClient();
-    const snapshotResult = await supabase.rpc('get_owner_profit_snapshot', {
-      p_club_id: selectedClubId,
-      p_through_date: businessToday,
-    });
+      setLoading(true);
+      setError('');
+      const supabase = createClient();
+      const snapshotResult = await supabase.rpc('get_owner_profit_snapshot', {
+        p_club_id: selectedClubId,
+        p_through_date: businessToday,
+      });
 
-    if (!snapshotResult.error && snapshotResult.data?.paymentMethodBalancesByMonth) {
-      const snapshot = buildOwnerProfitSnapshot(snapshotResult.data as OwnerProfitSnapshotPayload);
-      setBalancesByMonth(snapshot.byMonth);
-      setWithdrawals(snapshot.withdrawals);
-      setPaymentMethodBalancesByMonth(snapshot.paymentMethodBalancesByMonth);
+      if (id !== requestId.current) return;
+
+      if (!snapshotResult.error && snapshotResult.data?.paymentMethodBalancesByMonth) {
+        const snapshot = buildOwnerProfitSnapshot(snapshotResult.data as OwnerProfitSnapshotPayload);
+        setBalancesByMonth(snapshot.byMonth);
+        setWithdrawals(snapshot.withdrawals);
+        setPaymentMethodBalancesByMonth(snapshot.paymentMethodBalancesByMonth);
+        setBalances({
+          gameClubEarned: snapshot.total.gameClub.earned,
+          barEarned: snapshot.total.bar.earned,
+          gameClubTaken: snapshot.total.gameClub.withdrawn,
+          barTaken: snapshot.total.bar.withdrawn,
+          gameClubAvailable: snapshot.total.gameClub.available,
+          barAvailable: snapshot.total.bar.available,
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (snapshotResult.error && !isMissingDatabaseFunction(snapshotResult.error, 'get_owner_profit_snapshot')) {
+        setError(snapshotResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      // Compatibility fallback while the application and migration are deployed separately.
+      const [cashRes, stockRes, purchaseRes, expenseRes, debtPaymentRes, withdrawalRes] = await Promise.all([
+        fetchAllRows<DailyCashRow>(() => supabase
+          .from('daily_cash_entries')
+          .select('date,cash_income,terminal_income,card_income,playstation_income')
+          .eq('club_id', selectedClubId)
+          .lte('date', businessToday)
+          .order('id')),
+        fetchAllRows<StockCountRow>(() => supabase
+          .from('daily_stock_counts')
+          .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
+          .eq('club_id', selectedClubId)
+          .lte('date', businessToday)
+          .order('id')),
+        fetchAllRows<StockPurchaseCostRow>(() => supabase
+          .from('stock_purchases')
+          .select('date,quantity,cost_price')
+          .eq('club_id', selectedClubId)
+          .lte('date', businessToday)
+          .order('id')),
+        fetchAllRows<ExpenseRow>(() => supabase
+          .from('expenses')
+          .select('id,date,amount,category,payment_method,payment_source,comment,created_at')
+          .eq('club_id', selectedClubId)
+          .lte('date', businessToday)
+          .order('id')),
+        fetchAllRows<DebtPaymentValueRow>(() => supabase
+          .from('debt_payments')
+          .select('date,amount,payment_method')
+          .eq('club_id', selectedClubId)
+          .lte('date', businessToday)
+          .order('id')),
+        fetchAllRows<OwnerWithdrawal>(() => supabase
+          .from('owner_withdrawals')
+          .select('id,club_id,period_month,source,amount,comment,created_by,created_at,updated_at')
+          .eq('club_id', selectedClubId)
+          .lte('period_month', `${currentMonth}-01`)
+          .order('period_month', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id')),
+      ]);
+      if (id !== requestId.current) return;
+      const firstError = [
+        cashRes.error,
+        stockRes.error,
+        purchaseRes.error,
+        expenseRes.error,
+        debtPaymentRes.error,
+        withdrawalRes.error,
+      ].find(Boolean);
+
+      if (firstError) {
+        setError(firstError.message);
+        setLoading(false);
+        return;
+      }
+
+      const withdrawalRows = withdrawalRes.data ?? [];
+      const nextLedgerRows = {
+        cashRows: cashRes.data ?? [],
+        stockRows: stockRes.data ?? [],
+        purchaseRows: purchaseRes.data ?? [],
+        expenseRows: expenseRes.data ?? [],
+        debtPaymentRows: debtPaymentRes.data ?? [],
+        withdrawalRows,
+      };
+      const availableMoney = calculateAvailableMoney({
+        ...nextLedgerRows,
+        throughDate: businessToday,
+      });
+      setBalancesByMonth(calculateAvailableMoneyByMonth({
+        ...nextLedgerRows,
+        throughDate: businessToday,
+      }));
+      setWithdrawals(withdrawalRows);
+      const months = new Set([
+        ...nextLedgerRows.cashRows,
+        ...nextLedgerRows.expenseRows,
+        ...nextLedgerRows.debtPaymentRows,
+      ].map((row) => row.date.slice(0, 7)));
+      setPaymentMethodBalancesByMonth(Object.fromEntries([...months].map((month) => [
+        month,
+        calculateGameClubMoneyLeftByPaymentMethod(
+          nextLedgerRows.cashRows.filter((row) => row.date.startsWith(month)),
+          nextLedgerRows.expenseRows.filter((row) => row.date.startsWith(month)),
+          nextLedgerRows.debtPaymentRows.filter((row) => row.date.startsWith(month)),
+        ),
+      ])));
       setBalances({
-        gameClubEarned: snapshot.total.gameClub.earned,
-        barEarned: snapshot.total.bar.earned,
-        gameClubTaken: snapshot.total.gameClub.withdrawn,
-        barTaken: snapshot.total.bar.withdrawn,
-        gameClubAvailable: snapshot.total.gameClub.available,
-        barAvailable: snapshot.total.bar.available,
+        gameClubEarned: availableMoney.gameClub.earned,
+        barEarned: availableMoney.bar.earned,
+        gameClubTaken: availableMoney.gameClub.withdrawn,
+        barTaken: availableMoney.bar.withdrawn,
+        gameClubAvailable: availableMoney.gameClub.available,
+        barAvailable: availableMoney.bar.available,
       });
       setLoading(false);
-      return;
+    } catch (loadError: unknown) {
+      if (id === requestId.current) {
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
+        setLoading(false);
+      }
     }
-
-    if (snapshotResult.error && !isMissingDatabaseFunction(snapshotResult.error, 'get_owner_profit_snapshot')) {
-      setError(snapshotResult.error.message);
-      setLoading(false);
-      return;
-    }
-
-    // Compatibility fallback while the application and migration are deployed separately.
-    const [cashRes, stockRes, purchaseRes, expenseRes, debtPaymentRes, withdrawalRes] = await Promise.all([
-      fetchAllRows<DailyCashRow>(() => supabase
-        .from('daily_cash_entries')
-        .select('date,cash_income,terminal_income,card_income,playstation_income')
-        .eq('club_id', selectedClubId)
-        .lte('date', businessToday)),
-      fetchAllRows<StockCountRow>(() => supabase
-        .from('daily_stock_counts')
-        .select('date,bar_income,bar_profit,bar_cost,sold_quantity')
-        .eq('club_id', selectedClubId)
-        .lte('date', businessToday)),
-      fetchAllRows<StockPurchaseCostRow>(() => supabase
-        .from('stock_purchases')
-        .select('date,quantity,cost_price')
-        .eq('club_id', selectedClubId)
-        .lte('date', businessToday)),
-      fetchAllRows<ExpenseRow>(() => supabase
-        .from('expenses')
-        .select('id,date,amount,category,payment_method,payment_source,comment,created_at')
-        .eq('club_id', selectedClubId)
-        .lte('date', businessToday)),
-      fetchAllRows<DebtPaymentValueRow>(() => supabase
-        .from('debt_payments')
-        .select('date,amount,payment_method')
-        .eq('club_id', selectedClubId)
-        .lte('date', businessToday)),
-      fetchAllRows<OwnerWithdrawal>(() => supabase
-        .from('owner_withdrawals')
-        .select('id,club_id,period_month,source,amount,comment,created_by,created_at,updated_at')
-        .eq('club_id', selectedClubId)
-        .lte('period_month', `${currentMonth}-01`)
-        .order('period_month', { ascending: false })
-        .order('created_at', { ascending: false })),
-    ]);
-    const firstError = [
-      cashRes.error,
-      stockRes.error,
-      purchaseRes.error,
-      expenseRes.error,
-      debtPaymentRes.error,
-      withdrawalRes.error,
-    ].find(Boolean);
-
-    if (firstError) {
-      setError(firstError.message);
-      setLoading(false);
-      return;
-    }
-
-    const withdrawalRows = withdrawalRes.data ?? [];
-    const nextLedgerRows = {
-      cashRows: cashRes.data ?? [],
-      stockRows: stockRes.data ?? [],
-      purchaseRows: purchaseRes.data ?? [],
-      expenseRows: expenseRes.data ?? [],
-      debtPaymentRows: debtPaymentRes.data ?? [],
-      withdrawalRows,
-    };
-    const availableMoney = calculateAvailableMoney({
-      ...nextLedgerRows,
-      throughDate: businessToday,
-    });
-    setBalancesByMonth(calculateAvailableMoneyByMonth({
-      ...nextLedgerRows,
-      throughDate: businessToday,
-    }));
-    setWithdrawals(withdrawalRows);
-    const months = new Set([
-      ...nextLedgerRows.cashRows,
-      ...nextLedgerRows.expenseRows,
-      ...nextLedgerRows.debtPaymentRows,
-    ].map((row) => row.date.slice(0, 7)));
-    setPaymentMethodBalancesByMonth(Object.fromEntries([...months].map((month) => [
-      month,
-      calculateGameClubMoneyLeftByPaymentMethod(
-        nextLedgerRows.cashRows.filter((row) => row.date.startsWith(month)),
-        nextLedgerRows.expenseRows.filter((row) => row.date.startsWith(month)),
-        nextLedgerRows.debtPaymentRows.filter((row) => row.date.startsWith(month)),
-      ),
-    ])));
-    setBalances({
-      gameClubEarned: availableMoney.gameClub.earned,
-      barEarned: availableMoney.bar.earned,
-      gameClubTaken: availableMoney.gameClub.withdrawn,
-      barTaken: availableMoney.bar.withdrawn,
-      gameClubAvailable: availableMoney.gameClub.available,
-      barAvailable: availableMoney.bar.available,
-    });
-    setLoading(false);
   }, [businessToday, currentMonth, selectedClubId]);
 
   useEffect(() => {
-    loadData().catch((loadError: unknown) => {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-      setLoading(false);
-    });
+    void loadData();
+    return () => { requestId.current += 1; };
   }, [loadData]);
 
   const sourceAvailable = useMemo(() => {
@@ -267,6 +288,10 @@ export default function MoneyTakenPage() {
     return Math.max(0, sourceBalance);
   }, [balancesByMonth, form.month, form.source]);
   const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
+  const monthlyOverallProfit = balancesByMonth[form.month]?.totalEarned ?? 0;
+  const monthlyBalance = balancesByMonth[form.month];
+  const monthlyGameClubMoney = monthlyBalance?.gameClub.available ?? 0;
+  const monthlyWithdrawn = monthlyBalance?.totalWithdrawn ?? 0;
   const monthlyBarMoney = balancesByMonth[form.month]?.bar.available ?? 0;
   const totalAvailable = balances.gameClubAvailable + balances.barAvailable;
   const totalTaken = balances.gameClubTaken + balances.barTaken;
@@ -277,6 +302,7 @@ export default function MoneyTakenPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (mutationPending.current || loading || error) return;
     const amount = parseCurrencyInput(form.amount);
 
     if (!selectedClubId || !isOwner) {
@@ -288,53 +314,76 @@ export default function MoneyTakenPage() {
       return;
     }
 
+    const operationRequestId = requestId.current;
+    mutationPending.current = true;
     setSaving(true);
-    const supabase = createClient();
-    const { error: insertError } = await supabase.rpc('withdraw_owner_money_for_month', {
-      p_club_id: selectedClubId,
-      p_period_month: `${form.month}-01`,
-      p_source: form.source,
-      p_amount: amount,
-      p_comment: form.comment.trim() || null,
-    });
-    setSaving(false);
+    try {
+      const supabase = createClient();
+      const { error: insertError } = await supabase.rpc('withdraw_owner_money_for_month', {
+        p_club_id: selectedClubId,
+        p_period_month: `${form.month}-01`,
+        p_source: form.source,
+        p_amount: amount,
+        p_comment: form.comment.trim() || null,
+      });
 
-    if (insertError) {
-      showToast(isMissingDatabaseFunction(insertError, 'withdraw_owner_money_for_month')
-        ? t('migrationRequired')
-        : insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
+      if (operationRequestId !== requestId.current) return;
+      if (insertError) {
+        showToast(isMissingDatabaseFunction(insertError, 'withdraw_owner_money_for_month')
+          ? t('migrationRequired')
+          : insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
+        await loadData();
+        return;
+      }
+
+      setForm((current) => ({ ...current, comment: '', amount: '' }));
+      showToast(t('saved'), 'success');
       await loadData();
-      return;
+    } catch (saveError: unknown) {
+      if (operationRequestId !== requestId.current) return;
+      showToast(saveError instanceof Error ? saveError.message : String(saveError), 'error');
+      await loadData();
+    } finally {
+      mutationPending.current = false;
+      setSaving(false);
     }
-
-    setForm((current) => ({ ...current, comment: '', amount: '' }));
-    showToast(t('saved'), 'success');
-    await loadData();
   }
 
   async function handleDelete(row: OwnerWithdrawal) {
+    if (mutationPending.current || loading || error || row.club_id !== selectedClubId) return;
     if (!selectedClubId || !isOwner || !window.confirm(t('deleteConfirm'))) return;
 
+    const operationRequestId = requestId.current;
+    mutationPending.current = true;
     setDeletingId(row.id);
-    const supabase = createClient();
-    const { error: deleteError } = await supabase
-      .from('owner_withdrawals')
-      .delete()
-      .eq('club_id', selectedClubId)
-      .eq('id', row.id);
-    setDeletingId(null);
+    try {
+      const supabase = createClient();
+      const { error: deleteError } = await supabase
+        .from('owner_withdrawals')
+        .delete()
+        .eq('club_id', selectedClubId)
+        .eq('id', row.id);
 
-    if (deleteError) {
-      showToast(deleteError.message, 'error');
-      return;
+      if (operationRequestId !== requestId.current) return;
+      if (deleteError) {
+        showToast(deleteError.message, 'error');
+        return;
+      }
+
+      showToast(t('deleted'), 'success');
+      await loadData();
+    } catch (deleteError: unknown) {
+      if (operationRequestId !== requestId.current) return;
+      showToast(deleteError instanceof Error ? deleteError.message : String(deleteError), 'error');
+      await loadData();
+    } finally {
+      mutationPending.current = false;
+      setDeletingId(null);
     }
-
-    showToast(t('deleted'), 'success');
-    await loadData();
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto w-full max-w-6xl [&_.truncate]:whitespace-normal [&_.truncate]:overflow-visible [&_.truncate]:text-clip">
       <PageHeader title={t('title')} description={t('description')} />
 
       {error ? (
@@ -343,6 +392,7 @@ export default function MoneyTakenPage() {
         </div>
       ) : null}
 
+      <h2 className="mb-2 font-bold text-gray-950">{t('allMonths')}</h2>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           loading={loading}
@@ -356,50 +406,96 @@ export default function MoneyTakenPage() {
           label={t('gameClubAvailable')}
           value={`${formatCurrency(balances.gameClubAvailable, locale)} ${tc('currency')}`}
           icon={Gamepad2}
-          valueClassName={balances.gameClubAvailable < 0 ? 'text-red-600' : 'text-blue-700'}
+          valueClassName={balances.gameClubAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}
         />
         <MetricCard
           loading={loading}
           label={t('barAvailable')}
           value={`${formatCurrency(balances.barAvailable, locale)} ${tc('currency')}`}
           icon={GlassWater}
-          valueClassName={balances.barAvailable < 0 ? 'text-red-600' : 'text-orange-700'}
+          valueClassName={balances.barAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}
         />
         <MetricCard
           loading={loading}
           label={t('totalTaken')}
+          valueClassName="text-red-600"
           value={`${formatCurrency(totalTaken, locale)} ${tc('currency')}`}
           icon={ArrowDownToLine}
         />
       </div>
 
+      <div className="mt-5 max-w-sm">
+        <label className="label">{t('month')}</label>
+        <MonthPicker value={form.month} max={currentMonth} onChange={(value) => setField('month', value)} />
+      </div>
+
+      <section className="mt-5" aria-label={t('monthlyOverallProfit')}>
+        <MetricCard
+          loading={loading}
+          label={`${t('monthlyOverallProfit')} · ${formatYearMonth(form.month, locale)}`}
+          value={`${formatCurrency(monthlyOverallProfit, locale)} ${tc('currency')}`}
+          icon={CircleDollarSign}
+          valueClassName={monthlyOverallProfit < 0 ? 'text-red-600' : 'text-blue-700'}
+        />
+        <p className="mt-2 text-sm text-gray-500">{t('monthlyOverallProfitDescription')}</p>
+      </section>
+
       <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-4">
-          <h2 className="font-bold text-gray-950">{t('paymentMethodBalancesTitle')} · {formatYearMonth(form.month, locale)}</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{t('paymentMethodBalancesDescription')}</p>
+        <h2 className="mb-4 font-bold text-gray-950">{t('monthlyRemaining')} · {formatYearMonth(form.month, locale)}</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {([
+            ['monthlyRemaining', monthlyBalance?.totalAvailable ?? 0, CircleDollarSign],
+            ['monthlyWithdrawn', monthlyWithdrawn, ArrowDownToLine],
+          ] as const).map(([label, amount, icon]) => (
+            <MetricCard key={label} loading={loading} label={t(label)}
+              value={`${formatCurrency(amount, locale)} ${tc('currency')}`} icon={icon}
+              valueClassName={label === 'monthlyWithdrawn' || amount < 0 ? 'text-red-600' : 'text-emerald-700'} />
+          ))}
         </div>
+      </section>
+
+      <section className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
+        <h2 className="mb-4 font-bold text-gray-950">{t('sources.game_club')} · {formatYearMonth(form.month, locale)}</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ['earnedBeforeWithdrawals', monthlyBalance?.gameClub.earned ?? 0, Gamepad2],
+            ['monthlyWithdrawn', monthlyBalance?.gameClub.withdrawn ?? 0, ArrowDownToLine],
+            ['monthlyRemaining', monthlyGameClubMoney, CircleDollarSign],
+          ] as const).map(([label, amount, icon]) => (
+            <MetricCard key={label} loading={loading} label={t(label)}
+              value={`${formatCurrency(amount, locale)} ${tc('currency')}`} icon={icon}
+              valueClassName={label === 'monthlyWithdrawn' || amount < 0 ? 'text-red-600' : label === 'earnedBeforeWithdrawals' ? 'text-blue-700' : 'text-emerald-700'} />
+          ))}
+        </div>
+        <p className="mb-3 mt-4 text-sm text-gray-600">{t('clubMethodsBeforeWithdrawals')}</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {([
             ['cash', Banknote],
             ['terminal', Landmark],
             ['card', CreditCard],
+            ['playstation', Gamepad2],
           ] as const).map(([method, Icon]) => (
-            <MetricCard
-              key={method}
-              loading={loading}
-              label={tc(`paymentMethods.${method}`)}
+            <MetricCard key={method} loading={loading}
+              label={method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`)}
               value={`${formatCurrency(paymentMethodBalances[method], locale)} ${tc('currency')}`}
               icon={Icon}
-              valueClassName={paymentMethodBalances[method] < 0 ? 'text-red-600' : 'text-emerald-700'}
-            />
+              valueClassName={paymentMethodBalances[method] < 0 ? 'text-red-600' : 'text-blue-700'} />
           ))}
-          <MetricCard
-            loading={loading}
-            label={t('sources.bar')}
-            value={`${formatCurrency(monthlyBarMoney, locale)} ${tc('currency')}`}
-            icon={GlassWater}
-            valueClassName={monthlyBarMoney < 0 ? 'text-red-600' : 'text-orange-700'}
-          />
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-xl border border-orange-100 bg-orange-50 p-5 shadow-sm">
+        <h2 className="mb-4 font-bold text-gray-950">{t('sources.bar')} · {formatYearMonth(form.month, locale)}</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ['earnedBeforeWithdrawals', monthlyBalance?.bar.earned ?? 0, GlassWater],
+            ['monthlyWithdrawn', monthlyBalance?.bar.withdrawn ?? 0, ArrowDownToLine],
+            ['monthlyRemaining', monthlyBarMoney, CircleDollarSign],
+          ] as const).map(([label, amount, icon]) => (
+            <MetricCard key={label} loading={loading} label={t(label)}
+              value={`${formatCurrency(amount, locale)} ${tc('currency')}`} icon={icon}
+              valueClassName={label === 'monthlyWithdrawn' || amount < 0 ? 'text-red-600' : label === 'earnedBeforeWithdrawals' ? 'text-blue-700' : 'text-emerald-700'} />
+          ))}
         </div>
       </section>
 
@@ -443,15 +539,6 @@ export default function MoneyTakenPage() {
               </div>
 
               <div>
-                <label className="label">{t('month')}</label>
-                <MonthPicker
-                  value={form.month}
-                  max={currentMonth}
-                  onChange={(value) => setField('month', value)}
-                />
-              </div>
-
-              <div>
                 <label htmlFor="withdrawal-amount" className="label">{t('amount')} ({tc('currency')})</label>
                 <input
                   id="withdrawal-amount"
@@ -481,7 +568,7 @@ export default function MoneyTakenPage() {
 
               <button
                 type="submit"
-                disabled={saving || !Number.isFinite(parseCurrencyInput(form.amount)) || parseCurrencyInput(form.amount) <= 0 || parseCurrencyInput(form.amount) > sourceAvailable}
+                disabled={loading || !!error || deletingId !== null || saving || !Number.isFinite(parseCurrencyInput(form.amount)) || parseCurrencyInput(form.amount) <= 0 || parseCurrencyInput(form.amount) > sourceAvailable}
                 className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ArrowDownToLine size={18} />
@@ -518,7 +605,7 @@ export default function MoneyTakenPage() {
                                   {t(`sources.${row.source}`)}
                                 </span>
                               </div>
-                              <p className="mt-2 text-lg font-black text-gray-950">− {formatCurrency(row.amount, locale)} {tc('currency')}</p>
+                              <p className="mt-2 text-lg font-black text-red-600">− {formatCurrency(row.amount, locale)} {tc('currency')}</p>
                               {row.comment ? <p className="mt-1 break-words text-sm text-gray-600">{row.comment}</p> : null}
                               <p className="mt-1 text-xs font-medium text-gray-400">
                                 {t('recordedAt', { date: formatDateTime(row.created_at, locale) })}
@@ -528,7 +615,7 @@ export default function MoneyTakenPage() {
                               <button
                                 type="button"
                                 onClick={() => handleDelete(row)}
-                                disabled={deletingId === row.id}
+                                disabled={loading || !!error || saving || deletingId !== null}
                                 aria-label={tc('delete')}
                                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                               >

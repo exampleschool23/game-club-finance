@@ -54,3 +54,29 @@ describe('owner profit snapshot', () => {
     expect(result.paymentMethodBalances).toEqual({ cash: 0, terminal: 0, card: 0, playstation: 0 });
   });
 });
+
+it('shows zero remaining for July after full Club and Bar withdrawals', () => {
+  const { byMonth } = buildOwnerProfitSnapshot({
+    monthlyBalances: [{ period_month: '2026-07-01', game_club_earned: 17_000_000,
+      bar_earned: 5_109_304, game_club_withdrawn: 17_000_000, bar_withdrawn: 5_109_304 }],
+    withdrawalRows: [],
+    paymentMethodBalancesByMonth: { '2026-07': { cash: 415_600, terminal: 1_221_400, card: 15_363_000 } },
+  });
+  expect(byMonth['2026-07'].totalEarned).toBe(22_109_304);
+  expect(byMonth['2026-07'].totalWithdrawn).toBe(22_109_304);
+  expect(byMonth['2026-07'].gameClub.available).toBe(0);
+  expect(byMonth['2026-07'].bar.available).toBe(0);
+  expect(byMonth['2026-07'].totalAvailable).toBe(0);
+});
+
+it('preserves monthly deficits and aggregate overdrawn flags', () => {
+  const { byMonth, total } = buildOwnerProfitSnapshot({
+    monthlyBalances: [{ period_month: '2026-07-01', game_club_earned: 100,
+      bar_earned: 300, game_club_withdrawn: 200, bar_withdrawn: 0 }],
+    withdrawalRows: [],
+  });
+  expect(byMonth['2026-07'].totalAvailable).toBe(200);
+  expect(byMonth['2026-07'].gameClub.available).toBe(-100);
+  expect(total.totalAvailable).toBe(300);
+  expect(total.hasOverWithdrawal).toBe(true);
+});

@@ -58,7 +58,7 @@ export function buildOwnerProfitSnapshot(payload: OwnerProfitSnapshotPayload): {
       bar,
       totalEarned: gameClub.earned + bar.earned,
       totalWithdrawn: gameClub.withdrawn + bar.withdrawn,
-      totalAvailable: Math.max(0, gameClub.available) + Math.max(0, bar.available),
+      totalAvailable: gameClub.available + bar.available,
       hasOverWithdrawal: gameClub.overdrawnBy > 0 || bar.overdrawnBy > 0,
       invalidWithdrawals: [],
     };

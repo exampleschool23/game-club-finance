@@ -331,7 +331,7 @@ export function sumAvailableMoneyResults(results: AvailableMoneyResult[]): Avail
     total.totalWithdrawn += result.totalWithdrawn;
     total.totalAvailable = total.gameClub.available + total.bar.available;
     total.invalidWithdrawals.push(...result.invalidWithdrawals);
-    total.hasOverWithdrawal = total.invalidWithdrawals.length > 0;
+    total.hasOverWithdrawal ||= result.hasOverWithdrawal;
     return total;
   }, emptyResult());
 }

@@ -698,6 +698,14 @@
     "loginWithGoogle": "Continue with Google"
   },
   "moneyTaken": {
+    "earnedBeforeWithdrawals": "Earned before withdrawals",
+    "clubMethodsBeforeWithdrawals": "Cash, Terminal, Card and PlayStation below are after operating expenses, before owner withdrawals.",
+    "playstation": "PlayStation",
+    "monthlyWithdrawn": "Withdrawn this month",
+    "monthlyRemaining": "Remaining after owner withdrawals",
+    "allMonths": "All months",
+    "monthlyOverallProfit": "Overall profit for the month",
+    "monthlyOverallProfitDescription": "Game Club and Bar earnings after operating expenses and qualifying stock purchases, before owner withdrawals. Includes debt repayments.",
     "migrationRequired": "Custom withdrawals require database migration 051. Apply it before recording a withdrawal.",
     "allAllocation": "All uses Game Club profit first, then Bar profit. Each portion is recorded separately.",
     "amount": "Withdrawal amount",
@@ -709,8 +717,8 @@
     "gameClubAvailable": "Game Club profit available",
     "barAvailable": "Bar profit available",
     "totalTaken": "Total profit withdrawn",
-    "paymentMethodBalancesTitle": "Monthly income left — Game Club and Bar",
-    "paymentMethodBalancesDescription": "For the selected withdrawal month: Game Club collections, including debt repayments, minus expenses by payment method; Game Club owner withdrawals are not deducted from these payment-method balances. Bar shows sales minus stock purchases, bar expenses, and Bar owner withdrawals for the selected month; bar sales are not split by payment method.",
+    "paymentMethodBalancesTitle": "Earnings breakdown before withdrawals",
+    "paymentMethodBalancesDescription": "Game Club collections (including debt repayments and PlayStation) minus operating expenses. Bar sales minus qualifying stock purchases and bar expenses. Owner withdrawals are not deducted here; see the remaining balances above.",
     "source": "Profit source",
     "sources": {
       "all": "All",

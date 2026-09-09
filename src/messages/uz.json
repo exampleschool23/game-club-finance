@@ -698,6 +698,14 @@
     "loginWithGoogle": "Google orqali kirish"
   },
   "moneyTaken": {
+    "earnedBeforeWithdrawals": "Pul yechishdan oldingi daromad",
+    "clubMethodsBeforeWithdrawals": "Quyidagi naqd pul, terminal, karta va PlayStation summalari operatsion xarajatlardan keyin, egasi pul yechishidan oldin ko‘rsatilgan.",
+    "playstation": "PlayStation",
+    "monthlyWithdrawn": "Shu oyda yechilgan",
+    "monthlyRemaining": "Egasi pul yechganidan keyingi qoldiq",
+    "allMonths": "Barcha oylar",
+    "monthlyOverallProfit": "Oylik umumiy foyda",
+    "monthlyOverallProfitDescription": "Operatsion xarajatlar va hisobga olinadigan mahsulot xaridlaridan keyingi, egasi pul yechishidan oldingi o‘yin klubi va bar daromadi. Qarz to‘lovlari ham kiritilgan.",
     "migrationRequired": "Ixtiyoriy summani olish uchun ma’lumotlar bazasining 051 migratsiyasi talab qilinadi.",
     "allAllocation": "Avval o‘yin klubi, keyin bar foydasi ishlatiladi. Har bir qism alohida qayd etiladi.",
     "amount": "Olinadigan summa",
@@ -709,8 +717,8 @@
     "gameClubAvailable": "O'yin klubi foydasi mavjud",
     "barAvailable": "Bar foydasi mavjud",
     "totalTaken": "Jami olingan foyda",
-    "paymentMethodBalancesTitle": "Oylik daromad qoldig‘i — o‘yin klubi va bar",
-    "paymentMethodBalancesDescription": "Pul olish uchun tanlangan oy: klub tushumlari, jumladan qarz to‘lovlari, minus to‘lov usuli bo‘yicha xarajatlar; egasi klubdan olgan pullar bu to‘lov usullari bo‘yicha qoldiqlardan ayrilmaydi. Bar: savdo tushumi minus mahsulot xaridlari, bar xarajatlari va egasi tanlangan oy uchun bardan olgan pullar; bar savdosi to‘lov usuliga ajratilmagan.",
+    "paymentMethodBalancesTitle": "Pul yechishdan oldingi daromad tafsilotlari",
+    "paymentMethodBalancesDescription": "Klub tushumlari (qarz to‘lovlari va PlayStation bilan) minus operatsion xarajatlar. Bar savdosi minus hisobga olinadigan xaridlar va bar xarajatlari. Bu yerda egasi yechgan pul ayirilmagan; yechishdan keyingi qoldiqlar yuqorida ko‘rsatilgan.",
     "source": "Foyda manbasi",
     "sources": {
       "all": "Barchasi",
