@@ -710,7 +710,7 @@
     "barAvailable": "Bar foydasi mavjud",
     "totalTaken": "Jami olingan foyda",
     "paymentMethodBalancesTitle": "Oylik daromad qoldig‘i — o‘yin klubi va bar",
-    "paymentMethodBalancesDescription": "Pul olish uchun tanlangan oy: klub tushumlari, jumladan qarz to‘lovlari, minus to‘lov usuli bo‘yicha xarajatlar. Bar: savdo tushumi minus mahsulot xaridlari va bar xarajatlari; bar savdosi to‘lov usuliga ajratilmagan. Owner olgan pullar ayrilmaydi.",
+    "paymentMethodBalancesDescription": "Pul olish uchun tanlangan oy: klub tushumlari, jumladan qarz to‘lovlari, minus to‘lov usuli bo‘yicha xarajatlar; egasi klubdan olgan pullar bu to‘lov usullari bo‘yicha qoldiqlardan ayrilmaydi. Bar: savdo tushumi minus mahsulot xaridlari, bar xarajatlari va egasi tanlangan oy uchun bardan olgan pullar; bar savdosi to‘lov usuliga ajratilmagan.",
     "source": "Foyda manbasi",
     "sources": {
       "all": "Barchasi",

@@ -267,7 +267,7 @@ export default function MoneyTakenPage() {
     return Math.max(0, sourceBalance);
   }, [balancesByMonth, form.month, form.source]);
   const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
-  const monthlyBarMoney = balancesByMonth[form.month]?.bar.earned ?? 0;
+  const monthlyBarMoney = balancesByMonth[form.month]?.bar.available ?? 0;
   const totalAvailable = balances.gameClubAvailable + balances.barAvailable;
   const totalTaken = balances.gameClubTaken + balances.barTaken;
 

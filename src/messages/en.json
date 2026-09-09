@@ -710,7 +710,7 @@
     "barAvailable": "Bar profit available",
     "totalTaken": "Total profit withdrawn",
     "paymentMethodBalancesTitle": "Monthly income left — Game Club and Bar",
-    "paymentMethodBalancesDescription": "For the selected withdrawal month: Game Club collections, including debt repayments, minus expenses by payment method. Bar shows sales minus stock purchases and bar expenses; bar sales are not split by payment method. Owner withdrawals are excluded.",
+    "paymentMethodBalancesDescription": "For the selected withdrawal month: Game Club collections, including debt repayments, minus expenses by payment method; Game Club owner withdrawals are not deducted from these payment-method balances. Bar shows sales minus stock purchases, bar expenses, and Bar owner withdrawals for the selected month; bar sales are not split by payment method.",
     "source": "Profit source",
     "sources": {
       "all": "All",
