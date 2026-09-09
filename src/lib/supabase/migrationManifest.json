@@ -50,5 +50,6 @@
   "049_finance_report_snapshot.sql",
   "050_owner_profit_monthly_payment_balances.sql",
   "051_custom_owner_withdrawals.sql",
-  "052_migration_health.sql"
+  "052_migration_health.sql",
+  "053_remove_pre_multiclub_policies.sql"
 ]
