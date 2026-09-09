@@ -96,3 +96,25 @@ Some membership selects retry without newer columns, and performance RPC reads
 temporarily fall back to table queries. These handle application/database
 deployment skew. Removal requires a deliberate cleanup after deployment state
 is known, along with updates to fallback tests.
+
+## Settings migration health
+
+Owners can run the read-only Settings health check after applying
+`052_migration_health.sql`. The RPC authorizes the selected club's owner before
+reading metadata. It returns recorded migration versions and direct function
+checks for 050/051; it never invokes a withdrawal RPC or returns function bodies.
+SQL Editor execution may not populate `supabase_migrations.schema_migrations`,
+so an unrecorded version is **unconfirmed**, not proof of a missing migration.
+Exact function-body fingerprints identify a match to this app version; different
+bodies require review, including harmless manual formatting changes.
+
+When adding a migration, update `src/lib/supabase/migrationManifest.json` with its
+filename. The manifest test checks that no committed migration is omitted. When
+replacing a checked function in a future migration, add a new migration updating
+the diagnostic fingerprints and their tests together.
+
+For an existing withdrawal RPC that blocks manual execution of 051, use
+`scripts/repair-051-custom-owner-withdrawals.sql` to apply its two definitions in
+one transaction, then apply 052. The repair script preserves ledger rows and
+does not update CLI migration history. Do not mark a version applied solely
+because one function exists.

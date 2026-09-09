@@ -551,6 +551,25 @@
     "noData": "No data for this month"
   },
   "settings": {
+    "migrationHealth": {
+      "title": "Database health",
+      "description": "Check migration records and owner-profit database functions. Only club owners can run this read-only check.",
+      "check": "Run health check",
+      "checking": "Checking…",
+      "unavailable": "Health check is not installed or not visible yet. Apply 052_migration_health.sql, then try again. Other migration statuses cannot be checked yet.",
+      "error": "Could not check database health. Check your connection and owner access, then try again.",
+      "historyNote": "SQL Editor runs may not be recorded in migration history. “Unconfirmed” does not mean a migration is missing.",
+      "noHistory": "Migration history is unavailable. Direct function checks are shown below.",
+      "featureChecks": "Owner-profit checks (050–051)",
+      "checksNote": "Matching means the function body matches this app version. A different definition, missing grant or inactive withdrawal trigger needs review. These checks do not certify every migration.",
+      "missing": "Function missing",
+      "different": "Different / needs review",
+      "matching": "Matches app version",
+      "allMigrations": "Migration records ({count})",
+      "recorded": "Recorded",
+      "unconfirmed": "Unconfirmed",
+      "nextSteps": "For missing functions, review the corresponding SQL migration. For unconfirmed records or differing definitions, inspect the database before rerunning migrations. This check never applies changes."
+    },
     "title": "Settings",
     "description": "Manage your clubs and how daily operations work.",
     "language": "Language",

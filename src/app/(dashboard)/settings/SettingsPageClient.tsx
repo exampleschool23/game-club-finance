@@ -14,6 +14,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
+import { MigrationHealthPanel } from './MigrationHealthPanel';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { createClient } from '@/lib/supabase/client';
@@ -442,6 +443,8 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
           </form>
         </section>
       </div>
+
+      {clubRole === 'owner' && selectedClub && <MigrationHealthPanel key={selectedClub.id} clubId={selectedClub.id} />}
 
       <p className="mt-5 text-center text-xs text-gray-400">GameClub Finance · {t('version')} 2.0.0</p>
     </div>
