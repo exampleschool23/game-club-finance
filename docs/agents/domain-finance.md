@@ -66,9 +66,11 @@ available      = earned - prior withdrawals for the same month and source
 ```
 
 Positive money in another month or source cannot validate an over-withdrawal.
-The database RPC `take_all_owner_money_for_month` atomically takes the complete
-positive remainder for exactly one month/source. Do not replace it with a
-client-computed amount followed by a direct insert.
+The database RPC `withdraw_owner_money_for_month` atomically validates and records
+a custom positive amount for one month. For `all`, it allocates Game Club first,
+then Bar, without overdrawing either bucket. The legacy
+`take_all_owner_money_for_month` remains available for older clients. Never
+replace these RPCs with direct browser inserts.
 
 ## Debts
 

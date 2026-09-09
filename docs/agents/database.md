@@ -54,6 +54,7 @@ operations. At least one owner must remain in a club.
 | `record_stock_purchase` | Insert purchase and update stock/cost safely. |
 | `delete_stock_purchase` | Remove a purchase and repair inventory safely. |
 | `save_closing_stock_counts` | Save/validate daily counts and historical chain. |
+| `withdraw_owner_money_for_month` | Atomically withdraw a custom amount for one month/source, or allocate across both sources. |
 | `take_all_owner_money_for_month` | Atomically take one month/source remainder. |
 | `get_dashboard_snapshot` | Efficient dashboard payload. |
 | `get_dashboard_bootstrap` | Authenticated profile, memberships, and club configuration in one payload. |

@@ -3,6 +3,18 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('Supabase migration files', () => {
+  it('validates custom withdrawals and allocates all sources atomically', () => {
+    const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/051_custom_owner_withdrawals.sql'), 'utf8');
+    expect(migration).toContain("current_user_club_role(p_club_id) is distinct from 'owner'");
+    expect(migration).toContain('NEW.amount > available_in_month');
+    expect(migration).not.toContain('NEW.amount <> available_in_month');
+    expect(migration).toContain("p_amount::text in ('NaN', 'Infinity', '-Infinity')");
+    expect(migration).toContain('pg_advisory_xact_lock');
+    expect(migration).toContain('where club_id = p_club_id and source = bucket and period_month = p_period_month');
+    expect(migration).toContain("raise exception 'Withdrawal exceeds available profit'");
+    expect(migration).toContain('from public, anon;');
+  });
+
   it('uses a unique version prefix for every migration', () => {
     const migrationDirectory = resolve(process.cwd(), 'supabase/migrations');
     const migrationFiles = readdirSync(migrationDirectory).filter((name) => name.endsWith('.sql'));

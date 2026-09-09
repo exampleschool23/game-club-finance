@@ -81,7 +81,7 @@ export default function MoneyTakenPage() {
   const currentMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [balances, setBalances] = useState<AvailableBalances>(emptyBalances);
   const [balancesByMonth, setBalancesByMonth] = useState<AvailableMoneyByMonth>({});
-  const [paymentMethodBalances, setPaymentMethodBalances] = useState<MoneyLeftByPaymentMethod>(emptyMoneyLeftByPaymentMethod);
+  const [paymentMethodBalancesByMonth, setPaymentMethodBalancesByMonth] = useState<Record<string, MoneyLeftByPaymentMethod>>({});
   const [withdrawals, setWithdrawals] = useState<OwnerWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -91,6 +91,7 @@ export default function MoneyTakenPage() {
     month: currentMonth,
     source: 'game_club' as MoneySource,
     comment: '',
+    amount: '',
   });
   const isOwner = role === 'owner';
   const withdrawalMonths = useMemo(() => {
@@ -112,7 +113,7 @@ export default function MoneyTakenPage() {
     if (!selectedClubId) {
       setBalances(emptyBalances);
       setBalancesByMonth({});
-      setPaymentMethodBalances(emptyMoneyLeftByPaymentMethod);
+      setPaymentMethodBalancesByMonth({});
       setWithdrawals([]);
       setLoading(false);
       return;
@@ -126,11 +127,11 @@ export default function MoneyTakenPage() {
       p_through_date: businessToday,
     });
 
-    if (!snapshotResult.error) {
+    if (!snapshotResult.error && snapshotResult.data?.paymentMethodBalancesByMonth) {
       const snapshot = buildOwnerProfitSnapshot(snapshotResult.data as OwnerProfitSnapshotPayload);
       setBalancesByMonth(snapshot.byMonth);
       setWithdrawals(snapshot.withdrawals);
-      setPaymentMethodBalances(snapshot.paymentMethodBalances);
+      setPaymentMethodBalancesByMonth(snapshot.paymentMethodBalancesByMonth);
       setBalances({
         gameClubEarned: snapshot.total.gameClub.earned,
         barEarned: snapshot.total.bar.earned,
@@ -143,7 +144,7 @@ export default function MoneyTakenPage() {
       return;
     }
 
-    if (!isMissingDatabaseFunction(snapshotResult.error, 'get_owner_profit_snapshot')) {
+    if (snapshotResult.error && !isMissingDatabaseFunction(snapshotResult.error, 'get_owner_profit_snapshot')) {
       setError(snapshotResult.error.message);
       setLoading(false);
       return;
@@ -217,11 +218,19 @@ export default function MoneyTakenPage() {
       throughDate: businessToday,
     }));
     setWithdrawals(withdrawalRows);
-    setPaymentMethodBalances(calculateGameClubMoneyLeftByPaymentMethod(
-      cashRes.data ?? [],
-      expenseRes.data ?? [],
-      debtPaymentRes.data ?? [],
-    ));
+    const months = new Set([
+      ...nextLedgerRows.cashRows,
+      ...nextLedgerRows.expenseRows,
+      ...nextLedgerRows.debtPaymentRows,
+    ].map((row) => row.date.slice(0, 7)));
+    setPaymentMethodBalancesByMonth(Object.fromEntries([...months].map((month) => [
+      month,
+      calculateGameClubMoneyLeftByPaymentMethod(
+        nextLedgerRows.cashRows.filter((row) => row.date.startsWith(month)),
+        nextLedgerRows.expenseRows.filter((row) => row.date.startsWith(month)),
+        nextLedgerRows.debtPaymentRows.filter((row) => row.date.startsWith(month)),
+      ),
+    ])));
     setBalances({
       gameClubEarned: availableMoney.gameClub.earned,
       barEarned: availableMoney.bar.earned,
@@ -255,6 +264,8 @@ export default function MoneyTakenPage() {
 
     return Math.max(0, sourceBalance);
   }, [balancesByMonth, form.month, form.source]);
+  const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
+  const monthlyBarMoney = balancesByMonth[form.month]?.bar.earned ?? 0;
   const totalAvailable = balances.gameClubAvailable + balances.barAvailable;
   const totalTaken = balances.gameClubTaken + balances.barTaken;
 
@@ -264,47 +275,37 @@ export default function MoneyTakenPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const amount = sourceAvailable;
+    const amount = Number(form.amount);
 
     if (!selectedClubId || !isOwner) {
       showToast(t('ownerOnly'), 'error');
       return;
     }
-    if (amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > sourceAvailable) {
       showToast(t('exceedsAvailable'), 'error');
       return;
     }
 
     setSaving(true);
     const supabase = createClient();
-    const availableForMonth = balancesByMonth[form.month];
-    const sources: OwnerWithdrawalSource[] = form.source === 'all'
-      ? OWNER_WITHDRAWAL_SOURCES.filter((source) => {
-        if (!availableForMonth) return false;
-        return source === 'bar'
-          ? availableForMonth.bar.available > 0
-          : availableForMonth.gameClub.available > 0;
-      })
-      : [form.source];
-    const results = await Promise.all(sources.map((source) => supabase.rpc(
-      'take_all_owner_money_for_month',
-      {
-        p_club_id: selectedClubId,
-        p_period_month: `${form.month}-01`,
-        p_source: source,
-        p_comment: form.comment.trim() || null,
-      },
-    )));
+    const { error: insertError } = await supabase.rpc('withdraw_owner_money_for_month', {
+      p_club_id: selectedClubId,
+      p_period_month: `${form.month}-01`,
+      p_source: form.source,
+      p_amount: amount,
+      p_comment: form.comment.trim() || null,
+    });
     setSaving(false);
 
-    const insertError = results.find((result) => result.error)?.error;
     if (insertError) {
-      showToast(insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
+      showToast(isMissingDatabaseFunction(insertError, 'withdraw_owner_money_for_month')
+        ? t('migrationRequired')
+        : insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
       await loadData();
       return;
     }
 
-    setForm((current) => ({ ...current, comment: '' }));
+    setForm((current) => ({ ...current, comment: '', amount: '' }));
     showToast(t('saved'), 'success');
     await loadData();
   }
@@ -372,10 +373,10 @@ export default function MoneyTakenPage() {
 
       <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-4">
-          <h2 className="font-bold text-gray-950">{t('paymentMethodBalancesTitle')}</h2>
+          <h2 className="font-bold text-gray-950">{t('paymentMethodBalancesTitle')} · {formatYearMonth(form.month, locale)}</h2>
           <p className="mt-0.5 text-sm text-gray-500">{t('paymentMethodBalancesDescription')}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {([
             ['cash', Banknote],
             ['terminal', Landmark],
@@ -390,6 +391,13 @@ export default function MoneyTakenPage() {
               valueClassName={paymentMethodBalances[method] < 0 ? 'text-red-600' : 'text-emerald-700'}
             />
           ))}
+          <MetricCard
+            loading={loading}
+            label={t('sources.bar')}
+            value={`${formatCurrency(monthlyBarMoney, locale)} ${tc('currency')}`}
+            icon={GlassWater}
+            valueClassName={monthlyBarMoney < 0 ? 'text-red-600' : 'text-orange-700'}
+          />
         </div>
       </section>
 
@@ -442,6 +450,24 @@ export default function MoneyTakenPage() {
               </div>
 
               <div>
+                <label htmlFor="withdrawal-amount" className="label">{t('amount')} ({tc('currency')})</label>
+                <input
+                  id="withdrawal-amount"
+                  type="number"
+                  inputMode="decimal"
+                  required
+                  min="0.01"
+                  max={sourceAvailable}
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(event) => setField('amount', event.target.value)}
+                  className="input-field"
+                  placeholder="0"
+                />
+                {form.source === 'all' ? <p className="mt-2 text-xs text-gray-500">{t('allAllocation')}</p> : null}
+              </div>
+
+              <div>
                 <label className="label">{t('comment')}</label>
                 <input
                   type="text"
@@ -455,7 +481,7 @@ export default function MoneyTakenPage() {
 
               <button
                 type="submit"
-                disabled={saving || sourceAvailable <= 0}
+                disabled={saving || !Number.isFinite(Number(form.amount)) || Number(form.amount) <= 0 || Number(form.amount) > sourceAvailable}
                 className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ArrowDownToLine size={18} />

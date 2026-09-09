@@ -20,6 +20,7 @@ export interface OwnerProfitMonthlyBalanceRow {
 export interface OwnerProfitSnapshotPayload {
   monthlyBalances: OwnerProfitMonthlyBalanceRow[];
   withdrawalRows: OwnerWithdrawal[];
+  paymentMethodBalancesByMonth?: Record<string, Partial<MoneyLeftByPaymentMethod>>;
   paymentMethodBalances?: Partial<MoneyLeftByPaymentMethod>;
 }
 
@@ -38,6 +39,7 @@ export function buildOwnerProfitSnapshot(payload: OwnerProfitSnapshotPayload): {
   byMonth: AvailableMoneyByMonth;
   total: AvailableMoneyResult;
   withdrawals: OwnerWithdrawal[];
+  paymentMethodBalancesByMonth: Record<string, MoneyLeftByPaymentMethod>;
   paymentMethodBalances: MoneyLeftByPaymentMethod;
 } {
   const byMonth = payload.monthlyBalances.reduce<AvailableMoneyByMonth>((result, row) => {
@@ -67,6 +69,12 @@ export function buildOwnerProfitSnapshot(payload: OwnerProfitSnapshotPayload): {
     byMonth,
     total: sumAvailableMoneyResults(Object.values(byMonth)),
     withdrawals: payload.withdrawalRows,
+    paymentMethodBalancesByMonth: Object.fromEntries(
+      Object.entries(payload.paymentMethodBalancesByMonth ?? {}).map(([month, balances]) => [month, {
+        ...emptyMoneyLeftByPaymentMethod,
+        ...Object.fromEntries(Object.entries(balances).map(([method, amount]) => [method, Number(amount ?? 0)])),
+      }]),
+    ),
     paymentMethodBalances: {
       ...emptyMoneyLeftByPaymentMethod,
       ...Object.fromEntries(Object.entries(payload.paymentMethodBalances ?? {}).map(

@@ -21,9 +21,19 @@ describe('owner profit snapshot', () => {
         },
       ],
       withdrawalRows: [],
+      paymentMethodBalancesByMonth: {
+        '2026-07': { cash: 800, terminal: 200 },
+        '2026-08': { cash: -100, card: 50 },
+      },
       paymentMethodBalances: { cash: 700, terminal: 250, card: 50, playstation: 100 },
     });
 
+    expect(result.paymentMethodBalancesByMonth['2026-07']).toEqual({ cash: 800, terminal: 200, card: 0, playstation: 0 });
+    expect(result.paymentMethodBalancesByMonth['2026-08']).toEqual({ cash: -100, terminal: 0, card: 50, playstation: 0 });
+    expect(result.paymentMethodBalancesByMonth['2026-09']).toBeUndefined();
+    // The bar card shows earned money before withdrawals, matching the method cards.
+    expect(result.byMonth['2026-07'].bar.earned).toBe(500);
+    expect(result.byMonth['2026-07'].bar.available).toBe(0);
     expect(result.byMonth['2026-07'].gameClub.available).toBe(800);
     expect(result.byMonth['2026-08'].gameClub.overdrawnBy).toBe(100);
     expect(result.total.gameClub.available).toBe(800);
@@ -40,6 +50,7 @@ describe('owner profit snapshot', () => {
   it('defaults payment-method balances for compatibility with the previous RPC payload', () => {
     const result = buildOwnerProfitSnapshot({ monthlyBalances: [], withdrawalRows: [] });
 
+    expect(result.paymentMethodBalancesByMonth).toEqual({});
     expect(result.paymentMethodBalances).toEqual({ cash: 0, terminal: 0, card: 0, playstation: 0 });
   });
 });
