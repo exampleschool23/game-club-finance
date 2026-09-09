@@ -43,6 +43,8 @@ import {
 } from '@/lib/calculations/dashboardMetrics';
 import {
   formatCurrency,
+  formatCurrencyInput,
+  parseCurrencyInput,
   formatDateTime,
   formatYearMonth,
 } from '@/lib/formatters';
@@ -275,7 +277,7 @@ export default function MoneyTakenPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const amount = Number(form.amount);
+    const amount = parseCurrencyInput(form.amount);
 
     if (!selectedClubId || !isOwner) {
       showToast(t('ownerOnly'), 'error');
@@ -453,14 +455,12 @@ export default function MoneyTakenPage() {
                 <label htmlFor="withdrawal-amount" className="label">{t('amount')} ({tc('currency')})</label>
                 <input
                   id="withdrawal-amount"
-                  type="number"
-                  inputMode="decimal"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
                   required
-                  min="0.01"
-                  max={sourceAvailable}
-                  step="0.01"
                   value={form.amount}
-                  onChange={(event) => setField('amount', event.target.value)}
+                  onChange={(event) => setField('amount', formatCurrencyInput(event.target.value))}
                   className="input-field"
                   placeholder="0"
                 />
@@ -481,7 +481,7 @@ export default function MoneyTakenPage() {
 
               <button
                 type="submit"
-                disabled={saving || !Number.isFinite(Number(form.amount)) || Number(form.amount) <= 0 || Number(form.amount) > sourceAvailable}
+                disabled={saving || !Number.isFinite(parseCurrencyInput(form.amount)) || parseCurrencyInput(form.amount) <= 0 || parseCurrencyInput(form.amount) > sourceAvailable}
                 className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ArrowDownToLine size={18} />
