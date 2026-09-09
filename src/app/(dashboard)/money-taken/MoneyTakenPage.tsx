@@ -22,7 +22,6 @@ import { Toast, useToast } from '@/components/ui/Toast';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import {
-  calculateAvailableMoney,
   calculateAvailableMoneyByMonth,
   type AvailableMoneyByMonth,
 } from '@/lib/calculations/availableMoney';
@@ -55,24 +54,6 @@ type MoneySource = OwnerWithdrawalSource | 'all';
 
 const PROFIT_SOURCES: readonly MoneySource[] = ['all', ...OWNER_WITHDRAWAL_SOURCES];
 
-interface AvailableBalances {
-  gameClubEarned: number;
-  barEarned: number;
-  gameClubTaken: number;
-  barTaken: number;
-  gameClubAvailable: number;
-  barAvailable: number;
-}
-
-const emptyBalances: AvailableBalances = {
-  gameClubEarned: 0,
-  barEarned: 0,
-  gameClubTaken: 0,
-  barTaken: 0,
-  gameClubAvailable: 0,
-  barAvailable: 0,
-};
-
 export default function MoneyTakenPage() {
   const t = useTranslations('moneyTaken');
   const tc = useTranslations('common');
@@ -81,7 +62,6 @@ export default function MoneyTakenPage() {
   const { toast, showToast, hideToast } = useToast();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const currentMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [balances, setBalances] = useState<AvailableBalances>(emptyBalances);
   const [balancesByMonth, setBalancesByMonth] = useState<AvailableMoneyByMonth>({});
   const [paymentMethodBalancesByMonth, setPaymentMethodBalancesByMonth] = useState<Record<string, MoneyLeftByPaymentMethod>>({});
   const [withdrawals, setWithdrawals] = useState<OwnerWithdrawal[]>([]);
@@ -115,13 +95,11 @@ export default function MoneyTakenPage() {
 
   const loadData = useCallback(async () => {
     const id = ++requestId.current;
-    setBalances(emptyBalances);
     setBalancesByMonth({});
     setPaymentMethodBalancesByMonth({});
     setWithdrawals([]);
     try {
       if (!selectedClubId) {
-        setBalances(emptyBalances);
         setBalancesByMonth({});
         setPaymentMethodBalancesByMonth({});
         setWithdrawals([]);
@@ -144,14 +122,6 @@ export default function MoneyTakenPage() {
         setBalancesByMonth(snapshot.byMonth);
         setWithdrawals(snapshot.withdrawals);
         setPaymentMethodBalancesByMonth(snapshot.paymentMethodBalancesByMonth);
-        setBalances({
-          gameClubEarned: snapshot.total.gameClub.earned,
-          barEarned: snapshot.total.bar.earned,
-          gameClubTaken: snapshot.total.gameClub.withdrawn,
-          barTaken: snapshot.total.bar.withdrawn,
-          gameClubAvailable: snapshot.total.gameClub.available,
-          barAvailable: snapshot.total.bar.available,
-        });
         setLoading(false);
         return;
       }
@@ -228,10 +198,6 @@ export default function MoneyTakenPage() {
         debtPaymentRows: debtPaymentRes.data ?? [],
         withdrawalRows,
       };
-      const availableMoney = calculateAvailableMoney({
-        ...nextLedgerRows,
-        throughDate: businessToday,
-      });
       setBalancesByMonth(calculateAvailableMoneyByMonth({
         ...nextLedgerRows,
         throughDate: businessToday,
@@ -250,14 +216,6 @@ export default function MoneyTakenPage() {
           nextLedgerRows.debtPaymentRows.filter((row) => row.date.startsWith(month)),
         ),
       ])));
-      setBalances({
-        gameClubEarned: availableMoney.gameClub.earned,
-        barEarned: availableMoney.bar.earned,
-        gameClubTaken: availableMoney.gameClub.withdrawn,
-        barTaken: availableMoney.bar.withdrawn,
-        gameClubAvailable: availableMoney.gameClub.available,
-        barAvailable: availableMoney.bar.available,
-      });
       setLoading(false);
     } catch (loadError: unknown) {
       if (id === requestId.current) {
@@ -291,10 +249,7 @@ export default function MoneyTakenPage() {
   const monthlyOverallProfit = balancesByMonth[form.month]?.totalEarned ?? 0;
   const monthlyBalance = balancesByMonth[form.month];
   const monthlyGameClubMoney = monthlyBalance?.gameClub.available ?? 0;
-  const monthlyWithdrawn = monthlyBalance?.totalWithdrawn ?? 0;
   const monthlyBarMoney = balancesByMonth[form.month]?.bar.available ?? 0;
-  const totalAvailable = balances.gameClubAvailable + balances.barAvailable;
-  const totalTaken = balances.gameClubTaken + balances.barTaken;
 
   function setField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -392,38 +347,6 @@ export default function MoneyTakenPage() {
         </div>
       ) : null}
 
-      <h2 className="mb-2 font-bold text-gray-950">{t('allMonths')}</h2>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          loading={loading}
-          label={t('totalAvailable')}
-          value={`${formatCurrency(totalAvailable, locale)} ${tc('currency')}`}
-          icon={CircleDollarSign}
-          valueClassName={totalAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}
-        />
-        <MetricCard
-          loading={loading}
-          label={t('gameClubAvailable')}
-          value={`${formatCurrency(balances.gameClubAvailable, locale)} ${tc('currency')}`}
-          icon={Gamepad2}
-          valueClassName={balances.gameClubAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}
-        />
-        <MetricCard
-          loading={loading}
-          label={t('barAvailable')}
-          value={`${formatCurrency(balances.barAvailable, locale)} ${tc('currency')}`}
-          icon={GlassWater}
-          valueClassName={balances.barAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}
-        />
-        <MetricCard
-          loading={loading}
-          label={t('totalTaken')}
-          valueClassName="text-red-600"
-          value={`${formatCurrency(totalTaken, locale)} ${tc('currency')}`}
-          icon={ArrowDownToLine}
-        />
-      </div>
-
       <div className="mt-5 max-w-sm">
         <label className="label">{t('month')}</label>
         <MonthPicker value={form.month} max={currentMonth} onChange={(value) => setField('month', value)} />
@@ -438,20 +361,6 @@ export default function MoneyTakenPage() {
           valueClassName={monthlyOverallProfit < 0 ? 'text-red-600' : 'text-blue-700'}
         />
         <p className="mt-2 text-sm text-gray-500">{t('monthlyOverallProfitDescription')}</p>
-      </section>
-
-      <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 font-bold text-gray-950">{t('monthlyRemaining')} · {formatYearMonth(form.month, locale)}</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {([
-            ['monthlyRemaining', monthlyBalance?.totalAvailable ?? 0, CircleDollarSign],
-            ['monthlyWithdrawn', monthlyWithdrawn, ArrowDownToLine],
-          ] as const).map(([label, amount, icon]) => (
-            <MetricCard key={label} loading={loading} label={t(label)}
-              value={`${formatCurrency(amount, locale)} ${tc('currency')}`} icon={icon}
-              valueClassName={label === 'monthlyWithdrawn' || amount < 0 ? 'text-red-600' : 'text-emerald-700'} />
-          ))}
-        </div>
       </section>
 
       <section className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
