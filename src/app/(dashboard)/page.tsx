@@ -1,4 +1,6 @@
 import DashboardPage from './DashboardPage';
+import { Suspense } from 'react';
+import { DashboardContentLoading } from '@/components/layout/DashboardContentLoading';
 import type { Club, ClubMembership } from '@/types';
 import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
@@ -31,7 +33,17 @@ function selectedMembership(
   return memberships.find((membership) => membership.club_id === clubId);
 }
 
-export default async function DashboardRoute({
+export default function DashboardRoute(props: {
+  searchParams: Promise<PageSearchParams>;
+}) {
+  return (
+    <Suspense fallback={<DashboardContentLoading />}>
+      <DashboardSnapshotRoute {...props} />
+    </Suspense>
+  );
+}
+
+async function DashboardSnapshotRoute({
   searchParams,
 }: {
   searchParams: Promise<PageSearchParams>;

@@ -39,6 +39,13 @@ memberships, clubs, per-club feature access, business-day start, and enabled
 payment methods through `get_dashboard_bootstrap`. React `cache()` shares that
 work inside one server request. A direct-query compatibility fallback remains
 for deployments where migration 048 has not reached the database yet.
+Remote user validation and the independently authorized bootstrap RPC run in
+parallel; account data is returned only after `auth.getUser()` validates the user.
+The protected layout streams a data-free placeholder during bootstrap, then
+the authenticated shell. A separate dashboard snapshot Suspense boundary keeps
+financial reads from blocking that shell. Do not render protected content in
+the outer fallback or cache authentication across requests. Anonymous protected
+requests redirect in the proxy without a remote auth call.
 
 `DashboardShell` owns the selected-club client context and refreshes membership
 data. The selected club is remembered in the
@@ -55,6 +62,8 @@ user may never visit. During an uncached navigation the current page remains
 visible with a slim progress indicator instead of a full-page loading skeleton.
 The dashboard root does not prefetch because its server response embeds live
 financial totals that can change while the user edits another screen.
+The annual chart history starts only when the dashboard's chart intersection
+observer enables charts, rather than competing with initial data reads.
 
 ## Page and calculation boundaries
 

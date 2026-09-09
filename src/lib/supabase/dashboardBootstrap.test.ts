@@ -22,10 +22,27 @@ describe('getDashboardBootstrap', () => {
     mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'user@example.test' } } });
   });
 
-  it('returns null only for an unauthenticated user without querying account data', async () => {
+  it('never returns account data when remote user validation fails', async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } });
+    mocks.rpc.mockResolvedValue({ data: {
+      profile: { full_name: 'Must not be returned', role: 'owner' },
+      memberships: [{ club_id: 'club-1' }],
+    }, error: null });
     expect(await getDashboardBootstrap()).toBeNull();
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.getCookie).not.toHaveBeenCalled();
+  });
+
+  it('starts the RPC without waiting for Auth, but waits for validation before returning', async () => {
+    let validate!: (result: unknown) => void;
+    mocks.getUser.mockReturnValue(new Promise((resolve) => { validate = resolve; }));
+    mocks.rpc.mockResolvedValue({ data: { profile: null, memberships: [] }, error: null });
+    let returned = false;
+    const pending = getDashboardBootstrap().then((result) => { returned = true; return result; });
+    await vi.waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith('get_dashboard_bootstrap'));
+    expect(returned).toBe(false);
+    validate({ data: { user: { id: 'user-1' } } });
+    expect(await pending).toMatchObject({ userId: 'user-1' });
   });
 
   it('loads memberships in one call and validates the selected club cookie', async () => {

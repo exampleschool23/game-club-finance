@@ -31,10 +31,15 @@ interface DashboardBootstrapSnapshot {
  */
 export const getDashboardBootstrap = cache(async (): Promise<DashboardBootstrap | null> => {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // The RPC authorizes through auth.uid()/RLS independently. Start it alongside
+  // remote user validation, but never return account data before getUser passes.
+  // Promise.all also observes either failure without an unhandled rejection.
+  const [{ data: { user } }, snapshotRes] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.rpc('get_dashboard_bootstrap'),
+  ]);
   if (!user) return null;
 
-  const snapshotRes = await supabase.rpc('get_dashboard_bootstrap');
   let profile: DashboardBootstrapSnapshot['profile'] = null;
   let memberships: ClubMembership[] = [];
 

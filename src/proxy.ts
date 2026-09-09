@@ -13,6 +13,11 @@ export async function proxy(request: NextRequest) {
   const isProtectedPage = !isAuthPage && !isAuthCallback;
   const hasAuthCookie = hasSupabaseAuthCookie(request);
 
+  // There is no session to validate; do not contact Auth just to redirect.
+  if (isProtectedPage && !hasAuthCookie) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   // The dashboard layout validates the user before rendering. Avoid making the
   // same remote getUser() request in middleware when an auth cookie is present.
   if (isProtectedPage && hasAuthCookie) {

@@ -58,6 +58,11 @@ The dashboard and closing page also use read RPCs
 direct-query paths are deployment compatibility fallbacks, not alternative
 business definitions.
 
+Migration 054 removes per-history-row permission lookups from these reads while
+preserving the existing RLS results and stock write rules. Apply it to the
+database to obtain the speed improvement; a frontend rebuild alone cannot
+change query execution inside Supabase.
+
 ## Historical snapshot rule
 
 For an open business day, purchases are the live source of `added_today`. Once a
@@ -86,4 +91,3 @@ the forward stock chain. Preserve the database behavior in migrations 034 and
 Test current-day purchases, purchase deletion, historical closings, forward
 stock-chain edits, made-to-order sales, soft deletion, adjustments, weighted
 cost, and the bar-money cutoff. See `docs/agents/testing.md` for commands.
-

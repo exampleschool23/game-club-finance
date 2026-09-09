@@ -523,6 +523,9 @@ export default function DashboardPage({
       setMonthlyAverageIncome([]);
       return;
     }
+    // This history is only used by the below-the-fold charts. Keep the initial
+    // connection free for the current dashboard and operational page reads.
+    if (!renderCharts) return;
 
     let cancelled = false;
     const supabase = createClient();
@@ -552,7 +555,7 @@ export default function DashboardPage({
     });
 
     return () => { cancelled = true; };
-  }, [businessToday, selectedClubId]);
+  }, [businessToday, renderCharts, selectedClubId]);
 
   useEffect(() => {
     const requestKey = `${selectedClubId}:${range.from}:${range.to}`;

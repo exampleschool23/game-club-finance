@@ -35,6 +35,16 @@ Authorization has three layers:
 Migration 033 applies corresponding RLS policies to reads and writes. UI checks
 improve UX; RLS and database constraints remain authoritative.
 
+Migration 054 keeps the same read feature unions but obtains permitted club IDs
+through `current_user_readable_clubs(text[])` once per statement. It delegates
+to the existing membership feature helper and never accepts a caller-supplied
+user ID. Keep the policy subquery uncorrelated: passing each ledger row's club
+into a permission function repeats membership work across history scans.
+Stock insert/update/delete policies retain 033's predicates, but are separate
+operations so the old `FOR ALL` write checks no longer run during SELECT.
+`ledgerReadPermissions.test.ts` executes the original and new policies in local
+PostgreSQL and compares read/write results, cross-club denial, and the query plan.
+
 Owner-only behavior includes team management and destructive/sensitive finance
 operations. At least one owner must remain in a club.
 

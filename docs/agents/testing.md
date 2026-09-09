@@ -28,8 +28,10 @@ npm run build
 | Dashboard range/totals | dashboard calculation/snapshot tests | Yes |
 | Debt validation | debt and validation tests | Yes |
 | Permissions/feature access | `permissions.test.ts` plus affected route | Yes |
+| Startup/auth routing | `dashboardBootstrap.test.ts`, `src/proxy.test.ts`, signed-in reload/navigation | Yes |
 | Supabase fallback/pagination | matching `src/lib/supabase` tests | Usually |
 | Migration/RLS/RPC | `migrationFiles.test.ts` plus domain tests | Yes |
+| Ledger read policy performance | `ledgerReadPermissions.test.ts` (embedded PostgreSQL) | Yes |
 | Telegram report formatting | daily report/image tests | Yes |
 | Telegram transport/ledger/cron | delivery, send, route, migration tests | Yes |
 | Locale-only copy | JSON shape review, typecheck/build | Build recommended |
@@ -63,4 +65,3 @@ scripts at production without explicit review.
 Use Telegram `dryRun` or the local preview generator before a live send. A live
 forced resend is an external side effect and requires an intentional unique
 request ID; follow `docs/runbooks/telegram-report.md`.
-
