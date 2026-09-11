@@ -307,7 +307,7 @@ export default function StockPurchasePage() {
 
     if (err) {
       setSaving(false);
-      setError(err.message);
+      setError(err.code === '55000' ? t('purchaseBlockedByClosing') : err.message);
       return;
     }
 
@@ -343,7 +343,7 @@ export default function StockPurchasePage() {
 
     if (deleteError) {
       setDeletingId(null);
-      setError(deleteError.message);
+      setError(deleteError.code === '55000' ? t('deleteBlockedByClosing') : deleteError.message);
       return;
     }
 

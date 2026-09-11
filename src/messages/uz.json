@@ -347,6 +347,8 @@
     "viewProducts": "Mahsulotlarni korish"
   },
   "stockPurchase": {
+    "purchaseBlockedByClosing": "Xaridni qo‘shib bo‘lmaydi: bu mahsulot uchun xarid sanasida yoki undan keyingi sanada ombor yopilishi saqlangan. Xarid sanasini tekshiring. Sana to‘g‘ri bo‘lsa, ombor hisobi tarixini tuzatish uchun klub egasiga murojaat qiling.",
+    "deleteBlockedByClosing": "Xaridni o‘chirib bo‘lmaydi: bu mahsulot uchun xarid sanasida yoki undan keyingi sanada ombor yopilishi saqlangan. Ombor hisobi tarixini tuzatish uchun klub egasiga murojaat qiling.",
     "title": "Mahsulot xaridi",
     "description": "Omborni yangilash uchun xaridni qayd eting",
     "date": "Sana",

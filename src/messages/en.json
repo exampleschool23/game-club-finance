@@ -347,6 +347,8 @@
     "viewProducts": "View Products"
   },
   "stockPurchase": {
+    "purchaseBlockedByClosing": "Cannot add this purchase: this product has a saved stock closing on or after the purchase date. Check the purchase date. If it is correct, contact the club owner to resolve the stock history.",
+    "deleteBlockedByClosing": "Cannot delete this purchase: this product has a saved stock closing on or after the purchase date. Contact the club owner to resolve the stock history.",
     "title": "Stock Purchase",
     "description": "Record product purchases to update inventory",
     "date": "Date",
