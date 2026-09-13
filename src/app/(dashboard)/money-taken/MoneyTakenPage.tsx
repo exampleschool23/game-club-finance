@@ -30,6 +30,7 @@ import {
   type OwnerProfitSnapshotPayload,
 } from '@/lib/calculations/ownerProfitSnapshot';
 import type { StockPurchaseCostRow } from '@/lib/calculations/barMoney';
+import { clampWithdrawalInput } from '@/lib/withdrawalInput';
 import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import {
   calculateGameClubMoneyLeftByPaymentMethod,
@@ -42,7 +43,6 @@ import {
 } from '@/lib/calculations/dashboardMetrics';
 import {
   formatCurrency,
-  formatCurrencyInput,
   parseCurrencyInput,
   formatDateTime,
   formatYearMonth,
@@ -245,6 +245,13 @@ export default function MoneyTakenPage() {
 
     return Math.max(0, sourceBalance);
   }, [balancesByMonth, form.month, form.source]);
+  useEffect(() => {
+    setForm((current) => {
+      const amount = clampWithdrawalInput(current.amount, sourceAvailable);
+      return amount === current.amount ? current : { ...current, amount };
+    });
+  }, [sourceAvailable]);
+
   const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
   const monthlyOverallProfit = balancesByMonth[form.month]?.totalEarned ?? 0;
   const monthlyBalance = balancesByMonth[form.month];
@@ -456,7 +463,7 @@ export default function MoneyTakenPage() {
                   autoComplete="off"
                   required
                   value={form.amount}
-                  onChange={(event) => setField('amount', formatCurrencyInput(event.target.value))}
+                  onChange={(event) => setField('amount', clampWithdrawalInput(event.target.value, sourceAvailable))}
                   className="input-field"
                   placeholder="0"
                 />
