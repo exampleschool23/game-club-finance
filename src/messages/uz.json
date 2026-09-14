@@ -399,7 +399,8 @@
     "paginationPage": "{page}/{total} sahifa",
     "previousPage": "Oldingi",
     "nextPage": "Keyingi",
-    "reset": "Qayta o'rnatish"
+    "reset": "Qayta o'rnatish",
+    "ownerOnlyCostPrice": "Tannarxni faqat klub egasi o‘zgartirishi mumkin."
   },
   "products": {
     "title": "Mahsulotlar",
@@ -428,7 +429,8 @@
     "editProduct": "Mahsulotni tahrirlash",
     "deleteProduct": "Mahsulotni o'chirish",
     "deleteConfirm": "Bu mahsulot o'chirilsinmi? U yangi ombor amaliyotlari uchun mavjud bo'lmaydi. Saqlangan savdolar, xaridlar, qoldiqlar, hisobotlar va tahlillar saqlanadi.",
-    "inactiveEditBlocked": "O'chirilgan inventarni tahrirlab bo'lmaydi."
+    "inactiveEditBlocked": "O'chirilgan inventarni tahrirlab bo'lmaydi.",
+    "ownerOnlyCostPrice": "Tannarxni faqat klub egasi o‘zgartirishi mumkin."
   },
   "expenses": {
     "title": "Xarajatlar",

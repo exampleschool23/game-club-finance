@@ -399,7 +399,8 @@
     "paginationPage": "Page {page} of {total}",
     "previousPage": "Previous",
     "nextPage": "Next",
-    "reset": "Reset"
+    "reset": "Reset",
+    "ownerOnlyCostPrice": "Only the club owner can change cost prices."
   },
   "products": {
     "title": "Products",
@@ -428,7 +429,8 @@
     "editProduct": "Edit Product",
     "deleteProduct": "Delete Product",
     "deleteConfirm": "Delete this product? It will no longer be available for new stock operations. Saved sales, purchases, closing stock, reports, and analytics will be preserved.",
-    "inactiveEditBlocked": "Disabled inventory cannot be edited."
+    "inactiveEditBlocked": "Disabled inventory cannot be edited.",
+    "ownerOnlyCostPrice": "Only the club owner can change cost prices."
   },
   "expenses": {
     "title": "Expenses",

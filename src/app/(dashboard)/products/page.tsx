@@ -492,7 +492,7 @@ export default function ProductsPage() {
                     onChange={(e) => set('cost_price', formatCurrencyInput(e.target.value))}
                   />
                   {!isOwner && (
-                    <p className="mt-1 text-xs text-gray-400">Updated automatically from stock purchases</p>
+                    <p className="mt-1 text-xs text-gray-400">{t('ownerOnlyCostPrice')}</p>
                   )}
                 </div>
                 <div>
