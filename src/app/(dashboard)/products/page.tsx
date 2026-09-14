@@ -31,10 +31,6 @@ function isMissingSortOrder(error: { message?: string } | null | undefined) {
   return error?.message?.includes('sort_order') ?? false;
 }
 
-function isForeignKeyDeleteError(error: { message?: string; code?: string } | null | undefined) {
-  return error?.code === '23503' || error?.message?.includes('violates foreign key constraint') || false;
-}
-
 function productCategory(value: string | null | undefined): string {
   return String(value ?? '').trim();
 }
@@ -238,38 +234,23 @@ export default function ProductsPage() {
     setError('');
 
     const supabase = createClient();
-    const { error: deleteError } = await supabase
+    const { data, error: deleteError } = await supabase
       .from('products')
-      .delete()
+      .update({
+        is_deleted: true,
+        is_active: false,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('club_id', selectedClubId)
-      .eq('id', editingId);
+      .eq('id', editingId)
+      .select('id')
+      .single();
 
-    if (deleteError) {
-      if (!isForeignKeyDeleteError(deleteError)) {
-        setDeleting(false);
-        setError(deleteError.message);
-        return;
-      }
-
-      const { error: softDeleteError } = await supabase
-        .from('products')
-        .update({
-          is_deleted: true,
-          is_active: false,
-          deleted_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('club_id', selectedClubId)
-        .eq('id', editingId);
-
-      setDeleting(false);
-
-      if (softDeleteError) {
-        setError(softDeleteError.message);
-        return;
-      }
-    } else {
-      setDeleting(false);
+    setDeleting(false);
+    if (deleteError || !data) {
+      setError(deleteError?.message ?? tc('error'));
+      return;
     }
 
     setModalOpen(false);

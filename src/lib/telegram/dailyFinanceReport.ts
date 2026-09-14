@@ -88,6 +88,8 @@ export interface DailyFinanceReportRows {
   previousMonthDebtPaymentRows?: DailyFinanceReportDebtPaymentRow[];
   previousMonthInventoryRows?: InventorySnapshotRow[];
   productRows?: ProductValueRow[];
+  /** Saved closing balances for the report date, including archived products. */
+  inventoryRows?: InventorySnapshotRow[];
   debtRows: DailyFinanceReportDebtRow[];
   debtPaymentRows?: DailyFinanceReportDebtPaymentRow[];
 }
@@ -252,6 +254,11 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
   const previousInventoryValue = calculateInventoryValueFromLatestStockCounts(
     rows.previousMonthInventoryRows ?? [],
   );
+  const inventoryValue = rows.inventoryRows === undefined
+    ? dailyTotals.inventoryValue
+    : calculateInventoryValueFromLatestStockCounts(
+      rows.inventoryRows.filter((row) => row.date === rows.businessDate),
+    );
   const dailyRevenue = dailyTotals.gameClubIncome + dailyTotals.barSales;
   const monthToDateRevenue = monthTotals.gameClubIncome;
   const operatingCosts = summarizeOperatingCosts(rows.expenseRows);
@@ -280,13 +287,13 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     gameClubMoneyLeft: monthTotals.gameClubMoneyLeft,
     averageDailyGameClubIncome: calculateAverageDailyIncome(monthTotals.gameClubIncome, averageRevenueDayCount),
     barMoneyLeft: monthTotals.barIncome,
-    inventoryValue: dailyTotals.inventoryValue,
+    inventoryValue,
     averageDailyGameClubIncomeChange: percentChange(
       calculateAverageDailyIncome(monthTotals.gameClubIncome, averageRevenueDayCount),
       previousAverageDailyGameClubIncome,
     ),
     barMoneyLeftChange: percentChange(monthTotals.barIncome, previousMonthTotals.barIncome),
-    inventoryValueChange: percentChange(dailyTotals.inventoryValue, previousInventoryValue),
+    inventoryValueChange: percentChange(inventoryValue, previousInventoryValue),
     activeDebts: dailyTotals.activeDebts,
   };
 }

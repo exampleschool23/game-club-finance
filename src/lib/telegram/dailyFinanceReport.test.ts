@@ -410,3 +410,22 @@ describe('monthStartIso', () => {
     });
   });
 });
+
+
+it('keeps dated report inventory unchanged after product archival and ignores future closings', () => {
+  const rows = {
+    clubName: 'Test', businessDate: '2026-09-02', businessDateLabel: '2 September',
+    cashRows: [], stockRows: [], stockPurchaseRows: [], expenseRows: [], debtRows: [],
+    inventoryRows: [
+      { product_id: 'tracked', date: '2026-09-01', closing_stock: 10, cost_price: 8, products: { tracks_inventory: true } },
+      { product_id: 'tracked', date: '2026-09-02', closing_stock: 7, cost_price: 6, products: { tracks_inventory: true } },
+      { product_id: 'tracked', date: '2026-09-03', closing_stock: 99, cost_price: 99, products: { tracks_inventory: true } },
+      { product_id: 'made-to-order', date: '2026-09-02', closing_stock: 10, cost_price: 10, products: { tracks_inventory: false } },
+    ],
+  };
+  const before = buildDailyFinanceReportInput({ ...rows, productRows: [{ current_stock: 7, cost_price: 6 }] });
+  const after = buildDailyFinanceReportInput({ ...rows, productRows: [] });
+  expect(before.inventoryValue).toBe(42);
+  expect(after).toEqual(before);
+  expect(buildDailyFinanceReportInput({ ...rows, inventoryRows: [], productRows: [{ current_stock: 7, cost_price: 6 }] }).inventoryValue).toBe(0);
+});

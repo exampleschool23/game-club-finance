@@ -52,5 +52,6 @@
   "051_custom_owner_withdrawals.sql",
   "052_migration_health.sql",
   "053_remove_pre_multiclub_policies.sql",
-  "054_cache_ledger_read_permissions.sql"
+  "054_cache_ledger_read_permissions.sql",
+  "055_product_archive_integrity.sql"
 ]

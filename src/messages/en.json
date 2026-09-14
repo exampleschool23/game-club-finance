@@ -427,7 +427,7 @@
     "success": "Product saved",
     "editProduct": "Edit Product",
     "deleteProduct": "Delete Product",
-    "deleteConfirm": "Delete this product? This cannot be undone.",
+    "deleteConfirm": "Delete this product? It will no longer be available for new stock operations. Saved sales, purchases, closing stock, reports, and analytics will be preserved.",
     "inactiveEditBlocked": "Disabled inventory cannot be edited."
   },
   "expenses": {

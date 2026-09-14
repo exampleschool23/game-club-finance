@@ -427,7 +427,7 @@
     "success": "Mahsulot saqlandi",
     "editProduct": "Mahsulotni tahrirlash",
     "deleteProduct": "Mahsulotni o'chirish",
-    "deleteConfirm": "Bu mahsulot o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.",
+    "deleteConfirm": "Bu mahsulot o'chirilsinmi? U yangi ombor amaliyotlari uchun mavjud bo'lmaydi. Saqlangan savdolar, xaridlar, qoldiqlar, hisobotlar va tahlillar saqlanadi.",
     "inactiveEditBlocked": "O'chirilgan inventarni tahrirlab bo'lmaydi."
   },
   "expenses": {

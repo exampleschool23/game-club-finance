@@ -923,3 +923,16 @@ describe('closing stock save payloads', () => {
     });
   });
 });
+
+it.each([true, false])('preserves archived closing snapshots (current date: %s) and excludes them from writes', (isCurrentDate) => {
+  const archived = product({ id: 'archived', is_deleted: true, is_active: false, current_stock: 0, sale_price: 999, cost_price: 888 });
+  const rows = buildEditableClosingStockRows({
+    products: [archived],
+    counts: [{ product_id: archived.id, previous_stock: 10, added_today: 2, closing_stock: 9, sold_quantity: 3, sale_price: 20, cost_price: 8 }],
+    purchases: [{ product_id: archived.id, quantity: 100 }],
+    previousClosings: {}, isCurrentDate,
+  });
+  expect(rows[0]).toMatchObject({ previousStock: '10', addedToday: '2', closingStock: '9', soldQuantity: '3', product: { sale_price: 20, cost_price: 8 } });
+  expect(buildClosingStockUpserts({ date: '2026-09-01', rows, createdBy: null }).upserts).toEqual([]);
+  expect(applyBulkStockOrder(rows, [{ productId: archived.id, quantity: 1 }])).toEqual(rows);
+});

@@ -11,7 +11,6 @@ import type {
   DailyCashRow,
   ExpenseRow,
   InventorySnapshotRow,
-  ProductValueRow,
   StockCountRow,
   StockPurchaseCostRow,
 } from '../calculations/dashboardMetrics';
@@ -116,7 +115,7 @@ export async function buildDailyFinanceTelegramReport(
 ): Promise<DailyFinanceReportBuildResult> {
   const monthStart = monthStartIso(businessDate);
   const previousMonthRange = previousComparableMonthRangeIso(businessDate);
-  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, productRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes, previousCashRes, previousStockRes, previousPurchaseRes, previousExpenseRes, previousDebtPaymentRes, previousInventoryRes] = await Promise.all([
+  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, inventoryRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes, previousCashRes, previousStockRes, previousPurchaseRes, previousExpenseRes, previousDebtPaymentRes, previousInventoryRes] = await Promise.all([
     getClub(supabase, clubId),
     fetchAllRows<DailyCashRow>(() =>
       supabase
@@ -153,13 +152,14 @@ export async function buildDailyFinanceTelegramReport(
         .order('date', { ascending: true })
         .order('id', { ascending: true }),
     ),
-    fetchAllRows<ProductValueRow>(() =>
+    fetchAllRows<InventorySnapshotRow>(() =>
       supabase
-        .from('products')
-        .select('id,current_stock,cost_price,tracks_inventory')
+        .from('daily_stock_counts')
+        .select('product_id,date,closing_stock,cost_price,products(tracks_inventory)')
         .eq('club_id', clubId)
-        .eq('is_active', true)
-        .order('id', { ascending: true }),
+        .eq('date', businessDate)
+        .order('date', { ascending: true })
+        .order('product_id', { ascending: true }),
     ),
     fetchAllRows<DailyFinanceReportDebtRow>(() =>
       supabase
@@ -283,7 +283,7 @@ export async function buildDailyFinanceTelegramReport(
     stockRes.error,
     purchaseRes.error,
     expenseRes.error,
-    productRes.error,
+    inventoryRes.error,
     debtRes.error,
     debtPaymentRes.error,
     monthCashRes.error,
@@ -318,7 +318,7 @@ export async function buildDailyFinanceTelegramReport(
     previousMonthExpenseRows: (previousExpenseRes.data ?? []) as ExpenseRow[],
     previousMonthDebtPaymentRows: (previousDebtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
     previousMonthInventoryRows: (previousInventoryRes.data ?? []) as InventorySnapshotRow[],
-    productRows: (productRes.data ?? []) as ProductValueRow[],
+    inventoryRows: (inventoryRes.data ?? []) as InventorySnapshotRow[],
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
     debtPaymentRows: (debtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
   });

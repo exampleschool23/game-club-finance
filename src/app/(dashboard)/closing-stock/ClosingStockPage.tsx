@@ -404,7 +404,6 @@ export default function ClosingStockPage() {
       setPurchaseCostsByProduct(calculatePurchaseCostsByProduct(purchases));
       const productsFromCounts = stockCountRows.flatMap((count) => {
           const relation = Array.isArray(count.products) ? count.products[0] : count.products;
-          if (relation?.is_deleted) return [];
           const product: Product = {
             id: relation?.id ?? count.product_id,
             club_id: relation?.club_id ?? selectedClubId,
@@ -461,8 +460,24 @@ export default function ClosingStockPage() {
     const purchases = ((purchasesRes.data as PurchaseQuantity[]) ?? []);
     setPurchaseCostsByProduct(calculatePurchaseCostsByProduct(purchases));
     const existingCounts = (countsRes.data ?? []) as ClosingStockExistingCount[];
+    // Retain already-saved archived rows even on the current business day.
+    const activeProducts = (productsRes.data ?? []) as Product[];
+    const missingIds = existingCounts.map((count) => count.product_id)
+      .filter((id) => !activeProducts.some((product) => product.id === id));
+    let savedProducts: Product[] = [];
+    if (missingIds.length > 0) {
+      const result = await supabase.from('products').select('*')
+        .eq('club_id', selectedClubId).eq('is_deleted', true).in('id', missingIds);
+      if (result.error) {
+        setError(result.error.message);
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      savedProducts = (result.data ?? []) as Product[];
+    }
     const editableRows = buildEditableRows(
-        (productsRes.data ?? []) as Product[],
+        [...activeProducts, ...savedProducts],
         existingCounts,
         purchases,
         previousClosingsRes.data ?? {},
@@ -680,6 +695,7 @@ export default function ClosingStockPage() {
       return false;
     }
 
+    nextRows = nextRows.filter((row) => !row.product.is_deleted);
     if (nextRows.length === 0) {
       setError(tc('noData'));
       return false;
@@ -774,7 +790,7 @@ export default function ClosingStockPage() {
     <div className="space-y-5">
       <BulkStockUpdateModal
         open={bulkUpdateOpen}
-        rows={rows}
+        rows={rows.filter((row) => !row.product.is_deleted)}
         saving={saving}
         onClose={() => setBulkUpdateOpen(false)}
         onSave={handleBulkStockSave}
@@ -974,6 +990,7 @@ export default function ClosingStockPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredRows.map((row) => {
+                    const isReadOnly = !canSave || !!row.product.is_deleted;
                     const originalIndex = rows.findIndex((candidate) => candidate.product.id === row.product.id);
                     const summary = rowSummary(row);
                     return (
@@ -1029,7 +1046,7 @@ export default function ClosingStockPage() {
                         <td className="px-4 py-4">
                           {row.product.tracks_inventory === false ? (
                             <p className="text-center font-semibold text-gray-400">—</p>
-                          ) : isOwner && canSave ? (
+                          ) : isOwner && !isReadOnly ? (
                             <div className="mx-auto w-44 space-y-2">
                               <input
                                 type="text"

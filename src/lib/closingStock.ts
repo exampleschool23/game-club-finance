@@ -91,6 +91,8 @@ export interface ClosingStockUpsert {
 }
 
 export interface ClosingStockExistingCount {
+  sale_price?: number;
+  cost_price?: number;
   product_id: string;
   previous_stock?: number | string | null;
   added_today?: number | string | null;
@@ -355,6 +357,7 @@ export function applyBulkStockOrder(
   const quantities = normalizeBulkOrderItems(items);
 
   return rows.map((row) => {
+    if (row.product.is_deleted) return row;
     const quantity = quantities.get(row.product.id) ?? 0;
     if (quantity === 0) return row;
 
@@ -503,6 +506,7 @@ export function applyClosingStockDraft(
 
   const draftByProduct = new Map(draft.rows.map((row) => [row.productId, row]));
   return rows.map((row) => {
+    if (row.product.is_deleted) return row;
     const draftRow = draftByProduct.get(row.product.id);
     if (!draftRow) return row;
     const adjustmentQuantity = String(draftRow.adjustmentQuantity ?? row.adjustmentQuantity ?? '0');
@@ -747,6 +751,7 @@ export function applyClosingStockImport(
   let matchedCount = 0;
 
   const nextRows = rows.map((row, rowIndex) => {
+    if (row.product.is_deleted) return row;
     const idMatch = findUnusedImportIndex(byProductId, normalizeText(row.product.id));
     const nameAndPricesMatch = findUnusedImportIndex(
       byProductNameAndPrices,
@@ -798,6 +803,13 @@ export function buildEditableClosingStockRows({
 
   return products.map((product) => {
     const existing = counts.find((count) => count.product_id === product.id);
+    if (existing && product.is_deleted) {
+      product = {
+        ...product,
+        sale_price: Number(existing.sale_price ?? product.sale_price),
+        cost_price: Number(existing.cost_price ?? product.cost_price),
+      };
+    }
 
     if (product.tracks_inventory === false) {
       return {
@@ -841,7 +853,7 @@ export function buildEditableClosingStockRows({
       // An already-saved historical row is an accounting snapshot. Purchases
       // may have been entered or corrected later, so display the mismatch but
       // never synthesize different added/closing values for that old count.
-      return isCurrentDate
+      return isCurrentDate && !product.is_deleted
         ? refreshRowPurchasedToday(savedRow, purchasedToday)
         : savedRow;
     }
@@ -956,6 +968,7 @@ export function buildClosingStockUpserts({
   createdBy: string | null;
   updatedAt?: string;
 }): { upserts: ClosingStockUpsert[]; savedClosings: Record<string, number> } {
+  rows = rows.filter((row) => !row.product.is_deleted);
   const validationError = validateClosingStockRows(rows);
   if (validationError) throw validationError;
 
