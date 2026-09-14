@@ -115,6 +115,49 @@ describe('createSupabaseReadFetch', () => {
     expect(nativeFetch).toHaveBeenCalledTimes(3);
   });
 
+  it.each(['completed', 'pending'] as const)(
+    'refreshes owner profit after saving even when a read during the write is %s',
+    async (readState) => {
+      let finishWrite!: (response: Response) => void;
+      let finishRead!: (response: Response) => void;
+      let readCount = 0;
+      const nativeFetch = vi.fn(async (input: RequestInfo | URL) => {
+        const request = input as Request;
+        if (request.url.endsWith('/withdraw_owner_money_for_month')) {
+          return new Promise<Response>((resolve) => { finishWrite = resolve; });
+        }
+        readCount += 1;
+        if (readCount === 1) {
+          return new Promise<Response>((resolve) => { finishRead = resolve; });
+        }
+        return jsonResponse({ withdrawn: 100, remaining: 900 });
+      }) as unknown as typeof fetch;
+      const cachedFetch = createSupabaseReadFetch(nativeFetch, SUPABASE_URL);
+      const read = () => cachedFetch(`${SUPABASE_URL}/rest/v1/rpc/get_owner_profit_snapshot`, {
+        method: 'POST', body: '{"p_club_id":"one"}',
+      });
+      const saving = cachedFetch(`${SUPABASE_URL}/rest/v1/rpc/withdraw_owner_money_for_month`, {
+        method: 'POST', body: '{}',
+      });
+      const staleRead = read();
+      await vi.waitFor(() => expect(finishRead).toBeTypeOf('function'));
+      if (readState === 'completed') {
+        finishRead(jsonResponse({ withdrawn: 0, remaining: 1000 }));
+        await staleRead;
+      }
+      finishWrite(new Response(null, { status: 204 }));
+      await saving;
+      const refreshed = await read();
+      expect(await refreshed.json()).toEqual({ withdrawn: 100, remaining: 900 });
+      if (readState === 'pending') {
+        finishRead(jsonResponse({ withdrawn: 0, remaining: 1000 }));
+        await staleRead;
+      }
+      expect(await (await read()).json()).toEqual({ withdrawn: 100, remaining: 900 });
+      expect(readCount).toBe(2);
+    },
+  );
+
   it('does not cache failed reads', async () => {
     const nativeFetch = vi.fn(async () => jsonResponse({ message: 'failed' }, 500)) as unknown as typeof fetch;
     const cachedFetch = createSupabaseReadFetch(nativeFetch, SUPABASE_URL);

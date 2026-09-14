@@ -63,7 +63,8 @@ function requestVaries(request: Request): string {
  * Supabase deliberately returns dynamic REST responses without browser caching.
  * Keep a very short, memory-only cache so returning to a page does not repeat
  * the same cross-region reads, and coalesce identical reads already in flight.
- * Every Supabase mutation clears the cache before it is sent.
+ * Every Supabase mutation clears the cache before and after it is sent so reads
+ * made during a write cannot supply stale data to the post-save refresh.
  */
 export function createSupabaseReadFetch(
   nativeFetch: typeof fetch,
@@ -96,6 +97,13 @@ export function createSupabaseReadFetch(
 
     if (url.origin === supabaseOrigin && !cacheable && request.method !== 'GET' && request.method !== 'HEAD') {
       clearAll();
+      try {
+        return await nativeFetch(request);
+      } finally {
+        // Also advance the generation: pending reads from before the write
+        // completed must neither be reused nor repopulate the current cache.
+        clearAll();
+      }
     }
 
     if (!cacheable || ttlMs <= 0) return nativeFetch(request);
