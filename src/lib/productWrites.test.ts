@@ -57,3 +57,8 @@ describe('product write payloads', () => {
   });
 });
 
+
+it('omits cost price from admin catalog updates and inserts even if a changed value is submitted', () => {
+  expect(buildProductUpdatePayload(form, { isOwner: false })).not.toHaveProperty('cost_price');
+  expect(buildProductInsertPayload(form, { isOwner: false })).not.toHaveProperty('cost_price');
+});

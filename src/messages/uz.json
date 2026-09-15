@@ -400,8 +400,7 @@
     "paginationPage": "{page}/{total} sahifa",
     "previousPage": "Oldingi",
     "nextPage": "Keyingi",
-    "reset": "Qayta o'rnatish",
-    "ownerOnlyCostPrice": "Tannarxni faqat klub egasi o‘zgartirishi mumkin."
+    "reset": "Qayta o'rnatish"
   },
   "products": {
     "title": "Mahsulotlar",

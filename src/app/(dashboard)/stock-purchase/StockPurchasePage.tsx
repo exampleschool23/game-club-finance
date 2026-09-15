@@ -102,7 +102,7 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
 export default function StockPurchasePage() {
   const t = useTranslations('stockPurchase');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour, enabledPaymentMethods, role } = useClub();
+  const { selectedClubId, businessDayStartHour, enabledPaymentMethods } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
 
@@ -226,7 +226,7 @@ export default function StockPurchasePage() {
 
   const selectedProduct = products.find((product) => product.id === form.product_id) ?? null;
   const quantity = parseQuantity(form.quantity);
-  const costPrice = role === 'owner' ? parseCurrencyInput(form.cost_price) : (selectedProduct?.cost_price ?? 0);
+  const costPrice = parseCurrencyInput(form.cost_price);
   const salePrice = parseCurrencyInput(form.sale_price || selectedProduct?.sale_price || 0);
   const totalCost = quantity * costPrice;
   const totalSaleValue = quantity * salePrice;
@@ -449,14 +449,12 @@ export default function StockPurchasePage() {
                   type="text"
                   inputMode="numeric"
                   className="min-w-0 flex-1 bg-transparent font-semibold text-gray-900 outline-none"
-                  value={role === 'owner' ? form.cost_price : formatCurrencyInput(selectedProduct?.cost_price ?? 0)}
-                  disabled={role !== 'owner'}
+                  value={form.cost_price}
                   onChange={(event) => set('cost_price', formatCurrencyInput(event.target.value))}
                   required
                 />
                 <span className="text-sm font-semibold text-gray-600">{tc('currency')}</span>
               </div>
-              {role !== 'owner' && <p className="mt-1 text-xs text-gray-500">{t('ownerOnlyCostPrice')}</p>}
             </div>
 
             <div>

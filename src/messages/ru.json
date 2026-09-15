@@ -400,8 +400,7 @@
     "paginationPage": "Страница {page} из {total}",
     "previousPage": "Назад",
     "nextPage": "Вперёд",
-    "reset": "Сбросить",
-    "ownerOnlyCostPrice": "Только владелец клуба может изменять себестоимость."
+    "reset": "Сбросить"
   },
   "products": {
     "title": "Товары",

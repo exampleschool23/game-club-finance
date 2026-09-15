@@ -34,6 +34,13 @@ barProfit      = barIncome - barCost
 Closing stock cannot exceed available stock unless an owner records an explicit
 adjustment and reason through the supported flow.
 
+Direct cost-price changes in the product catalog are owner-only. Owners and
+admins with Stock Purchase access can enter each receipt's actual cost through
+`record_stock_purchase`; its trusted stock update recalculates average cost.
+Admins cannot rewrite existing receipt costs. Migration 058 corrects 056's
+purchase restriction while preserving the catalog restriction and RPC-only
+ledger writes. Purchase deletion reverses its stock and cost atomically.
+
 Purchase cost updates use weighted average cost:
 
 ```text
