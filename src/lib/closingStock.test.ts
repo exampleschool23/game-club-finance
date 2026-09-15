@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/types';
+import { calculateStockOpeningBalances } from './calculations/stock';
 import {
   applyBulkStockOrder,
   applyClosingStockDraft,
@@ -935,4 +936,55 @@ it.each([true, false])('preserves archived closing snapshots (current date: %s) 
   expect(rows[0]).toMatchObject({ previousStock: '10', addedToday: '2', closingStock: '9', soldQuantity: '3', product: { sale_price: 20, cost_price: 8 } });
   expect(buildClosingStockUpserts({ date: '2026-09-01', rows, createdBy: null }).upserts).toEqual([]);
   expect(applyBulkStockOrder(rows, [{ productId: archived.id, quantity: 1 }])).toEqual(rows);
+});
+
+describe('opening receipts across skipped closing dates', () => {
+  it('shows 9 Fanta and 10 Cappy after six-unit receipts between closings', () => {
+    const previousClosings = calculateStockOpeningBalances([
+      { product_id: 'fanta', date: '2026-09-12', closing_stock: 3 },
+      { product_id: 'cappy', date: '2026-09-12', closing_stock: 4 },
+    ], [
+      { product_id: 'fanta', date: '2026-09-14', quantity: 6, cost_price: 9170 },
+      { product_id: 'cappy', date: '2026-09-14', quantity: 6, cost_price: 14167 },
+    ], '2026-09-15', true);
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'fanta', current_stock: 9 }), product({ id: 'cappy', current_stock: 10 })],
+      counts: [], purchases: [], previousClosings, isCurrentDate: true,
+    });
+    expect(rows.map(({ previousStock, addedToday, closingStock, soldQuantity }) =>
+      ({ previousStock, addedToday, closingStock, soldQuantity }))).toEqual([
+      { previousStock: '9', addedToday: '0', closingStock: '9', soldQuantity: '0' },
+      { previousStock: '10', addedToday: '0', closingStock: '10', soldQuantity: '0' },
+    ]);
+    const { upserts } = buildClosingStockUpserts({ date: '2026-09-15', rows, createdBy: null });
+    expect(upserts.map((r) => r.sold_quantity)).toEqual([0, 0]);
+  });
+
+  it('refreshes an existing current closing while preserving recorded sales and adjustments', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'fanta', current_stock: 3 })],
+      counts: [{ product_id: 'fanta', previous_stock: 3, added_today: 2, closing_stock: 3,
+        adjustment_quantity: -1, adjustment_reason: 'Damaged', sold_quantity: 1 }],
+      purchases: [{ product_id: 'fanta', quantity: 2 }],
+      previousClosings: { fanta: 9 }, isCurrentDate: true,
+    });
+    expect(rows[0]).toMatchObject({ previousStock: '9', addedToday: '2', closingStock: '9', soldQuantity: '1', adjustmentQuantity: '-1' });
+    // Reloading the same canonical values must never apply the six units twice.
+    const again = buildEditableClosingStockRows({
+      products: [rows[0].product],
+      counts: [{ product_id: 'fanta', previous_stock: 9, added_today: 2, closing_stock: 9,
+        adjustment_quantity: -1, adjustment_reason: 'Damaged', sold_quantity: 1 }],
+      purchases: [{ product_id: 'fanta', quantity: 2 }], previousClosings: { fanta: 9 }, isCurrentDate: true,
+    });
+    expect(again).toEqual(rows);
+  });
+
+  it('preserves historical snapshots even when the calculated opening differs', () => {
+    const rows = buildEditableClosingStockRows({
+      products: [product({ id: 'fanta', current_stock: 100 })],
+      counts: [{ product_id: 'fanta', previous_stock: 3, added_today: 0, closing_stock: 3, sold_quantity: 0 }],
+      purchases: [], previousClosings: { fanta: 9 }, isCurrentDate: false,
+    });
+    expect(rows[0]).toMatchObject({ previousStock: '3', addedToday: '0', closingStock: '3', soldQuantity: '0' });
+  });
 });

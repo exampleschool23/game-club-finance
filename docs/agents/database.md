@@ -69,7 +69,8 @@ operations. At least one owner must remain in a club.
 | `get_dashboard_snapshot` | Efficient dashboard payload. |
 | `get_dashboard_bootstrap` | Authenticated profile, memberships, and club configuration in one payload. |
 | `get_finance_report_snapshot` | Selective, date-bounded finance ledgers for report/detail screens. |
-| `get_latest_stock_closings` | Latest product closing values before a date. |
+| `get_stock_opening_balances` | Latest closing plus receipts on intervening unclosed dates. |
+| `get_latest_stock_closings` | Raw latest product closings for older clients. |
 | Delivery ledger RPCs | Claim, begin dispatch, and complete Telegram delivery. |
 
 PostgreSQL functions execute as `PUBLIC` unless restricted. Security-definer

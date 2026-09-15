@@ -5,12 +5,7 @@
 import { useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
-import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
-import {
-  markPerformanceRpcAvailable,
-  markPerformanceRpcMissing,
-  shouldTryPerformanceRpc,
-} from '@/lib/supabase/performanceRpc';
+import { fetchStockOpeningBalances, fetchStockPurchasesForDate } from '@/lib/supabase/stockOpeningBalances';
 import { useClub } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
@@ -60,11 +55,6 @@ interface PurchaseQuantity {
   product_id: string;
   quantity: number;
   cost_price: number;
-}
-
-interface PreviousClosing {
-  product_id: string;
-  closing_stock: number;
 }
 
 interface StockCountRow {
@@ -211,52 +201,6 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
     .order('name', { ascending: true });
 }
 
-async function fetchPreviousClosings(supabase: ReturnType<typeof createClient>, selectedDate: string, clubId: string) {
-  if (shouldTryPerformanceRpc()) {
-    const latestResult = await supabase.rpc('get_latest_stock_closings', {
-      p_club_id: clubId,
-      p_before_date: selectedDate,
-    });
-
-    if (!latestResult.error) {
-      const latestRows = (latestResult.data ?? []) as Array<{ product_id: string; closing_stock: number }>;
-      markPerformanceRpcAvailable();
-      return {
-        data: Object.fromEntries(latestRows.map((row) => [row.product_id, Number(row.closing_stock ?? 0)])),
-        error: null,
-      };
-    }
-
-    if (!isMissingDatabaseFunction(latestResult.error, 'get_latest_stock_closings')) {
-      return { data: null, error: latestResult.error };
-    }
-
-    markPerformanceRpcMissing();
-  }
-
-  // Compatibility fallback while migration 030 is being deployed.
-  const { data, error } = await supabase
-    .from('daily_stock_counts')
-    .select('product_id,closing_stock')
-    .eq('club_id', clubId)
-    .lt('date', selectedDate)
-    .order('date', { ascending: false });
-
-  if (error) return { data: null, error };
-
-  const previousClosings = ((data as PreviousClosing[]) ?? []).reduce<Record<string, number>>(
-    (acc, row) => {
-      if (acc[row.product_id] === undefined) {
-        acc[row.product_id] = Number(row.closing_stock ?? 0);
-      }
-      return acc;
-    },
-    {},
-  );
-
-  return { data: previousClosings, error: null };
-}
-
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
@@ -352,12 +296,8 @@ export default function ClosingStockPage() {
       if (stockCountRows.length === 0 && currentRole === 'owner') {
         const [productsRes, purchasesRes, previousClosingsRes] = await Promise.all([
           fetchActiveProductsOrdered(supabase, selectedClubId),
-          supabase
-            .from('stock_purchases')
-            .select('product_id, quantity, cost_price')
-            .eq('club_id', selectedClubId)
-            .eq('date', selectedDate),
-          fetchPreviousClosings(supabase, selectedDate, selectedClubId),
+          fetchStockPurchasesForDate(supabase, selectedDate, selectedClubId),
+          fetchStockOpeningBalances(supabase, selectedDate, selectedClubId, selectedDate === today),
         ]);
 
         if (productsRes.error || purchasesRes.error || previousClosingsRes.error) {
@@ -387,11 +327,7 @@ export default function ClosingStockPage() {
         return;
       }
 
-      const purchasesRes = await supabase
-        .from('stock_purchases')
-        .select('product_id, quantity, cost_price')
-        .eq('club_id', selectedClubId)
-        .eq('date', selectedDate);
+      const purchasesRes = await fetchStockPurchasesForDate(supabase, selectedDate, selectedClubId);
 
       if (purchasesRes.error) {
         setError(purchasesRes.error.message);
@@ -442,12 +378,8 @@ export default function ClosingStockPage() {
         .select('*')
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate),
-      supabase
-        .from('stock_purchases')
-        .select('product_id, quantity, cost_price')
-        .eq('club_id', selectedClubId)
-        .eq('date', selectedDate),
-      fetchPreviousClosings(supabase, selectedDate, selectedClubId),
+      fetchStockPurchasesForDate(supabase, selectedDate, selectedClubId),
+      fetchStockOpeningBalances(supabase, selectedDate, selectedClubId, selectedDate === today),
     ]);
 
     if (productsRes.error || countsRes.error || purchasesRes.error || previousClosingsRes.error) {
@@ -957,7 +889,7 @@ export default function ClosingStockPage() {
                     <th className={`${stickyHeaderCellClass} min-w-[250px] text-left`}>{t('product')}</th>
                     <th className={`${stickyHeaderCellClass} text-right`}>{t('salePrice')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
                     <th className={`${stickyHeaderCellClass} text-right`}>{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className={`${stickyHeaderCellClass} text-center`}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                    <th className={`${stickyHeaderCellClass} text-center`} title={t('openingStockHint')}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className={`${addedTodayHeaderCellClass} text-center`}>{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
                     <th className={`${stickyHeaderCellClass} min-w-[190px] text-center`}>
                       {t('adjustment')}

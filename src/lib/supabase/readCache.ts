@@ -4,6 +4,7 @@ const MAX_CACHE_ENTRIES = 100;
 const READ_ONLY_RPCS = new Set([
   'get_dashboard_snapshot',
   'get_latest_stock_closings',
+  'get_stock_opening_balances',
   'get_owner_profit_snapshot',
   'get_money_report_snapshot',
   'get_finance_report_snapshot',

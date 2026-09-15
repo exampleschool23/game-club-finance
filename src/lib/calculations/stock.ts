@@ -225,3 +225,43 @@ export function recalculateFutureStockCounts(
       return recalculated;
     });
 }
+
+export interface DatedStockClosing {
+  product_id: string;
+  date: string;
+  closing_stock: number;
+}
+
+export interface DatedStockPurchase {
+  product_id: string;
+  date: string;
+  quantity: number;
+  cost_price: number;
+}
+
+/** Purchases on the closing date are already represented in its saved balance. */
+export function calculateStockOpeningBalances(
+  counts: DatedStockClosing[],
+  purchases: DatedStockPurchase[],
+  selectedDate: string,
+  isCurrentDate: boolean,
+): Record<string, number> {
+  const latest = new Map<string, DatedStockClosing>();
+  for (const count of counts) {
+    if (count.date >= selectedDate) continue;
+    const previous = latest.get(count.product_id);
+    if (!previous || count.date > previous.date) latest.set(count.product_id, count);
+  }
+  const balances = Object.fromEntries(
+    [...latest].map(([id, count]) => [id, Number(count.closing_stock)]),
+  );
+  for (const purchase of purchases) {
+    const previous = latest.get(purchase.product_id);
+    if (purchase.date >= selectedDate || (previous && purchase.date <= previous.date)) continue;
+    // Without a first closing, today's opening derives from live stock. For
+    // historical dates use only the ledger up to that date, never future stock.
+    if (!previous && isCurrentDate) continue;
+    balances[purchase.product_id] = (balances[purchase.product_id] ?? 0) + Number(purchase.quantity);
+  }
+  return balances;
+}

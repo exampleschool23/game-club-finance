@@ -134,6 +134,7 @@ export interface BuildEditableClosingStockRowsInput {
   products: Product[];
   counts: ClosingStockExistingCount[];
   purchases: ClosingStockPurchaseQuantity[];
+  // Opening balances: last closing plus purchases on intervening unclosed dates.
   previousClosings: Record<string, number>;
   isCurrentDate: boolean;
 }
@@ -405,14 +406,18 @@ function formatEditableStockValue(value: unknown): string {
   return String(value ?? '').trim() === '' ? '' : formatStockValue(value);
 }
 
-function refreshRowPurchasedToday(row: ClosingStockRowData, purchasedToday: number | undefined): ClosingStockRowData {
-  if (purchasedToday === undefined) return row;
-
-  const addedToday = normalizeStockCount(purchasedToday);
-  const addedDelta = addedToday - normalizeStockCount(row.addedToday);
+function refreshRowPurchasedToday(
+  row: ClosingStockRowData,
+  purchasedToday: number | undefined,
+  openingStock: number | undefined,
+): ClosingStockRowData {
+  const previousStock = openingStock ?? normalizeStockCount(row.previousStock);
+  const addedToday = normalizeStockCount(purchasedToday ?? row.addedToday);
+  const addedDelta = addedToday - normalizeStockCount(row.addedToday)
+    + previousStock - normalizeStockCount(row.previousStock);
   const closingStock = Math.max(0, normalizeStockCount(row.closingStock) + addedDelta);
   const summary = calculateStockCountSummary({
-    previousStock: normalizeStockCount(row.previousStock),
+    previousStock,
     addedToday,
     adjustmentQuantity: normalizeStockAdjustment(row.adjustmentQuantity),
     closingStock,
@@ -422,6 +427,7 @@ function refreshRowPurchasedToday(row: ClosingStockRowData, purchasedToday: numb
 
   return {
     ...row,
+    previousStock: formatStockValue(previousStock),
     addedToday: formatStockValue(addedToday),
     closingStock: formatStockValue(closingStock),
     soldQuantity: formatStockValue(summary.soldQuantity),
@@ -854,7 +860,7 @@ export function buildEditableClosingStockRows({
       // may have been entered or corrected later, so display the mismatch but
       // never synthesize different added/closing values for that old count.
       return isCurrentDate && !product.is_deleted
-        ? refreshRowPurchasedToday(savedRow, purchasedToday)
+        ? refreshRowPurchasedToday(savedRow, purchasedToday, previousClosing)
         : savedRow;
     }
 

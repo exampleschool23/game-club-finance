@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  calculateStockOpeningBalances,
   calculateSoldQuantity,
   calculateClosingStockFromSold,
   calculateBarIncome,
@@ -355,5 +356,32 @@ describe('recalculateFutureStockCounts', () => {
         bar_profit: 10000,
       },
     ]);
+  });
+});
+
+describe('opening stock between closings', () => {
+  it('uses each product’s latest closing and excludes both interval boundaries', () => {
+    expect(calculateStockOpeningBalances([
+      { product_id: 'a', date: '2026-09-10', closing_stock: 100 },
+      { product_id: 'a', date: '2026-09-12', closing_stock: 3 },
+      { product_id: 'b', date: '2026-09-14', closing_stock: 4 },
+      { product_id: 'a', date: '2026-09-15', closing_stock: 999 },
+    ], [
+      { product_id: 'a', date: '2026-09-12', quantity: 50, cost_price: 1 },
+      { product_id: 'a', date: '2026-09-13', quantity: 2, cost_price: 1 },
+      { product_id: 'a', date: '2026-09-14', quantity: 4, cost_price: 1 },
+      { product_id: 'a', date: '2026-09-15', quantity: 20, cost_price: 1 },
+      { product_id: 'a', date: '2026-09-16', quantity: 30, cost_price: 1 },
+      { product_id: 'b', date: '2026-09-14', quantity: 50, cost_price: 1 },
+    ], '2026-09-15', true)).toEqual({ a: 9, b: 4 });
+  });
+
+  it('keeps current live-stock defaults before the first closing and uses earlier receipts for historical dates', () => {
+    const receipts = [
+      { product_id: 'new', date: '2026-09-13', quantity: 6, cost_price: 1 },
+      { product_id: 'new', date: '2026-09-15', quantity: 12, cost_price: 1 },
+    ];
+    expect(calculateStockOpeningBalances([], receipts, '2026-09-14', true)).toEqual({});
+    expect(calculateStockOpeningBalances([], receipts, '2026-09-14', false)).toEqual({ new: 6 });
   });
 });

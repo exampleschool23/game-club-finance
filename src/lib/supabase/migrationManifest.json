@@ -54,5 +54,6 @@
   "053_remove_pre_multiclub_policies.sql",
   "054_cache_ledger_read_permissions.sql",
   "055_product_archive_integrity.sql",
-  "056_owner_only_cost_prices.sql"
+  "056_owner_only_cost_prices.sql",
+  "057_stock_opening_purchase_carry_forward.sql"
 ]

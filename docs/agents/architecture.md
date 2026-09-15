@@ -74,7 +74,7 @@ observer enables charts, rather than competing with initial data reads.
 - Data sets that may exceed 1,000 rows use `fetchAllRows` from
   `src/lib/supabase/pagination.ts`.
 - The dashboard prefers `get_dashboard_snapshot`; closing stock prefers
-  `get_latest_stock_closings`. Both retain temporary direct-query fallbacks for
+  `get_stock_opening_balances` (latest closing plus intervening receipts). Both retain temporary direct-query fallbacks for
   deployments where the application arrives before the database migration.
 - Daily/monthly reports and dashboard money-detail routes prefer the selective
   `get_finance_report_snapshot`. Pass only the ledger sections the screen needs;

@@ -23,6 +23,7 @@ fractional rows remain readable for compatibility.
 The implementation is `src/lib/calculations/stock.ts`:
 
 ```text
+previousStock  = latestClosing + purchasesAfterClosingBeforeSelectedDate
 availableStock = previousStock + addedToday + adjustmentQuantity
 soldQuantity   = max(0, availableStock - closingStock)
 barIncome      = soldQuantity * salePrice
@@ -54,9 +55,25 @@ Do not split an RPC into separate inserts/updates. The functions lock and
 validate related rows so concurrent writes cannot leave partial ledger state.
 
 The dashboard and closing page also use read RPCs
-`get_dashboard_snapshot` and `get_latest_stock_closings` for performance. Their
+`get_dashboard_snapshot` and `get_stock_opening_balances` for performance.
+`get_latest_stock_closings` remains available for older clients. Their
 direct-query paths are deployment compatibility fallbacks, not alternative
 business definitions.
+
+Migration 057 includes receipts on dates with no closing in the next opening
+balance, while `added_today` and purchase-cost cards remain selected-date totals.
+Both the read fallback and atomic save use this rule. With no earlier closing,
+the current day uses live stock minus same-day purchases; a new historical
+closing uses only earlier purchase receipts. Current saved rows refresh their
+opening and closing by the same delta, preserving recorded sold quantities.
+
+Apply 057 before deploying the frontend. It does not rewrite saved history or
+infer physical stock/sales for dates affected by the old bug. Reconcile affected
+historical counts separately using verified stock and sales; purchase receipts
+alone do not establish actual sales. Existing historical openings also remain
+snapshots when that row is edited, so old rows remain editable. Editing
+a historical closing validates/recalculates later openings including intervening
+receipts; inserting a missing closing splits the interval without double counting.
 
 Migration 054 removes per-history-row permission lookups from these reads while
 preserving the existing RLS results and stock write rules. Apply it to the
@@ -80,6 +97,7 @@ the forward stock chain. Preserve the database behavior in migrations 034 and
 - `src/app/(dashboard)/stock-purchase/StockPurchasePage.tsx`: purchase UI/RPCs.
 - `src/app/(dashboard)/closing-stock/ClosingStockPage.tsx`: closing workflow.
 - `src/lib/closingStock.ts`: drafts/import transformation.
+- `src/lib/supabase/stockOpeningBalances.ts`: opening read RPC and paginated fallback.
 - `src/lib/calculations/stock.ts`: pure formulas.
 - `src/lib/calculations/barMoney.ts`: bar cash and purchase cutoff.
 - `supabase/migrations/034_atomic_closing_stock_save.sql`: atomic stock model.
