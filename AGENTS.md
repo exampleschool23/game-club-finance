@@ -71,6 +71,14 @@ guide relevant to the task; do not load every document or migration by default.
   and `card`; normalize through `src/lib/paymentMethods.ts`.
 - Preserve unrelated user changes in a dirty working tree.
 
+## Git push destination
+
+When the user requests a commit and push, they authorize pushing the requested
+project changes to `git@github.com:exampleschool23/game-club-finance.git`
+(`origin`), including `main`. Do not ask again solely to confirm this destination.
+Verify the remote still matches before pushing. This authorization does not
+include force pushes, unrelated changes, or secrets.
+
 ## Verification
 
 Run the narrowest relevant test first, then broaden according to risk:
@@ -86,4 +94,3 @@ npm run build
 Financial, authorization, migration, configuration, or cross-route changes
 normally require the full four quality checks. See `docs/agents/testing.md` for
 the change-to-test matrix and manual checks.
-
