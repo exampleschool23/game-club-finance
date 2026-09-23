@@ -26,6 +26,12 @@ export function MigrationHealthPanel({ clubId }: { clubId: string }) {
   }
 
   const data = result?.status === 'ready' ? result.data : null;
+  const ownerProfitChecksPass = data && [
+    'get_owner_profit_snapshot',
+    'enforce_owner_withdrawal_month_balance',
+    'withdraw_owner_money_for_month',
+  ].every((name) => data.checks.some((check) => check.name === name && check.status === 'matching'))
+    && data.checks.every((check) => check.status === 'matching');
   return (
     <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6" aria-busy={loading}>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -44,8 +50,7 @@ export function MigrationHealthPanel({ clubId }: { clubId: string }) {
         {result?.status === 'unavailable' && <p className="rounded-lg bg-amber-50 p-3 text-amber-900">{t('unavailable')}</p>}
         {result?.status === 'error' && <p role="alert" className="text-danger-600">{t('error')}</p>}
         {data && <>
-          <p className="mb-4 text-gray-600">{t('historyNote')}</p>
-          {!data.historyAvailable && <p className="mb-4 text-amber-800">{t('noHistory')}</p>}
+          {ownerProfitChecksPass && <p className="mb-4 rounded-lg bg-success-50 p-3 text-success-600">{t('checksPassed')}</p>}
           <h3 className="font-semibold text-gray-900">{t('featureChecks')}</h3>
           <p className="mt-1 text-xs text-gray-500">{t('checksNote')}</p>
           <ul className="mt-2 divide-y divide-gray-100">
@@ -56,14 +61,16 @@ export function MigrationHealthPanel({ clubId }: { clubId: string }) {
           </ul>
           <details className="mt-4">
             <summary className="cursor-pointer font-semibold text-gray-900">{t('allMigrations', { count: migrations.length })}</summary>
-            <ul className="mt-2 max-h-96 divide-y divide-gray-100 overflow-auto">
+            <p className="mt-2 text-gray-600">{t('historyNote')}</p>
+            {!data.historyAvailable && <p className="mt-2 text-gray-500">{t('noHistory')}</p>}
+            {data.historyAvailable && <ul className="mt-2 max-h-96 divide-y divide-gray-100 overflow-auto">
               {migrations.map((file) => <li key={file} className="flex flex-wrap justify-between gap-2 py-2">
                 <span className="min-w-0 break-all font-mono text-xs">{file}</span>
                 <span className="text-xs text-gray-600">{t(data.historyAvailable && data.recordedVersions.includes(file.split('_')[0]) ? 'recorded' : 'unconfirmed')}</span>
               </li>)}
-            </ul>
+            </ul>}
           </details>
-          <p className="mt-4 text-xs text-gray-500">{t('nextSteps')}</p>
+          {!ownerProfitChecksPass && <p className="mt-4 text-xs text-gray-500">{t('nextSteps')}</p>}
         </>}
       </div>
     </section>
