@@ -169,7 +169,7 @@ export function Sidebar({
     {
       href: '/products',
       icon: Package,
-      label: t('inventory'),
+      label: t('products'),
       feature: 'inventory' as FeatureKey,
     },
     {

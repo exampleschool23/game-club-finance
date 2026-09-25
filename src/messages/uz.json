@@ -432,7 +432,18 @@
     "deleteProduct": "Mahsulotni o'chirish",
     "deleteConfirm": "Bu mahsulot o'chirilsinmi? U yangi ombor amaliyotlari uchun mavjud bo'lmaydi. Saqlangan savdolar, xaridlar, qoldiqlar, hisobotlar va tahlillar saqlanadi.",
     "inactiveEditBlocked": "O'chirilgan inventarni tahrirlab bo'lmaydi.",
-    "ownerOnlyCostPrice": "Tannarxni faqat klub egasi o‘zgartirishi mumkin."
+    "ownerOnlyCostPrice": "Tannarxni faqat klub egasi o‘zgartirishi mumkin.",
+    "search": "Mahsulot qidirish…",
+    "allCategories": "Barcha kategoriyalar",
+    "reorder": "Tartibni o‘zgartirish",
+    "finishReordering": "Tayyor",
+    "reorderHelp": "Barcha mahsulotlar ko‘rsatilgan. Strelkalar bilan tartibni o‘zgartiring; har bir o‘zgarish avtomatik saqlanadi. Tugatgach, filtrlar tiklanadi.",
+    "lowStock": "Kam qolgan",
+    "outOfStock": "Tugagan",
+    "resultCount": "{total} ta mahsulotdan {count} tasi",
+    "noResults": "Filtrlarga mos mahsulot topilmadi",
+    "clearFilters": "Filtrlarni tozalash",
+    "stockUnits": "{count} dona"
   },
   "expenses": {
     "title": "Xarajatlar",

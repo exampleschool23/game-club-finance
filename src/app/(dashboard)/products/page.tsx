@@ -9,9 +9,9 @@ import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencyInput, formatUnitCurrency } from '@/lib/formatters';
 import { buildProductInsertPayload, buildProductUpdatePayload, type ProductWriteForm } from '@/lib/productWrites';
-import { ArrowDown, ArrowUp, Lock, Package, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ListOrdered, Lock, Package, Plus, Search, Trash2, X } from 'lucide-react';
 import type { Product } from '@/types';
 
 type ProductForm = ProductWriteForm;
@@ -48,6 +48,10 @@ export default function ProductsPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [search, setSearch] = useState('');
+  const [stockFilter, setStockFilter] = useState('all');
+  const [reordering, setReordering] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const isOwner = currentRole === 'owner';
   const canManageInventory = currentRole === 'owner' || currentRole === 'admin';
@@ -135,9 +139,18 @@ export default function ProductsPage() {
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    if (!selectedCategory) return products;
-    return products.filter((product) => productCategory(product.category) === selectedCategory);
-  }, [products, selectedCategory]);
+    if (reordering) return products;
+    const query = search.trim().toLocaleLowerCase();
+    return products.filter((product) => {
+      if (selectedCategory && productCategory(product.category) !== selectedCategory) return false;
+      if (query && !`${product.name} ${product.category ?? ''}`.toLocaleLowerCase().includes(query)) return false;
+      if (stockFilter === 'inactive') return !product.is_active;
+      if (stockFilter === 'all') return true;
+      if (!product.is_active || product.tracks_inventory === false) return false;
+      if (stockFilter === 'out') return product.current_stock <= 0;
+      return product.current_stock > 0 && product.current_stock <= (product.low_stock_threshold ?? 5);
+    });
+  }, [products, selectedCategory, search, stockFilter, reordering]);
   useEffect(() => {
     if (!selectedCategory) return;
     const categoryExists = products.some((product) => productCategory(product.category) === selectedCategory);
@@ -258,7 +271,7 @@ export default function ProductsPage() {
   }
 
   async function moveProduct(productId: string, direction: -1 | 1) {
-    if (!canManageInventory) return;
+    if (!canManageInventory || !selectedClubId || moving) return;
     const currentIndex = products.findIndex((product) => product.id === productId);
     const targetIndex = currentIndex + direction;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= products.length) return;
@@ -267,22 +280,30 @@ export default function ProductsPage() {
     const [moved] = reordered.splice(currentIndex, 1);
     reordered.splice(targetIndex, 0, moved);
 
+    setMoving(true);
     setProducts(reordered);
 
-    const supabase = createClient();
-    const updates = reordered.map((product, index) =>
-      supabase
-        .from('products')
-        .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
-        .eq('club_id', selectedClubId)
-        .eq('id', product.id),
-    );
-    const results = await Promise.all(updates);
-    const firstError = results.find((result) => result.error)?.error;
+    try {
+      const supabase = createClient();
+      const updates = reordered.map((product, index) =>
+        supabase
+          .from('products')
+          .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
+          .eq('club_id', selectedClubId)
+          .eq('id', product.id),
+      );
+      const results = await Promise.all(updates);
+      const firstError = results.find((result) => result.error)?.error;
 
-    if (firstError) {
-      setError(isMissingSortOrder(firstError) ? t('sortOrderMigrationRequired') : firstError.message);
+      if (firstError) {
+        setError(isMissingSortOrder(firstError) ? t('sortOrderMigrationRequired') : firstError.message);
+        await loadProducts();
+      }
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : tc('error'));
       await loadProducts();
+    } finally {
+      setMoving(false);
     }
   }
 
@@ -313,45 +334,62 @@ export default function ProductsPage() {
         />
       ) : (
         <div className="space-y-3">
-          {categoryOptions.length > 0 && (
-            <div className="rounded-lg border border-gray-100 bg-white px-4 py-3 shadow-sm">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('')}
-                  className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                    selectedCategory === ''
-                      ? 'border-primary-600 bg-primary-600 text-white'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {tc('all')}
+          <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1">
+                <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-3 text-gray-400" />
+                <input type="search" className="input-field pl-10" aria-label={t('search')}
+                  placeholder={t('search')} value={search} disabled={reordering}
+                  onChange={(event) => setSearch(event.target.value)} />
+              </div>
+              <select className="input-field sm:max-w-56" aria-label={t('category')}
+                value={selectedCategory} disabled={reordering}
+                onChange={(event) => setSelectedCategory(event.target.value)}>
+                <option value="">{t('allCategories')}</option>
+                {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+              {canManageInventory && (
+                <button type="button" className="btn-secondary flex items-center justify-center gap-2"
+                  aria-pressed={reordering} disabled={moving} onClick={() => setReordering(!reordering)}>
+                  {reordering ? <Check size={16} /> : <ListOrdered size={16} />}
+                  {t(reordering ? 'finishReordering' : 'reorder')}
                 </button>
-                {categoryOptions.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setSelectedCategory(category)}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                      selectedCategory === category
-                        ? 'border-primary-600 bg-primary-600 text-white'
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {category}
+              )}
+            </div>
+            {reordering ? (
+              <p className="mt-3 text-sm text-gray-600" role="status">{t('reorderHelp')}</p>
+            ) : (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {(['all', 'low', 'out', 'inactive'] as const).map((filter) => (
+                  <button key={filter} type="button" aria-pressed={stockFilter === filter}
+                    onClick={() => setStockFilter(filter)}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${stockFilter === filter
+                      ? 'border-primary-600 bg-primary-600 text-white'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                    {filter === 'all' ? tc('all') : filter === 'inactive' ? tc('inactive') : t(filter === 'low' ? 'lowStock' : 'outOfStock')}
                   </button>
                 ))}
+                <span className="text-sm text-gray-500 sm:ml-auto" role="status">
+                  {t('resultCount', { count: filteredProducts.length, total: products.length })}
+                </span>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <DataTable
+          {filteredProducts.length === 0 ? (
+            <EmptyState icon={Search} title={t('noResults')} action={(
+              <button type="button" className="btn-secondary" onClick={() => {
+                setSearch(''); setSelectedCategory(''); setStockFilter('all');
+              }}>{t('clearFilters')}</button>
+            )} />
+          ) : <DataTable
             keyExtractor={(r) => r.id}
             data={filteredProducts}
             stickyHeader
+            className="[&_table]:min-w-0"
             columns={[
-              { key: 'name', header: t('name') },
-              ...(canManageInventory ? [{
+              { key: 'name', header: t('name'), className: 'font-medium text-gray-900' },
+              ...(canManageInventory && reordering ? [{
                 key: 'sort_order',
                 header: t('order'),
                 render: (r: Product) => {
@@ -361,7 +399,7 @@ export default function ProductsPage() {
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={index <= 0}
+                        disabled={moving || index <= 0}
                         aria-label={t('moveUp')}
                         title={t('moveUp')}
                         onClick={() => moveProduct(r.id, -1)}
@@ -371,7 +409,7 @@ export default function ProductsPage() {
                       <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={index === -1 || index >= products.length - 1}
+                        disabled={moving || index === -1 || index >= products.length - 1}
                         aria-label={t('moveDown')}
                         title={t('moveDown')}
                         onClick={() => moveProduct(r.id, 1)}
@@ -382,37 +420,39 @@ export default function ProductsPage() {
                   );
                 },
               }] : []),
-              { key: 'category', header: t('category'), render: (r) => r.category ?? '-' },
+              ...(!selectedCategory || reordering ? [{ key: 'category', header: t('category'), className: 'hidden lg:table-cell', render: (r: Product) => r.category ?? '-' }] : []),
               {
                 key: 'sale_price',
-                header: t('salePrice'),
+                header: `${t('salePrice')} (UZS)`,
+                className: 'text-right tabular-nums whitespace-nowrap',
                 render: (r) => formatCurrency(r.sale_price),
               },
               {
                 key: 'cost_price',
-                header: t('costPrice'),
-                render: (r) => formatCurrency(r.cost_price),
+                header: `${t('costPrice')} (UZS)`,
+                className: 'hidden lg:table-cell text-right tabular-nums whitespace-nowrap',
+                render: (r) => formatUnitCurrency(r.cost_price),
               },
               {
                 key: 'current_stock',
                 header: t('currentStock'),
+                className: 'text-right tabular-nums whitespace-nowrap',
                 render: (r) => {
                   if (r.tracks_inventory === false) {
                     return <Badge variant="default">{t('madeToOrder')}</Badge>;
                   }
-                  const low = r.current_stock <= (r.low_stock_threshold ?? 5);
-                  return (
-                    <span className={low ? 'text-danger-500 font-semibold' : ''}>
-                      {r.current_stock}
-                    </span>
-                  );
+                  const quantity = t('stockUnits', { count: formatUnitCurrency(r.current_stock) });
+                  if (r.current_stock <= 0) return <Badge variant="danger">{t('outOfStock')} · {quantity}</Badge>;
+                  if (r.current_stock <= (r.low_stock_threshold ?? 5)) return <Badge variant="warning">{t('lowStock')} · {quantity}</Badge>;
+                  return <span>{quantity}</span>;
                 },
               },
               {
                 key: 'is_active',
                 header: tc('active'),
+                className: 'hidden sm:table-cell',
                 render: (r) => (
-                  <Badge variant={r.is_active ? 'success' : 'default'}>
+                  <Badge variant="default" className={r.is_active ? 'bg-transparent text-gray-500' : ''}>
                     {r.is_active ? tc('active') : tc('inactive')}
                   </Badge>
                 ),
@@ -432,9 +472,11 @@ export default function ProductsPage() {
                 ),
               }] : []),
             ]}
-          />
+          />}
         </div>
       )}
+
+      {error && !modalOpen && <p role="alert" className="mt-3 text-sm text-danger-500">{error}</p>}
 
       {/* Modal */}
       {modalOpen && (

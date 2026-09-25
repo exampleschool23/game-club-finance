@@ -432,7 +432,18 @@
     "deleteProduct": "Delete Product",
     "deleteConfirm": "Delete this product? It will no longer be available for new stock operations. Saved sales, purchases, closing stock, reports, and analytics will be preserved.",
     "inactiveEditBlocked": "Disabled inventory cannot be edited.",
-    "ownerOnlyCostPrice": "Only the club owner can change cost prices."
+    "ownerOnlyCostPrice": "Only the club owner can change cost prices.",
+    "search": "Search products…",
+    "allCategories": "All categories",
+    "reorder": "Reorder products",
+    "finishReordering": "Done",
+    "reorderHelp": "The full catalog is shown. Use the arrows to move products; each change saves automatically. Your filters return when you finish.",
+    "lowStock": "Low stock",
+    "outOfStock": "Out of stock",
+    "resultCount": "{count} of {total} products",
+    "noResults": "No products match your filters",
+    "clearFilters": "Clear filters",
+    "stockUnits": "{count} units"
   },
   "expenses": {
     "title": "Expenses",
