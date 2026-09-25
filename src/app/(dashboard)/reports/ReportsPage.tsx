@@ -425,8 +425,8 @@ export default function ReportsPage() {
         body: JSON.stringify({ clubId: selectedClubId, expenseId: activity.id }),
       });
       if (!response.ok) {
-        const result = await response.json().catch(() => null) as { error?: string } | null;
-        deleteError = { message: result?.error ?? 'Could not delete expense' };
+        const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+        deleteError = { message: result?.code === 'SALARY_PAYMENT_IMMUTABLE' ? t('salaryPaymentProtected') : result?.error ?? 'Could not delete expense' };
       }
     } else {
       const supabase = createClient();

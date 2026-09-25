@@ -173,6 +173,12 @@ export function Sidebar({
       feature: 'inventory' as FeatureKey,
     },
     {
+      href: '/salaries',
+      icon: Wallet,
+      label: t('salaries'),
+      feature: 'salaries' as FeatureKey,
+    },
+    {
       href: '/team',
       icon: Shield,
       label: t('team'),
@@ -187,7 +193,7 @@ export function Sidebar({
   ].filter((link) => (
     link.href === '/reports'
       ? canAccessFeature(role, featureAccess, 'reports') || canAccessFeature(role, featureAccess, 'expenses')
-      : canAccessFeature(role, featureAccess, link.feature)
+      : link.feature === 'salaries' || canAccessFeature(role, featureAccess, link.feature)
   ));
 
   const initials = fullName

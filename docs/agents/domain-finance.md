@@ -96,3 +96,36 @@ When a formula changes, inspect all consumers: dashboard, daily/monthly reports,
 money details, owner money, Telegram report, and tests. Prefer changing one pure
 calculation and its tests rather than fixing each consumer independently.
 
+## Employee salaries
+
+`src/lib/calculations/salaries.ts` is the canonical payroll calculation.
+`salary_employees` identifies staff (independent of login/team memberships),
+`salary_rates` preserves effective-dated daily/monthly rates, KPI and active
+status, and `salary_entries` holds append-only payments, bonuses and fines.
+
+Daily salary accrues on active calendar days including the current business
+date. Monthly salary accrues proportionally to the actual calendar days in
+that month. Changes/deactivation start today; historical rates stay intact.
+Same-business-day settings can be corrected. KPI percentages are weighted by
+eligible days over elapsed days in that month.
+
+KPI uses the existing Owner Profit **earned** cash definition before owner
+withdrawals, after all accrued payroll costs, including KPI. Add back linked
+salary payments to monthly earned cash, then deduct base + bonus - fine. With
+`P` as that remainder and `r` as the sum of weighted employee KPI fractions,
+remaining owner profit is `max(0, P) / (1 + r)`; each employee receives their
+fraction of that remaining profit. Salary payment timing cannot change KPI.
+Existing manual salary expenses remain ordinary expenses; do not record the
+same payout again through payroll.
+
+Employee balance = accrued base + KPI + bonuses - fines - payments. Negative
+balances represent advances/credit and carry across months. Bonuses and fines
+affect salary entitlement, not immediate cash. Payments create ordinary salary
+expenses atomically, so current dashboards, owner money, reports and daily
+Telegram totals already include their cash outflow without separate deduction.
+Payroll balances/KPI are live estimates: later finance edits may change past KPI.
+There is no closed payroll-period snapshot in this version.
+
+Future salary employees are supported by migration `060_future_salary_employees.sql`. They accrue nothing before joining. `change_salary_term` changes only salary or KPI under the employee lock, effective on the club business date (or the future joining date), preserving the other terms and earlier rates.
+
+Migration 062 adds audited deletion for salary entries and rates. `delete_salary_record` requires salary editing access and retains the original row with `deleted_at`/`deleted_by`. Payment deletion removes the linked expense atomically; direct payroll mutations remain forbidden. Calculations exclude deleted rows; history displays them. Deleting a rate extends the preceding rate until the next live rate and may change historical KPI/balances. Operations live at `/salaries`, employees at `/salaries/employees`, and individual history at `/salaries/employees/[employeeId]`.

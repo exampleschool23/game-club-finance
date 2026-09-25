@@ -59,6 +59,17 @@ guide relevant to the task; do not load every document or migration by default.
 ## Implementation conventions
 
 - Prefer `@/` imports for `src` modules.
+- Format every user-facing date and monetary amount, including form inputs.
+  Use the shared `DatePicker`/`MonthPicker` from
+  `src/components/ui/CalendarPicker.tsx` and date formatters from
+  `src/lib/formatters.ts` so dates follow the selected app language; keep stored
+  dates in ISO format. Do not use raw native date inputs for visible forms.
+  Show prices and money with thousands separators (for example, `1 000 000`).
+  For whole-UZS inputs, use `formatCurrencyInput` while editing and
+  `parseCurrencyInput` when saving; use `formatCurrency` for totals and
+  `formatUnitCurrency` where fractional unit prices must be preserved. Do not
+  pass formatted money strings directly to `Number()` or silently discard
+  required precision.
 - Keep business logic pure and tested under `src/lib`; components should mainly
   coordinate queries, state, and rendering.
 - Use `src/lib/supabase/client.ts` only in browser code,

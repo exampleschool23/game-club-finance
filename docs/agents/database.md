@@ -129,3 +129,23 @@ For an existing withdrawal RPC that blocks manual execution of 051, use
 one transaction, then apply 052. The repair script preserves ledger rows and
 does not update CLI migration history. Do not mark a version applied solely
 because one function exists.
+
+## Payroll (migration 059)
+
+Migration 061 lets all club members view salaries. Owners retain editing access; other members require the explicit `salaries` feature grant from Team. RLS enforces member reads and every payroll mutation RPC checks editing access. Use
+`save_salary_employee` for employee/rate changes and `record_salary_entry` for
+payments, bonuses and fines. Pass a stable request UUID on entry retries.
+The payment RPC atomically inserts the payroll entry and linked `expenses` row;
+composite foreign keys prevent cross-club links. Linked salary expenses cannot
+be changed/deleted, even through the ordinary expense endpoint. Report delivery
+metadata can still be updated. Direct browser writes to payroll tables are denied.
+Apply all pending migrations in order before using `/salaries`; the page reports
+a load error rather than calculating misleading zero balances without its schema.
+
+Future salary employees are supported by migration `060_future_salary_employees.sql`. They accrue nothing before joining. `change_salary_term` changes only salary or KPI under the employee lock, effective on the club business date (or the future joining date), preserving the other terms and earlier rates.
+
+Migration 062 adds audited deletion for salary entries and rates. `delete_salary_record` requires salary editing access and retains the original row with `deleted_at`/`deleted_by`. Payment deletion removes the linked expense atomically; direct payroll mutations remain forbidden. Calculations exclude deleted rows; history displays them. Deleting a rate extends the preceding rate until the next live rate and may change historical KPI/balances. Operations live at `/salaries`, employees at `/salaries/employees`, and individual history at `/salaries/employees/[employeeId]`.
+
+Migration 063 adds `deactivate_salary_employee`: salary editors can stop accrual from the current club business date, or the joining date for upcoming staff. It preserves the latest salary/KPI terms under a lock and does not remove payment history. Employee cards offer History and Deactivate only; forms stay on `/salaries`.
+
+Migration 064 adds `change_salary_employee_role` for salary editors. It changes only the employee job title (Manager, Admin, Cleaner), without touching salary rates, entries, or Team membership permissions.

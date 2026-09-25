@@ -162,13 +162,17 @@ export async function DELETE(request: Request) {
 
   const { data: expense, error: expenseError } = await supabase
     .from('expenses')
-    .select('id,telegram_chat_id,telegram_message_id')
+    .select('*') // Includes the optional salary link; also works before migration 059.
     .eq('club_id', body.clubId)
     .eq('id', body.expenseId)
     .maybeSingle();
 
   if (expenseError) return Response.json({ error: expenseError.message }, { status: 400 });
   if (!expense) return Response.json({ error: 'Expense not found' }, { status: 404 });
+
+  if (expense.salary_entry_id) {
+    return Response.json({ error: 'Salary payments cannot be deleted.', code: 'SALARY_PAYMENT_IMMUTABLE' }, { status: 409 });
+  }
 
   if (expense.telegram_chat_id && expense.telegram_message_id) {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;

@@ -56,5 +56,11 @@
   "055_product_archive_integrity.sql",
   "056_owner_only_cost_prices.sql",
   "057_stock_opening_purchase_carry_forward.sql",
-  "058_admin_purchase_cost_entry.sql"
+  "058_admin_purchase_cost_entry.sql",
+  "059_employee_salaries.sql",
+  "060_future_salary_employees.sql",
+  "061_salary_edit_access.sql",
+  "062_salary_record_deletion.sql",
+  "063_deactivate_salary_employee.sql",
+  "064_salary_employee_role.sql"
 ]

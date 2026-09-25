@@ -51,6 +51,7 @@ function queryResult<T>(data: T, error: { message: string } | null = null) {
 
 function mockSupabase(expense: {
   id: string;
+  salary_entry_id?: string;
   telegram_chat_id: string | null;
   telegram_message_id: number | null;
 }) {
@@ -110,6 +111,14 @@ describe('expense deletion route', () => {
     const response = await DELETE(deleteRequest());
 
     expect(response.status).toBe(502);
+    expect(deleteQuery.delete).not.toHaveBeenCalled();
+  });
+
+  it('protects payroll payments before attempting Telegram or expense deletion', async () => {
+    const { deleteQuery } = mockSupabase({ id: EXPENSE_ID, salary_entry_id: 'salary-entry', telegram_chat_id: '-1001', telegram_message_id: 42 });
+    const response = await DELETE(deleteRequest());
+    expect(response.status).toBe(409);
+    expect(mocks.deleteTelegramMessage).not.toHaveBeenCalled();
     expect(deleteQuery.delete).not.toHaveBeenCalled();
   });
 

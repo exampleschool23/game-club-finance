@@ -10,6 +10,7 @@ export const FEATURE_DEFINITIONS = [
   { key: 'owner_profit', paths: ['/money-taken'], labelKey: 'ownerProfit', descriptionKey: 'ownerProfitDescription' },
   { key: 'debts', paths: ['/debts'], labelKey: 'debts', descriptionKey: 'debtsDescription' },
   { key: 'inventory', paths: ['/products'], labelKey: 'inventory', descriptionKey: 'inventoryDescription' },
+  { key: 'salaries', paths: ['/salaries'], labelKey: 'salaries', descriptionKey: 'salariesDescription' },
   { key: 'team', paths: ['/team'], labelKey: 'team', descriptionKey: 'teamDescription', ownerOnly: true },
   { key: 'settings', paths: ['/settings'], labelKey: 'settings', descriptionKey: 'settingsDescription' },
 ] as const;
@@ -77,6 +78,8 @@ export function canAccessFeature(role: UserRole, explicitAccess: unknown, featur
 
 export function canAccessPath(role: UserRole, explicitAccess: unknown, pathname: string): boolean {
   const normalizedPath = pathname !== '/' ? pathname.replace(/\/$/, '') : pathname;
+  // Salary balances are visible to club members; the salaries feature grants editing.
+  if (normalizedPath === '/salaries' || normalizedPath.startsWith('/salaries/')) return true;
   if (normalizedPath === '/reports') {
     return canAccessFeature(role, explicitAccess, 'reports') || canAccessFeature(role, explicitAccess, 'expenses');
   }
@@ -92,5 +95,5 @@ export function defaultPathForAccess(role: UserRole, explicitAccess: unknown): s
       return feature.key === 'expenses' ? '/reports' : feature.paths[0];
     }
   }
-  return null;
+  return '/salaries';
 }

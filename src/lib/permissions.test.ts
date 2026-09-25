@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canAccessPath,
+  canAccessFeature,
   defaultPathForAccess,
   featureAccessForMembership,
   featureForPath,
@@ -49,5 +50,18 @@ describe('feature permissions', () => {
   it('always gives owners full access and keeps Team owner-only', () => {
     expect(canAccessPath('owner', [], '/expenses')).toBe(true);
     expect(canAccessPath('admin', ['team'], '/team')).toBe(false);
+    expect(canAccessPath('owner', [], '/salaries')).toBe(true);
+    expect(canAccessPath('admin', [], '/salaries')).toBe(true);
+    expect(canAccessPath('viewer', [], '/salaries')).toBe(true);
   });
+  it('requires an explicit salary editing grant for nonowners', () => {
+    for (const role of ['admin', 'viewer'] as const) {
+      expect(canAccessFeature(role, null, 'salaries')).toBe(false);
+      expect(canAccessFeature(role, [], 'salaries')).toBe(false);
+      expect(canAccessFeature(role, ['salaries'], 'salaries')).toBe(true);
+      expect(defaultPathForAccess(role, [])).toBe('/salaries');
+    }
+    expect(canAccessFeature('owner', [], 'salaries')).toBe(true);
+  });
+
 });
