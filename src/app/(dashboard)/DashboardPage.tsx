@@ -211,7 +211,7 @@ export default function DashboardPage({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { selectedClubId, businessDayStartHour, role } = useClub();
+  const { selectedClubId, businessDayStartHour } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [range, setRange] = useState(() => initialDashboardRange(searchParams, businessToday));
@@ -661,21 +661,9 @@ export default function DashboardPage({
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
-          <p className="mt-1 text-base text-gray-600">{t('subtitle')}</p>
-        </div>
-        {role === 'owner' ? (
-          <button
-            type="button"
-            onClick={() => router.push('/money-taken')}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-primary-700"
-          >
-            <Wallet size={18} />
-            {t('recordMoneyTaken')}
-          </button>
-        ) : null}
+      <div>
+        <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
+        <p className="mt-1 text-base text-gray-600">{t('subtitle')}</p>
       </div>
 
       {error && (
