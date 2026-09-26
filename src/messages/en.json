@@ -939,6 +939,7 @@
     "recordOperations": "Record payment / bonus / fine",
     "deactivate": "Deactivate",
     "deactivated": "Employee deactivated. Previous history and unpaid balance are preserved.",
-    "changeRole": "Change role"
+    "changeRole": "Change role",
+    "lastRateHelp": "Keep at least one salary rate. Edit the employee settings or deactivate the employee instead."
   }
 }

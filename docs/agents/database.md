@@ -149,3 +149,12 @@ Migration 062 adds audited deletion for salary entries and rates. `delete_salary
 Migration 063 adds `deactivate_salary_employee`: salary editors can stop accrual from the current club business date, or the joining date for upcoming staff. It preserves the latest salary/KPI terms under a lock and does not remove payment history. Employee cards offer History and Deactivate only; forms stay on `/salaries`.
 
 Migration 064 adds `change_salary_employee_role` for salary editors. It changes only the employee job title (Manager, Admin, Cleaner), without touching salary rates, entries, or Team membership permissions.
+
+Migration 065 adds `get_salary_profit_snapshot`: it checks club membership,
+then returns only monthly earned-cash inputs under a trusted role. This keeps
+payroll KPI independent of finance feature grants without widening ledger RLS.
+The application fails closed if this RPC is missing; apply 065 before deploying
+its salary loader. It reuses the canonical owner-profit aggregate without changing
+that function or its migration-health fingerprint. The same migration prevents
+deleting the final live salary rate under the employee lock. Employee settings
+can restore a missing rate left by older versions, retaining deleted audit rows.

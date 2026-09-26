@@ -97,3 +97,8 @@ export function defaultPathForAccess(role: UserRole, explicitAccess: unknown): s
   }
   return '/salaries';
 }
+
+/** These feature unions grant reads of every input to accounting net profit. */
+export function canReadFinancialTotals(role: UserRole, explicitAccess: unknown): boolean {
+  return (['dashboard', 'reports', 'owner_profit'] as const).some((key) => canAccessFeature(role, explicitAccess, key));
+}

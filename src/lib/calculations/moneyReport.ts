@@ -201,8 +201,7 @@ export function buildMoneyReport(
   const paymentMethods = buildPaymentMethods(cashRows, expenseRows, debtPaymentRows);
   const totalCollected = Object.values(paymentMethods)
     .reduce((sum, method) => sum + method.collected, 0);
-  const totalExpenses = Object.values(paymentMethods)
-    .reduce((sum, method) => sum + method.expenses, 0);
+  const totalExpenses = expenseRows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
   const gameClubLeft = Object.values(paymentMethods)
     .reduce((sum, method) => sum + method.left, 0);
   const barExpenses = expenseRows.reduce(

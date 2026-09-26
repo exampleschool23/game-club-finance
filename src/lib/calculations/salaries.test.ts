@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateSalaries, salaryBalance, type SalaryEmployee, type SalaryEntry, type SalaryRate } from './salaries';
+import { calculateSalaries, salaryBalance, canDeleteSalaryRate, type SalaryEmployee, type SalaryEntry, type SalaryRate } from './salaries';
 
 const employee: SalaryEmployee = { id: 'one', club_id: 'club', name: 'Employee', job_title: '', joined_on: '2026-09-01' };
 const rate: SalaryRate = { id: 'rate', employee_id: 'one', effective_date: '2026-09-01', salary_type: 'daily', amount: 100, kpi_percent: 10, active: true };
@@ -86,4 +86,10 @@ describe('salary accrual and owner profit after all salary costs', () => {
     expect(rows).toEqual(calculate());
   });
 
+});
+
+it('keeps the final live rate available for editing, ignoring deleted history and other staff',()=>{
+ expect(canDeleteSalaryRate([rate],rate)).toBe(false);
+ expect(canDeleteSalaryRate([rate,{...rate,id:'deleted',deleted_at:'2026-09-24'},{...rate,id:'other',employee_id:'two'}],rate)).toBe(false);
+ expect(canDeleteSalaryRate([rate,{...rate,id:'replacement'}],rate)).toBe(true);
 });

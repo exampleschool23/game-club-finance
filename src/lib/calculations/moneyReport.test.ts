@@ -89,7 +89,7 @@ describe('money report', () => {
     });
     expect(report.paymentMethods.playstation.left).toBe(200_000);
     expect(report.totalCollected).toBe(3_550_000);
-    expect(report.totalExpenses).toBe(400_000);
+    expect(report.totalExpenses).toBe(1_300_000);
     expect(report.barLeft).toBe(-900_000);
     expect(report.totalLeft).toBe(2_250_000);
     expect(report.days).toEqual([
@@ -224,7 +224,7 @@ describe('money report', () => {
       created_at: '2026-08-26T09:00:00Z',
     }]);
 
-    expect(report.totalExpenses).toBe(0);
+    expect(report.totalExpenses).toBe(75_000);
     expect(report.barLeft).toBe(-75_000);
     expect(report.totalLeft).toBe(-75_000);
     expect(report.days).toHaveLength(1);
@@ -308,4 +308,17 @@ describe('money report', () => {
     expect(debtPayments.totalCollected).toBe(100);
     expect(debtPayments.days[0].activities.map((activity) => activity.kind)).toEqual(['debt_payment']);
   });
+});
+
+it.each(['all','expense','expense:salary'] as const)('counts salary payments from both sources for %s without double-deducting cash', (filter) => {
+  const rows = [
+    {id:'bar',date:'2026-09-26',amount:100000,category:'salary',payment_method:'cash',payment_source:'bar' as const,comment:null,created_at:'2026-09-26T10:00:00Z'},
+    {id:'club',date:'2026-09-26',amount:50000,category:'salary',payment_method:'cash',payment_source:'game_club' as const,comment:null,created_at:'2026-09-26T10:00:00Z'},
+  ];
+  const report=buildFilteredMoneyReport([],rows,[],filter);
+  expect(report.totalExpenses).toBe(150000);
+  expect(report.days[0].expenses).toBe(report.totalExpenses);
+  expect(report.paymentMethods.cash.expenses).toBe(50000);
+  expect(report.barLeft).toBe(-100000);
+  expect(report.totalLeft).toBe(-150000);
 });

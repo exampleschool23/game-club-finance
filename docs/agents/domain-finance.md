@@ -129,3 +129,12 @@ There is no closed payroll-period snapshot in this version.
 Future salary employees are supported by migration `060_future_salary_employees.sql`. They accrue nothing before joining. `change_salary_term` changes only salary or KPI under the employee lock, effective on the club business date (or the future joining date), preserving the other terms and earlier rates.
 
 Migration 062 adds audited deletion for salary entries and rates. `delete_salary_record` requires salary editing access and retains the original row with `deleted_at`/`deleted_by`. Payment deletion removes the linked expense atomically; direct payroll mutations remain forbidden. Calculations exclude deleted rows; history displays them. Deleting a rate extends the preceding rate until the next live rate and may change historical KPI/balances. Operations live at `/salaries`, employees at `/salaries/employees`, and individual history at `/salaries/employees/[employeeId]`.
+
+Migration 065 preserves at least one live rate per employee. The Employee Settings
+form can restore settings that were already deleted, effective today (or the
+future joining date), without rewriting historical deleted rates. Payroll profit
+inputs now use the member-authorized salary snapshot, independent of ledger
+feature grants. Money Report expense totals include both payment sources;
+method balances still deduct only Game Club expenses. Daily Cash uses the same
+accounting-profit calculation as reports, including new debt principal and all
+expenses; the metric is hidden when the member cannot read every required ledger.

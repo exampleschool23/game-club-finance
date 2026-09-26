@@ -7,7 +7,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/CalendarPicker';
 import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, mutateFinanceRequest } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
 import type { Expense } from '@/types';
@@ -126,7 +126,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     setSaving(true);
     setError('');
 
-    const response = await fetch('/api/expenses', {
+    const response = await mutateFinanceRequest('/api/expenses', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

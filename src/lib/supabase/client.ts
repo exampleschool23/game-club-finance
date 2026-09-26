@@ -4,7 +4,7 @@ import { createSupabaseReadFetch } from './readCache';
 type BrowserSupabaseClient = ReturnType<typeof createBrowserClient>;
 
 let browserClient: BrowserSupabaseClient | undefined;
-let cachedFetch: typeof fetch | undefined;
+let cachedFetch: ReturnType<typeof createSupabaseReadFetch> | undefined;
 
 export function createClient() {
   if (!browserClient) {
@@ -20,4 +20,15 @@ export function createClient() {
   }
 
   return browserClient;
+}
+
+/** API routes write outside the browser Supabase client; invalidate on both
+ * sides of the request, including failures with an uncertain commit outcome. */
+export async function mutateFinanceRequest(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  cachedFetch?.invalidate();
+  try {
+    return await window.fetch(input, init);
+  } finally {
+    cachedFetch?.invalidate();
+  }
 }

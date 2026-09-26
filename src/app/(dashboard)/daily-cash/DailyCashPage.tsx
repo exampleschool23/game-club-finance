@@ -2,7 +2,7 @@
 
 // Route: /daily-cash
 
-import { useCallback, useEffect, useMemo, useState, type ElementType, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ElementType, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
@@ -19,6 +19,9 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
+import { canReadFinancialTotals } from '@/lib/permissions';
+import { loadDailyCashSummary, emptyDailyCashSummary, type DailyCashSummary } from '@/lib/supabase/dailyCashSummary';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -36,11 +39,6 @@ interface CashFormData {
   card_income: string;
   playstation_income: string;
   comment: string;
-}
-
-interface BarSummary {
-  sales: number;
-  profit: number;
 }
 
 const emptyForm = (date = todayIso()): CashFormData => ({
@@ -131,7 +129,7 @@ function PaymentCard({
 export default function DailyCashPage() {
   const t = useTranslations('dailyCash');
   const tc = useTranslations('common');
-  const { selectedClubId, role: currentRole, businessDayStartHour, enabledPaymentMethods } = useClub();
+  const { selectedClubId, role: currentRole, businessDayStartHour, enabledPaymentMethods, featureAccess } = useClub();
   const { locale } = useAppLocale();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [form, setForm] = useState<CashFormData>(() => emptyForm(businessToday));
@@ -142,7 +140,10 @@ export default function DailyCashPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => new Date());
-  const [barSummary, setBarSummary] = useState<BarSummary>({ sales: 0, profit: 0 });
+  const [financeSummary, setFinanceSummary] = useState<DailyCashSummary | null>(null);
+  const canSeeNetProfit = canReadFinancialTotals(currentRole, featureAccess);
+  const loadSequence = useRef(0);
+  const cancelLoads = useCallback(() => { loadSequence.current++; }, []);
 
   useEffect(() => {
     setForm(emptyForm(businessToday));
@@ -150,10 +151,11 @@ export default function DailyCashPage() {
 
   const fetchExisting = useCallback(
     async (date: string) => {
+      const requestId = ++loadSequence.current;
       if (!selectedClubId) {
         setEntry(null);
         setForm(emptyForm(date));
-        setBarSummary({ sales: 0, profit: 0 });
+        setFinanceSummary(null);
         setLoading(false);
         return;
       }
@@ -163,68 +165,62 @@ export default function DailyCashPage() {
       setMessage('');
       setError('');
 
-      const [cashRes, barRes] = await Promise.all([
-        supabase
-          .from('daily_cash_entries')
-          .select('*')
-          .eq('club_id', selectedClubId)
-          .eq('date', date)
-          .maybeSingle(),
-        supabase
-          .from('daily_stock_counts')
-          .select('bar_income,bar_profit')
-          .eq('club_id', selectedClubId)
-          .eq('date', date),
-      ]);
+      try {
+        const [cashRes, summary] = await Promise.all([
+          supabase
+            .from('daily_cash_entries')
+            .select('*')
+            .eq('club_id', selectedClubId)
+            .eq('date', date)
+            .maybeSingle(),
+          loadDailyCashSummary(supabase, selectedClubId, date, canSeeNetProfit),
+        ]);
 
-      const { data, error: fetchError } = cashRes;
+        if (requestId !== loadSequence.current) return;
+        const { data, error: fetchError } = cashRes;
 
-      if (fetchError || barRes.error) {
-        setError(fetchError?.message ?? barRes.error?.message ?? 'Error');
-        setEntry(null);
-        setForm(emptyForm(date));
-        setBarSummary({ sales: 0, profit: 0 });
+        if (fetchError) {
+          setError(fetchError.message);
+          setEntry(null);
+          setForm(emptyForm(date));
+          setFinanceSummary(null);
+          setLoading(false);
+          return;
+        }
+
+        setFinanceSummary(summary);
+
+        const cashEntry = data as DailyCashEntry | null;
+        setEntry(cashEntry);
+        setForm(cashEntry ? entryToForm(cashEntry) : emptyForm(date));
+
+        if (cashEntry?.created_by) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', cashEntry.created_by)
+            .maybeSingle();
+          if (requestId !== loadSequence.current) return;
+          setCreatedByName(profile?.full_name ?? 'Admin');
+        } else {
+          setCreatedByName('Admin');
+        }
+
         setLoading(false);
-        return;
+      } catch (loadError) {
+        if (requestId !== loadSequence.current) return;
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
+        setFinanceSummary(null);
+        setLoading(false);
       }
-
-      const stockRows = (barRes.data ?? []) as Array<{ bar_income: number | null; bar_profit: number | null }>;
-      setBarSummary(
-        stockRows.reduce(
-          (acc, row) => ({
-            sales: acc.sales + Number(row.bar_income ?? 0),
-            profit: acc.profit + Number(row.bar_profit ?? 0),
-          }),
-          { sales: 0, profit: 0 },
-        ),
-      );
-
-      const cashEntry = data as DailyCashEntry | null;
-      setEntry(cashEntry);
-      setForm(cashEntry ? entryToForm(cashEntry) : emptyForm(date));
-
-      if (cashEntry?.created_by) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', cashEntry.created_by)
-          .maybeSingle();
-        setCreatedByName(profile?.full_name ?? 'Admin');
-      } else {
-        setCreatedByName('Admin');
-      }
-
-      setLoading(false);
     },
-    [selectedClubId],
+    [selectedClubId, canSeeNetProfit],
   );
 
   useEffect(() => {
-    fetchExisting(form.date).catch((fetchError) => {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-      setLoading(false);
-    });
-  }, [form.date, fetchExisting]);
+    void fetchExisting(form.date);
+    return cancelLoads;
+  }, [form.date, fetchExisting, cancelLoads]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -248,7 +244,9 @@ export default function DailyCashPage() {
   );
 
   const total = calculateGameClubIncome(values);
-  const netProfit = total + barSummary.profit;
+  const totals = calculateFinancialReportTotals({ ...(financeSummary ?? emptyDailyCashSummary), manualIncome: total });
+  const barSummary = { sales: totals.barSales, profit: totals.barSales - totals.barCost };
+  const netProfit = totals.accountingNetProfit;
   const editable = entry ? canEditEntryForRole(currentRole, entry.created_at, now) : true;
   const locked = Boolean(entry && !editable);
   const deadline = entry ? getEditDeadline(entry.created_at) : null;
@@ -483,7 +481,7 @@ export default function DailyCashPage() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={`mt-3 grid grid-cols-1 gap-3 ${canSeeNetProfit ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
           <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
             <p className="text-xs font-semibold text-gray-500">{t('barSales')}</p>
             <p className="mt-1 break-words text-lg font-bold text-gray-950">
@@ -496,12 +494,12 @@ export default function DailyCashPage() {
               {formatCurrency(barSummary.profit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+          {canSeeNetProfit && financeSummary && <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
             <p className="text-xs font-semibold text-gray-500">{t('netProfit')}</p>
             <p className="mt-1 break-words text-lg font-bold text-primary-600">
               {formatCurrency(netProfit)} <span className="text-sm font-semibold text-gray-500">UZS</span>
             </p>
-          </div>
+          </div>}
         </div>
 
         <div className="mt-6">

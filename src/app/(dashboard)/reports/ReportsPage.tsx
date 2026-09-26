@@ -38,7 +38,7 @@ import {
 } from '@/lib/calculations/dashboardMetrics';
 import { formatCurrency, formatDateOnly, formatTime } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, mutateFinanceRequest } from '@/lib/supabase/client';
 import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
@@ -419,7 +419,7 @@ export default function ReportsPage() {
 
     let deleteError: { message: string } | null = null;
     if (activity.source === 'expense') {
-      const response = await fetch('/api/expenses', {
+      const response = await mutateFinanceRequest('/api/expenses', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ clubId: selectedClubId, expenseId: activity.id }),

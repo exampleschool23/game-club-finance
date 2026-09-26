@@ -39,6 +39,7 @@ beforeAll(async () => {
   await db.exec(readFileSync(resolve('supabase/migrations/062_salary_record_deletion.sql'), 'utf8'));
   await db.exec(readFileSync(resolve('supabase/migrations/063_deactivate_salary_employee.sql'), 'utf8'));
   await db.exec(readFileSync(resolve('supabase/migrations/064_salary_employee_role.sql'), 'utf8'));
+  await db.exec(readFileSync(resolve('supabase/migrations/065_payroll_read_and_rate_integrity.sql'), 'utf8'));
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${owner}',false);`);
   await save();
 }, 60_000);
@@ -218,4 +219,26 @@ describe('salary database authorization and ledger integrity', () => {
     await db.exec("reset role; update club_memberships set role='owner',feature_access=null; set role authenticated;");
   });
 
+});
+
+it('prevents deleting the last live rate and preserves salary/KPI editing',async()=>{
+ const id='20000000-0000-0000-0000-000000000099';
+ await save(id,'2026-09-01');
+ const rate=(await db.query<{id:string}>('select id from salary_rates where employee_id=$1',[id])).rows[0];
+ await expect(db.query('select delete_salary_record($1,$2,$3)',[club,rate.id,'rate'])).rejects.toThrow('last salary rate');
+ await db.query('select change_salary_term($1,$2,$3,$4,$5)',[club,id,'salary',100,'daily']);
+ await db.query('select change_salary_term($1,$2,$3,$4)',[club,id,'kpi',5]);
+ await db.query('select delete_salary_record($1,$2,$3)',[club,rate.id,'rate']);
+ await db.query('select delete_salary_record($1,$2,$3)',[club,rate.id,'rate']);
+ expect((await db.query('select * from salary_rates where employee_id=$1 and deleted_at is null',[id])).rows).toHaveLength(1);
+});
+it('restores already missing salary settings without erasing deleted history',async()=>{
+ const id='20000000-0000-0000-0000-000000000098';
+ await save(id,'2026-09-01');
+ await db.exec('reset role');
+ await db.query('update salary_rates set deleted_at=now(),deleted_by=$1 where employee_id=$2',[owner,id]);
+ await db.exec('set role authenticated');
+ await save(id,'2026-09-24');
+ await db.query('select change_salary_term($1,$2,$3,$4)',[club,id,'kpi',5]);
+ expect((await db.query('select * from salary_rates where employee_id=$1',[id])).rows).toHaveLength(2);
 });

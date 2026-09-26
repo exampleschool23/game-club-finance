@@ -194,3 +194,49 @@ describe('ledger read permission optimization (PostgreSQL)', () => {
     expect(JSON.stringify(plan)).not.toContain('current_user_club_role');
   });
 });
+
+it('returns identical payroll earned-cash inputs despite restricted ledger access, without exposing withdrawal history', async () => {
+  // Execute the actual owner aggregate and payroll wrapper with RLS enabled.
+  await db.exec(`
+    create function public.user_has_club_access(p_club_id uuid) returns boolean language sql stable security definer as $$
+      select exists(select 1 from public.club_memberships where club_id=p_club_id and user_id=auth.uid())
+    $$;
+    alter table daily_cash_entries add cash_income numeric default 0, add terminal_income numeric default 0,
+      add card_income numeric default 0, add playstation_income numeric default 0;
+    alter table debt_payments add amount numeric default 0, add payment_method text;
+    alter table daily_stock_counts add bar_income numeric default 0;
+    alter table stock_purchases add quantity numeric default 0, add cost_price numeric default 0;
+    alter table expenses add amount numeric default 0, add payment_source text, add payment_method text;
+    alter table owner_withdrawals add id uuid, add period_month date, add source text,
+      add amount numeric, add comment text, add created_by uuid, add created_at timestamptz;
+    update daily_cash_entries set cash_income=1000 where club_id='${clubId}' and date='2026-09-08';
+    update daily_stock_counts set bar_income=500 where club_id='${clubId}' and date='2026-09-08';
+    update expenses set amount=100,payment_source='game_club' where club_id='${clubId}' and date='2026-09-08';
+    update owner_withdrawals set period_month='2026-09-01',source='game_club',amount=50,comment='private withdrawal';
+  `);
+  const access = readMigration('061_salary_edit_access.sql');
+  await db.exec(access.slice(0, access.indexOf('drop policy salary_employees_owner_read')));
+  await db.exec(readMigration('050_owner_profit_monthly_payment_balances.sql'));
+  await db.exec(readMigration('065_payroll_read_and_rate_integrity.sql'));
+  const snapshot=()=>withActor(async()=> (await db.query<{snapshot:unknown}>(
+    'select get_salary_profit_snapshot($1,$2) as snapshot',[clubId,'2026-09-09'],
+  )).rows[0].snapshot);
+  await configure('owner',null);
+  const expected=await snapshot();
+  expect(expected).toEqual({monthlyBalances:[{period_month:'2026-09-01',game_club_earned:900,bar_earned:500,game_club_withdrawn:0,bar_withdrawn:0}]});
+  for(const role of ['viewer','admin']) {
+    for(const access of [[],['salaries'],['expenses']]) {
+      await configure(role,access);
+      expect(await snapshot()).toEqual(expected);
+    }
+  }
+  await configure('viewer',['salaries']);
+  expect((await visibleRows()).daily_cash_entries).toEqual([]);
+  await withActor(async()=>{
+    await expect(db.query('select get_salary_profit_snapshot($1,$2)',[otherClubId,'2026-09-09'])).rejects.toThrow('Not authorized');
+    await expect(db.query('select get_salary_profit_snapshot($1,$2)',[clubId,'2026-09-10'])).rejects.toThrow('Invalid payroll date');
+  });
+  await db.exec("set role anon; select set_config('request.jwt.claim.sub','',false)");
+  try { await expect(db.query('select get_salary_profit_snapshot($1,$2)',[clubId,'2026-09-09'])).rejects.toThrow('permission denied'); }
+  finally { await db.exec('reset role'); }
+});

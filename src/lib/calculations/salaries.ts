@@ -111,3 +111,8 @@ export function calculateSalaries({ employees, rates, entries, monthlyProfit, th
 export function salaryBalance(months: SalaryMonth[]): number {
   return money(months.reduce((sum, month) => sum + month.balance, 0));
 }
+
+/** Keep an editable baseline; deleted audit rows do not count as a live rate. */
+export function canDeleteSalaryRate(rates: SalaryRate[], rate: SalaryRate): boolean {
+  return !rate.deleted_at && rates.some((other) => other.employee_id === rate.employee_id && other.id !== rate.id && !other.deleted_at);
+}

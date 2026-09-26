@@ -939,6 +939,7 @@
     "recordOperations": "To‘lov / mukofot / jarima kiritish",
     "deactivate": "Faolsizlantirish",
     "deactivated": "Xodim faolsizlantirildi. Tarix va to‘lanmagan qoldiq saqlandi.",
-    "changeRole": "Lavozimni o‘zgartirish"
+    "changeRole": "Lavozimni o‘zgartirish",
+    "lastRateHelp": "Kamida bitta ish haqi stavkasi saqlanishi kerak. Xodim sozlamalarini o‘zgartiring yoki uni faolsizlantiring."
   }
 }

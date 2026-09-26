@@ -6,6 +6,7 @@ const READ_ONLY_RPCS = new Set([
   'get_latest_stock_closings',
   'get_stock_opening_balances',
   'get_owner_profit_snapshot',
+  'get_salary_profit_snapshot',
   'get_money_report_snapshot',
   'get_finance_report_snapshot',
 ]);
@@ -74,7 +75,7 @@ export function createSupabaseReadFetch(
     now = Date.now,
     ttlMs = DEFAULT_READ_CACHE_TTL_MS,
   }: SupabaseReadCacheOptions = {},
-): typeof fetch {
+): typeof fetch & { invalidate: () => void } {
   const supabaseOrigin = new URL(supabaseUrl).origin;
   const cache = new Map<string, CachedResponse>();
   const inFlight = new Map<string, Promise<CachedResponse>>();
@@ -91,7 +92,7 @@ export function createSupabaseReadFetch(
     cache.clear();
   }
 
-  return async (input: RequestInfo | URL, init?: RequestInit) => {
+  const cachedFetch: typeof fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
     const cacheable = isCacheableRead(request, supabaseOrigin);
@@ -153,4 +154,5 @@ export function createSupabaseReadFetch(
     const entry = await pending;
     return responseFromCache(entry);
   };
+  return Object.assign(cachedFetch, { invalidate: clearAll });
 }
