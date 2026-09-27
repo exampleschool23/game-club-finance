@@ -88,12 +88,13 @@ describe('daily finance report image', () => {
     const svg = buildDailyFinanceReportSvg(reportInput());
 
     expect(svg).toContain('width="1200"');
-    expect(svg).toContain('height="1762"');
+    expect(svg).toContain('height="1776"');
     expect(svg).toContain('ФИНАНСЫ КЛУБА');
     expect(svg).toContain('Main Game Club · Рабочий день: 27 августа 2026');
     expect(svg).toContain('ДОХОД КЛУБА ЗА МЕСЯЦ');
     expect(svg).toContain('58 240 000<tspan');
-    expect(svg).toContain('Общий доход (клуб + бар):');
+    expect(svg).toContain('Прибыль клуба');
+    expect(svg).toContain('Клуб + бар');
     expect(svg).toContain('68 326 526 UZS');
     expect(svg).toContain('1 806 500');
     expect(svg).toContain('РАСХОДЫ КЛУБА');
@@ -145,7 +146,7 @@ describe('daily finance report image', () => {
       width: 1200,
       channels: 4,
     });
-    expect(metadata.height).toBe(1762);
+    expect(metadata.height).toBe(1776);
   });
 
   it('grows the report when the club has more expense rows', () => {
@@ -161,8 +162,8 @@ describe('daily finance report image', () => {
       ],
     });
 
-    expect(compact).toContain('height="1762"');
-    expect(expanded).toContain('height="1876"');
+    expect(compact).toContain('height="1776"');
+    expect(expanded).toContain('height="1890"');
   });
 
   it('configures application-owned Noto Sans before the static Sharp import', () => {

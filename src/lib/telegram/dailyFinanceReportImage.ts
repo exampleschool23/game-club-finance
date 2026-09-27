@@ -263,6 +263,7 @@ function kpiTile(
 export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): string {
   const monthClubIncome = input.monthToDateRevenue;
   const monthBarSales = input.monthBarSales ?? input.barMoneyLeft;
+  const monthClubProfit = input.monthGameClubProfit ?? monthClubIncome;
   const monthTotalIncome = input.monthTotalIncome ?? monthClubIncome + monthBarSales;
   const dailyPoints = input.monthDailyGameClubIncome ?? [];
   const clubNetProfit = input.gameClubIncome - input.gameClubExpenses;
@@ -271,7 +272,7 @@ export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): stri
   // Header and summary row.
   const headerY = 40;
   const summaryY = 176;
-  const summaryHeight = 196;
+  const summaryHeight = 210;
 
   // Income mix and monthly trend.
   const chartsY = summaryY + summaryHeight + 24;
@@ -374,9 +375,12 @@ export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): stri
 
     ${card(PAGE_X, summaryY, 400, summaryHeight, '#F0FAF3', '#BFE5CB')}
     <text x="${PAGE_X + 28}" y="${summaryY + 50}" font-size="18" font-weight="800" fill="${GREEN}">ДОХОД КЛУБА ЗА МЕСЯЦ</text>
-    ${moneyText(PAGE_X + 28, summaryY + 116, monthClubIncome, 44, GREEN)}
-    <text x="${PAGE_X + 28}" y="${summaryY + 154}" font-size="18" fill="${TEXT}">Общий доход (клуб + бар):</text>
-    <text x="${PAGE_X + 28}" y="${summaryY + 178}" font-size="19" font-weight="800" fill="${INK}">${escapeXml(money(monthTotalIncome))}</text>
+    ${moneyText(PAGE_X + 28, summaryY + 108, monthClubIncome, 44, GREEN)}
+<line x1="${PAGE_X + 28}" y1="${summaryY + 136}" x2="${PAGE_X + 372}" y2="${summaryY + 136}" stroke="#BFE5CB" stroke-width="2"/>
+    <text x="${PAGE_X + 28}" y="${summaryY + 164}" font-size="18" fill="${TEXT}">Прибыль клуба</text>
+    <text x="${PAGE_X + 372}" y="${summaryY + 164}" text-anchor="end" font-size="20" font-weight="800" fill="${monthClubProfit < 0 ? RED : GREEN}">${escapeXml(money(monthClubProfit))}</text>
+    <text x="${PAGE_X + 28}" y="${summaryY + 188}" font-size="16" fill="${MUTED}">Клуб + бар</text>
+    <text x="${PAGE_X + 372}" y="${summaryY + 188}" text-anchor="end" font-size="16" font-weight="700" fill="${INK}">${escapeXml(money(monthTotalIncome))}</text>
 
     ${card(PAGE_X + 424, summaryY, PAGE_WIDTH - 424, summaryHeight)}
     ${summaryColumn(0, 'ОБЩИЙ ДОХОД', BLUE, GLYPH_TREND_UP, input.dailyRevenue)}

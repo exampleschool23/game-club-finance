@@ -52,6 +52,8 @@ export interface DailyFinanceReportInput {
   activeDebts: number;
   /** Month-to-date bar sales used for the monthly overall income. */
   monthBarSales?: number;
+  /** Month-to-date game club income minus expenses paid from game club money. */
+  monthGameClubProfit?: number;
   /** Month-to-date game club plus bar sales. */
   monthTotalIncome?: number;
   /** Game club income per calendar day from the first of the month through the report date. */
@@ -330,6 +332,7 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     inventoryValueChange: percentChange(inventoryValue, previousInventoryValue),
     activeDebts: dailyTotals.activeDebts,
     monthBarSales: monthTotals.barSales,
+    monthGameClubProfit: monthTotals.gameClubIncome - monthTotals.gameClubExpenses,
     monthTotalIncome: monthTotals.gameClubIncome + monthTotals.barSales,
     monthDailyGameClubIncome: buildDailyGameClubIncomeSeries(
       rows.monthCashRows ?? rows.cashRows,
@@ -369,6 +372,9 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     `  • Прочие расходы: ${money(input.otherOperatingCosts)}`,
     '',
     `🗓 Доход клуба с начала месяца: ${money(input.monthToDateRevenue)}`,
+    ...(input.monthGameClubProfit === undefined
+      ? []
+      : [`🎮 Прибыль клуба за месяц: ${money(input.monthGameClubProfit)}`]),
     ...(input.monthTotalIncome === undefined
       ? []
       : [`🏦 Общий доход за месяц (клуб + бар): ${money(input.monthTotalIncome)}`]),
