@@ -88,27 +88,49 @@ describe('daily finance report image', () => {
     const svg = buildDailyFinanceReportSvg(reportInput());
 
     expect(svg).toContain('width="1200"');
-    expect(svg).toContain('height="1468"');
-    expect(svg).not.toContain('GAME CLUB · ФИНАНСОВЫЙ ОТЧЁТ');
-    expect(svg).not.toContain('Рабочий день: 27 августа 2026');
-    expect(svg).not.toContain('url(#header)');
-    expect(svg).toContain('ДОХОД КЛУБА — 1 431 000 UZS');
-    expect(svg).toContain('ДОХОД БАРА — 375 500 UZS');
-    expect(svg).toContain('РАСХОДЫ КЛУБА — 526 000 UZS');
-    expect(svg).toContain('РАСХОДЫ БАРА — 161 000 UZS');
-    expect(svg).toContain('ОБЩИЕ РАСХОДЫ — 687 000 UZS');
+    expect(svg).toContain('height="1762"');
+    expect(svg).toContain('ФИНАНСЫ КЛУБА');
+    expect(svg).toContain('Main Game Club · Рабочий день: 27 августа 2026');
+    expect(svg).toContain('ДОХОД КЛУБА ЗА МЕСЯЦ');
+    expect(svg).toContain('58 240 000<tspan');
+    expect(svg).toContain('Общий доход (клуб + бар):');
+    expect(svg).toContain('68 326 526 UZS');
+    expect(svg).toContain('1 806 500');
+    expect(svg).toContain('РАСХОДЫ КЛУБА');
+    expect(svg).toContain('526 000 UZS');
+    expect(svg).toContain('161 000 UZS');
     expect(svg).toContain('SKIDKA &amp; bonus');
-    expect(svg).toContain('ОСТАТОК ДЕНЕГ КЛУБА ЗА МЕСЯЦ');
-    expect(svg).toContain('СРЕДНИЙ ДНЕВНОЙ ДОХОД КЛУБА');
-    expect(svg).toContain('ДОХОД БАРА ЗА МЕСЯЦ');
-    expect(svg).toContain('СТОИМОСТЬ СКЛАДА');
-    expect(svg).toContain('АКТИВНЫЕ ДОЛГИ');
-    expect(svg).toContain('▲ 12% к прошлому месяцу');
-    expect(svg).toContain('▼ 5% к прошлому месяцу');
-    expect(svg).toContain('▲ 20% к прошлому месяцу');
-    expect(svg).toContain('474 000 UZS');
+    expect(svg).toContain('Чистая прибыль клуба');
+    expect(svg).toContain('905 000<tspan');
+    expect(svg).toContain('Чистая прибыль бара');
+    expect(svg).toContain('4 500<tspan');
+    expect(svg).toContain('ДИНАМИКА ДОХОДА КЛУБА ЗА МЕСЯЦ');
+    expect(svg).toContain('КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ');
+    expect(svg).toContain('37 830 000');
+    expect(svg).toContain('23 749 204');
+    expect(svg).toContain('474 000');
+    expect(svg).toContain('>12%</text>');
+    expect(svg).toContain('>5%</text>');
+    expect(svg).not.toContain('▲');
     expect(svg).toContain('font-family="Noto Sans"');
     expect(buildDailyFinanceReportSvg(reportInput())).toBe(svg);
+  });
+
+  it('plots the month daily income trend with day labels', () => {
+    const svg = buildDailyFinanceReportSvg({
+      ...reportInput(),
+      monthDailyGameClubIncome: [
+        { date: '2026-08-01', amount: 1_000_000 },
+        { date: '2026-08-02', amount: 2_000_000 },
+        { date: '2026-08-03', amount: 1_500_000 },
+      ],
+    });
+
+    expect(svg).toContain('<polyline points="');
+    expect(svg).toContain('>1 авг</text>');
+    expect(svg).toContain('>3 авг</text>');
+    expect(svg).toContain('2 млн');
+    expect(buildDailyFinanceReportSvg(reportInput())).toContain('Нет данных за месяц');
   });
 
   it('renders the SVG into a real PNG buffer', async () => {
@@ -123,10 +145,10 @@ describe('daily finance report image', () => {
       width: 1200,
       channels: 4,
     });
-    expect(metadata.height).toBe(1468);
+    expect(metadata.height).toBe(1762);
   });
 
-  it('shrinks the report when the club has fewer expense rows', () => {
+  it('grows the report when the club has more expense rows', () => {
     const compact = buildDailyFinanceReportSvg(reportInput());
     const expanded = buildDailyFinanceReportSvg({
       ...reportInput(),
@@ -139,10 +161,8 @@ describe('daily finance report image', () => {
       ],
     });
 
-    expect(compact).toContain('height="1468"');
-    expect(compact).toContain('<rect x="68" y="554" width="1064" height="278"');
-    expect(expanded).toContain('height="1600"');
-    expect(expanded).toContain('<rect x="68" y="686" width="1064" height="278"');
+    expect(compact).toContain('height="1762"');
+    expect(expanded).toContain('height="1876"');
   });
 
   it('configures application-owned Noto Sans before the static Sharp import', () => {

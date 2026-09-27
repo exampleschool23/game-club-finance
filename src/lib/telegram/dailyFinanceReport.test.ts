@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDailyFinanceReportInput,
+  buildDailyGameClubIncomeSeries,
   formatRussianDailyFinanceReportCaption,
   formatRussianDailyFinanceReport,
 } from './dailyFinanceReport';
@@ -385,6 +386,28 @@ describe('formatRussianDailyFinanceReport', () => {
     expect(input.averageDailyGameClubIncomeChange).toBe(100);
     expect(input.barMoneyLeftChange).toBe(167);
     expect(input.inventoryValueChange).toBe(100);
+    expect(input.monthBarSales).toBe(1_000_000);
+    expect(input.monthTotalIncome).toBe(3_000_000);
+    expect(input.monthDailyGameClubIncome).toHaveLength(28);
+    expect(input.monthDailyGameClubIncome?.[0]).toEqual({ date: '2026-08-01', amount: 0 });
+    expect(input.monthDailyGameClubIncome?.[27]).toEqual({ date: '2026-08-28', amount: 2_000_000 });
+  });
+
+  it('adds recorded debts to the day they were given in the month income series', () => {
+    const series = buildDailyGameClubIncomeSeries(
+      [
+        { date: '2026-08-01', cash_income: 100, terminal_income: 50, card_income: 25, playstation_income: 10 },
+        { date: '2026-08-02', cash_income: 200, terminal_income: 0, card_income: 0 },
+      ],
+      [{ date: '2026-08-02', amount: 40, remaining_amount: 40, status: 'active' }],
+      { from: '2026-08-01', to: '2026-08-03' },
+    );
+
+    expect(series).toEqual([
+      { date: '2026-08-01', amount: 185 },
+      { date: '2026-08-02', amount: 240 },
+      { date: '2026-08-03', amount: 0 },
+    ]);
   });
 });
 

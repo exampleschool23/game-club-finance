@@ -6,6 +6,7 @@ import {
   countDashboardRangeDaysThroughDate,
   getLatestRowDateInRange,
   percentChange,
+  sumGameClubRows,
 } from '../calculations/dashboardMetrics';
 import type {
   DailyCashRow,
@@ -49,6 +50,17 @@ export interface DailyFinanceReportInput {
   barMoneyLeftChange?: number | null;
   inventoryValueChange?: number | null;
   activeDebts: number;
+  /** Month-to-date bar sales used for the monthly overall income. */
+  monthBarSales?: number;
+  /** Month-to-date game club plus bar sales. */
+  monthTotalIncome?: number;
+  /** Game club income per calendar day from the first of the month through the report date. */
+  monthDailyGameClubIncome?: DailyFinanceIncomePoint[];
+}
+
+export interface DailyFinanceIncomePoint {
+  date: string;
+  amount: number;
 }
 
 export interface DailyFinanceExpenseCategory {
@@ -178,6 +190,28 @@ function percent(value: number, total: number): string {
   return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format((value / total) * 100)}%`;
 }
 
+/** Builds one game club income point per day, including debts recorded that day. */
+export function buildDailyGameClubIncomeSeries(
+  cashRows: DailyCashRow[],
+  debtRows: DailyFinanceReportDebtRow[],
+  range: { from: string; to: string },
+): DailyFinanceIncomePoint[] {
+  const points: DailyFinanceIncomePoint[] = [];
+  const [year, month, firstDay] = range.from.split('-').map(Number);
+  const lastDay = Number(range.to.slice(8, 10));
+
+  for (let day = firstDay; day <= lastDay; day += 1) {
+    const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const collected = sumGameClubRows(cashRows.filter((row) => row.date === date)).gameClubIncome;
+    const debts = debtRows
+      .filter((row) => row.date === date)
+      .reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+    points.push({ date, amount: collected + debts });
+  }
+
+  return points;
+}
+
 function previousComparableMonthRange(date: string): { from: string; to: string } {
   const [year, month, day] = date.split('-').map(Number);
   const previousMonthStart = new Date(Date.UTC(year, month - 2, 1));
@@ -295,6 +329,13 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
     barMoneyLeftChange: percentChange(monthTotals.barIncome, previousMonthTotals.barIncome),
     inventoryValueChange: percentChange(inventoryValue, previousInventoryValue),
     activeDebts: dailyTotals.activeDebts,
+    monthBarSales: monthTotals.barSales,
+    monthTotalIncome: monthTotals.gameClubIncome + monthTotals.barSales,
+    monthDailyGameClubIncome: buildDailyGameClubIncomeSeries(
+      rows.monthCashRows ?? rows.cashRows,
+      monthDebtRows,
+      monthRange,
+    ),
   };
 }
 
@@ -328,6 +369,9 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     `  • Прочие расходы: ${money(input.otherOperatingCosts)}`,
     '',
     `🗓 Доход клуба с начала месяца: ${money(input.monthToDateRevenue)}`,
+    ...(input.monthTotalIncome === undefined
+      ? []
+      : [`🏦 Общий доход за месяц (клуб + бар): ${money(input.monthTotalIncome)}`]),
     `📊 Средний доход клуба в день: ${money(input.averageDailyRevenue)}`,
     `💰 Остаток денег клуба за месяц: ${money(input.gameClubMoneyLeft)}`,
     `📈 Средний дневной доход клуба за месяц: ${money(input.averageDailyGameClubIncome)}`,
