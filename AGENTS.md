@@ -90,6 +90,11 @@ project changes to `git@github.com:exampleschool23/game-club-finance.git`
 Verify the remote still matches before pushing. This authorization does not
 include force pushes, unrelated changes, or secrets.
 
+Always push finished work to `main`. If a session assigns a feature branch, you
+may also push that branch, but land the same commits on `main` with a
+fast-forward or merge commit, never a force push. Run the verification checks
+below before pushing to `main`.
+
 ## Verification
 
 Run the narrowest relevant test first, then broaden according to risk:
