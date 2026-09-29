@@ -133,7 +133,7 @@ function expenseName(row: ExpenseRow): string {
   return RUSSIAN_EXPENSE_CATEGORY_LABELS[row.category] ?? row.category;
 }
 
-export function summarizeExpenseCategories(
+function summarizeExpenseCategories(
   rows: ExpenseRow[],
   paymentSource: 'game_club' | 'bar',
 ): DailyFinanceExpenseCategory[] {

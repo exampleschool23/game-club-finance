@@ -1,19 +1,34 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { TableSkeleton } from '@/components/ui/LoadingSkeleton';
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  IconButton,
+  InlineAlert,
+  PageHeader,
+  SearchInput,
+  SectionHeading,
+  Select,
+  TableSkeleton,
+  useConfirm,
+  useToast,
+} from '@/components/PresentationFoundation';
+import { cn } from '@/lib/utils';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDateTime } from '@/lib/formatters';
 import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import {
   Building2,
   ChevronDown,
-  Search,
   RefreshCw,
   Settings2,
   X,
@@ -38,8 +53,6 @@ interface TeamMembership {
   clubName: string;
   role: UserRole;
   featureAccess: FeatureKey[] | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface TeamMember extends Profile {
@@ -49,10 +62,6 @@ interface TeamMember extends Profile {
 interface AccessDraft {
   clubId: string;
   role: UserRole;
-}
-
-interface TeamPageClientProps {
-  currentUserId?: string;
 }
 
 function normalizeRole(role: string | null | undefined): UserRole {
@@ -68,14 +77,17 @@ function initials(name: string): string {
     .join('') || '?';
 }
 
-export default function TeamPageClient({ currentUserId: initialCurrentUserId }: TeamPageClientProps) {
+export default function TeamPageClient() {
   const router = useRouter();
   const t = useTranslations('team');
   const tc = useTranslations('common');
   const { locale } = useAppLocale();
   const { selectedClubId, role: currentClubRole, loading: clubLoading, refreshClubs } = useClub();
-  const [currentUserId, setCurrentUserId] = useState(initialCurrentUserId ?? '');
-  const [authorized, setAuthorized] = useState(Boolean(initialCurrentUserId));
+  const { showToast, toastElement } = useToast();
+  const { confirm, confirmDialog } = useConfirm();
+  const requestSequence = useRef(0);
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [authorized, setAuthorized] = useState(false);
   const [profiles, setProfiles] = useState<TeamMember[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessDraft>>({});
@@ -86,10 +98,10 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   const [membershipSelection, setMembershipSelection] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [featureAccessAvailable, setFeatureAccessAvailable] = useState(true);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const loadProfiles = useCallback(async () => {
+  const loadProfiles = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++requestSequence.current;
     if (!selectedClubId) {
       setProfiles([]);
       setClubs([]);
@@ -97,13 +109,13 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError('');
     const supabase = createClient();
     const [membershipRes, profileRes, clubRes] = await Promise.all([
       supabase
         .from('club_memberships')
-        .select('club_id, user_id, role, feature_access, created_at, updated_at')
+        .select('club_id, user_id, role, feature_access, created_at')
         .order('created_at', { ascending: true }),
       supabase
         .from('profiles')
@@ -116,21 +128,22 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         .order('name', { ascending: true }),
     ]);
 
+    if (requestId !== requestSequence.current) return;
+
     let membershipRows = (membershipRes.data ?? []) as Array<{
       club_id: string;
       user_id: string;
       role: string;
       feature_access?: string[] | null;
-      created_at: string;
-      updated_at: string;
     }>;
     let membershipError = membershipRes.error;
 
     if (isMissingDatabaseColumn(membershipRes.error, 'feature_access')) {
       const fallbackMembershipRes = await supabase
         .from('club_memberships')
-        .select('club_id, user_id, role, created_at, updated_at')
+        .select('club_id, user_id, role, created_at')
         .order('created_at', { ascending: true });
+      if (requestId !== requestSequence.current) return;
       membershipRows = (fallbackMembershipRes.data ?? []) as typeof membershipRows;
       membershipError = fallbackMembershipRes.error;
       setFeatureAccessAvailable(false);
@@ -160,8 +173,6 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         clubName: club.name,
         role: normalizeRole(membership.role),
         featureAccess: normalizeFeatureAccess(membership.feature_access),
-        createdAt: membership.created_at,
-        updatedAt: membership.updated_at,
       });
       membershipsByUser.set(membership.user_id, userMemberships);
     }
@@ -177,29 +188,6 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
     setClubs(clubRows);
     setProfiles(teamRows);
-    setAccessDrafts((current) => {
-      const next: Record<string, AccessDraft> = {};
-
-      for (const profile of teamRows) {
-        const assignedClubIds = new Set(profile.memberships.map((membership) => membership.clubId));
-        const availableClubs = clubRows.filter((club) => !assignedClubIds.has(club.id));
-        const currentDraft = current[profile.id];
-        const preferredClubId =
-          (currentDraft?.clubId && availableClubs.some((club) => club.id === currentDraft.clubId)
-            ? currentDraft.clubId
-            : '') ||
-          availableClubs.find((club) => club.id === selectedClubId)?.id ||
-          availableClubs[0]?.id ||
-          '';
-
-        next[profile.id] = {
-          clubId: preferredClubId,
-          role: currentDraft?.role ?? 'viewer',
-        };
-      }
-
-      return next;
-    });
     setLoading(false);
   }, [selectedClubId]);
 
@@ -240,6 +228,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
   useEffect(() => {
     if (!authorized) return;
     loadProfiles().catch((err) => setError(String(err)));
+    return () => { requestSequence.current += 1; };
   }, [authorized, loadProfiles]);
 
   const pendingProfiles = useMemo(
@@ -323,7 +312,6 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
     setSavingId(`${profile.id}:${draft.clubId}:add`);
     setError('');
-    setMessage('');
 
     const supabase = createClient();
     const { error: insertError } = await supabase
@@ -340,8 +328,8 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       return;
     }
 
-    setMessage(t('accessAdded'));
-    await loadProfiles();
+    showToast(t('accessAdded'));
+    await loadProfiles({ silent: true });
 
     if (profile.id === currentUserId) {
       await refreshClubs();
@@ -363,7 +351,6 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
     setSavingId(`${profile.id}:${membership.clubId}:role`);
     setError('');
-    setMessage('');
 
     const supabase = createClient();
     const { error: updateError } = await supabase
@@ -378,8 +365,8 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       return;
     }
 
-    setMessage(t('saved'));
-    await loadProfiles();
+    showToast(t('saved'));
+    await loadProfiles({ silent: true });
 
     if (profile.id === currentUserId) {
       await refreshClubs();
@@ -397,11 +384,15 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       return;
     }
 
-    if (!window.confirm(t('removeClubConfirm', { club: membership.clubName }))) return;
+    const confirmed = await confirm({
+      title: t('removeAccess'),
+      description: t('removeClubConfirm', { club: membership.clubName }),
+      confirmLabel: t('removeAccess'),
+    });
+    if (!confirmed) return;
 
     setSavingId(`${profile.id}:${membership.clubId}:remove`);
     setError('');
-    setMessage('');
 
     const supabase = createClient();
     const { error: deleteError } = await supabase
@@ -416,8 +407,8 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       return;
     }
 
-    setMessage(t('removed'));
-    await loadProfiles();
+    showToast(t('removed'));
+    await loadProfiles({ silent: true });
   }
 
   async function updateMembershipFeatureAccess(
@@ -435,7 +426,6 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
     setSavingId(membershipSavingId);
     setError('');
-    setMessage('');
     setProfiles((current) => current.map((member) => member.id !== profile.id
       ? member
       : {
@@ -466,7 +456,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       return;
     }
 
-    setMessage(t('featureAccessSaved'));
+    showToast(t('featureAccessSaved'));
     if (profile.id === currentUserId) await refreshClubs();
   }
 
@@ -478,52 +468,44 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
     if (availableClubs.length === 0) {
       return (
         <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-500">
-          <ShieldCheck size={16} className="text-success-500" />
+          <ShieldCheck size={16} className="text-success-500" aria-hidden="true" />
           {t('allClubsAdded')}
         </div>
       );
     }
 
     return (
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
-        <div className="relative">
-          <Building2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <select
-            className="input-field h-11 pl-9"
-            aria-label={t('gameClubs')}
-            value={draft.clubId}
-            disabled={saving}
-            onChange={(event) => updateAccessDraft(profile.id, { clubId: event.target.value })}
-          >
-            {availableClubs.map((club) => (
-              <option key={club.id} value={club.id}>
-                {club.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <select
-          className="input-field h-11"
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+        <Select
+          leadingIcon={<Building2 size={16} />}
+          aria-label={t('gameClubs')}
+          value={draft.clubId}
+          disabled={saving}
+          onChange={(event) => updateAccessDraft(profile.id, { clubId: event.target.value })}
+        >
+          {availableClubs.map((club) => (
+            <option key={club.id} value={club.id}>{club.name}</option>
+          ))}
+        </Select>
+        <Select
           aria-label={t('memberRole')}
           value={draft.role}
           disabled={saving}
           onChange={(event) => updateAccessDraft(profile.id, { role: event.target.value as UserRole })}
         >
           {ROLES.map((role) => (
-            <option key={role} value={role}>
-              {t(`roles.${role}`)}
-            </option>
+            <option key={role} value={role}>{t(`roles.${role}`)}</option>
           ))}
-        </select>
-        <button
-          type="button"
-          className="btn-primary h-11 whitespace-nowrap px-5"
-          disabled={saving || !draft.clubId}
+        </Select>
+        <Button
+          className="px-5"
+          loading={saving}
+          disabled={!draft.clubId}
           onClick={() => addClubAccess(profile)}
+          icon={<UserPlus size={16} aria-hidden="true" />}
         >
-          <UserPlus size={16} />
           {buttonLabel}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -538,18 +520,15 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
         <div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-gray-600">
-                <ShieldCheck size={16} className="text-primary-600" />
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-600">
+                <ShieldCheck size={16} className="text-primary-600" aria-hidden="true" />
                 {t('pageAccess')}
               </div>
               <p className="mt-1 text-sm text-gray-500">
                 {membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
               </p>
             </div>
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-bold text-gray-600">
-              <Building2 size={13} />
-              {membership.clubName}
-            </span>
+            <Badge variant="outline" icon={<Building2 size={13} aria-hidden="true" />}>{membership.clubName}</Badge>
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -563,7 +542,12 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
               return (
                 <label
                   key={feature.key}
-                  className={`flex min-h-[76px] gap-3 rounded-xl border p-3 transition ${checked ? 'border-primary-300 bg-primary-50/50' : 'border-gray-200 bg-white'} ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-primary-300'}`}
+                  className={cn(
+                    'flex min-h-[76px] gap-3 rounded-xl border p-3 transition focus-within:ring-2 focus-within:ring-primary-500',
+                    checked ? 'border-primary-300 bg-primary-50/50' : 'border-gray-200 bg-white',
+                    disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-primary-300',
+                  )}
+                  title={ownerOnly && membership.role !== 'owner' ? t('features.teamDescription') : undefined}
                 >
                   <input
                     type="checkbox"
@@ -594,39 +578,27 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
-          <button className="btn-secondary flex items-center gap-2" disabled={loading || Boolean(savingId)} onClick={loadProfiles}>
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        action={(
+          <Button variant="outline" disabled={loading || Boolean(savingId)} onClick={() => loadProfiles()} icon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden="true" />}>
             {t('refresh')}
-          </button>
-        }
+          </Button>
+        )}
       />
 
-      {error && (
-        <div role="alert" className="mb-4 rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-600">
-          {error}
-        </div>
-      )}
-      {message && (
-        <div role="status" className="mb-4 rounded-xl border border-success-100 bg-success-50 px-4 py-3 text-sm font-medium text-success-600">
-          {message}
-        </div>
-      )}
+      {error && <InlineAlert variant="danger" className="mb-4">{error}</InlineAlert>}
 
       {loading ? (
         <TableSkeleton rows={7} columns={4} />
       ) : (
         <div className="space-y-6">
           {pendingProfiles.length > 0 && (
-            <section className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/40">
+            <Card as="section" padding="none" tone="warning" className="overflow-hidden rounded-2xl bg-amber-50/40">
               <div className="flex items-center justify-between px-4 py-3 sm:px-5">
                 <div className="flex items-center gap-2.5">
-                  <UserPlus size={17} className="text-amber-600" />
+                  <UserPlus size={17} className="text-amber-600" aria-hidden="true" />
                   <h2 className="text-sm font-bold text-amber-950">{t('pendingApproval')}</h2>
                 </div>
-                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-700">
-                  {pendingProfiles.length}
-                </span>
+                <Badge variant="warning" className="bg-white">{pendingProfiles.length}</Badge>
               </div>
               <div className="divide-y divide-amber-100">
                 {pendingProfiles.map((profile) => (
@@ -648,45 +620,37 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                   </div>
                 ))}
               </div>
-            </section>
+            </Card>
           )}
 
           {activeProfiles.length === 0 ? (
-            <div className="card py-12 text-center text-gray-500">{tc('noData')}</div>
+            <Card><EmptyState icon={Users} title={tc('noData')} /></Card>
           ) : (
-            <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="flex flex-col gap-4 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <Users size={19} className="text-primary-600" />
-                    <h2 className="text-base font-bold text-gray-950">{t('members')}</h2>
-                    <span className="rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-bold tabular-nums text-primary-700">
-                      {activeProfiles.length}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-sm text-gray-500">{t('manageHelp')}</p>
-                </div>
-                <div className="relative w-full sm:w-72 sm:shrink-0">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
-                  <input
-                    type="search"
-                    className="input-field h-11 rounded-xl bg-gray-50/70 pl-10"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={t('searchPlaceholder')}
-                    aria-label={t('searchPlaceholder')}
-                  />
-                </div>
-              </div>
+            <Card as="section" padding="none" className="overflow-hidden rounded-2xl">
+              <CardHeader className="sm:p-5">
+                <SectionHeading
+                  title={t('members')}
+                  description={t('manageHelp')}
+                  badge={<Badge variant="primary">{activeProfiles.length}</Badge>}
+                  action={(
+                    <SearchInput
+                      className="w-full sm:w-72"
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder={t('searchPlaceholder')}
+                      clearLabel={t('clearSearch')}
+                    />
+                  )}
+                />
+              </CardHeader>
 
               {filteredActiveProfiles.length === 0 ? (
-                <div className="px-5 py-14 text-center">
-                  <Search size={25} className="mx-auto mb-3 text-gray-300" />
-                  <p className="text-sm text-gray-500">{t('noSearchResults')}</p>
-                  <button className="mt-3 text-sm font-semibold text-primary-600 hover:text-primary-800" onClick={() => setSearchQuery('')}>
-                    {t('clearSearch')}
-                  </button>
-                </div>
+                <EmptyState
+                  compact
+                  icon={Users}
+                  title={t('noSearchResults')}
+                  action={<Button variant="ghost" size="sm" onClick={() => setSearchQuery('')}>{t('clearSearch')}</Button>}
+                />
               ) : (
                 <>
                   <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_148px] gap-5 border-b border-gray-100 bg-gray-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 lg:grid">
@@ -724,9 +688,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
                                   <h3 className="break-words text-sm font-bold text-gray-950">{profile.full_name}</h3>
-                                  {profile.id === currentUserId && (
-                                    <span className="shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary-700">{t('you')}</span>
-                                  )}
+                                  {profile.id === currentUserId && <Badge variant="primary" size="sm">{t('you')}</Badge>}
                                 </div>
                                 {profile.email && <p className="mt-1 truncate text-xs text-gray-500" title={profile.email}>{profile.email}</p>}
                               </div>
@@ -734,7 +696,7 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
 
                             <div className="min-w-0 sm:order-3 sm:col-span-2 lg:order-none lg:col-span-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <Building2 size={15} className="shrink-0 text-gray-400" />
+                                <Building2 size={15} className="shrink-0 text-gray-400" aria-hidden="true" />
                                 <span className="break-words text-sm font-medium text-gray-800">{membership.clubName}</span>
                                 <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${roleStyle}`}>
                                   {t(`roles.${membership.role}`)}
@@ -746,9 +708,10 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                               </p>
                             </div>
 
-                            <button
-                              type="button"
-                              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition sm:order-2 lg:order-none ${expanded ? 'border-primary-200 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-700 hover:border-primary-200 hover:bg-primary-50/50 hover:text-primary-700'}`}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn('sm:order-2 lg:order-none', expanded && 'border-primary-200 bg-primary-50 text-primary-700')}
                               onClick={() => {
                                 setExpandedMemberId(expanded ? null : profile.id);
                                 setExpandedAddAccessId(null);
@@ -756,11 +719,11 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                               aria-label={t('manageMember', { name: profile.full_name })}
                               aria-expanded={expanded}
                               aria-controls={`member-access-${profile.id}`}
+                              icon={<Settings2 size={15} aria-hidden="true" />}
+                              iconRight={<ChevronDown size={14} className={cn('shrink-0 transition-transform', expanded && 'rotate-180')} aria-hidden="true" />}
                             >
-                              <Settings2 size={15} />
                               {t('manageAccess')}
-                              <ChevronDown size={14} className={`shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                            </button>
+                            </Button>
                           </div>
 
                           {expanded && (
@@ -770,20 +733,13 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                                   <h4 className="text-sm font-bold text-gray-900">{t('accessSettings')}</h4>
                                   <p className="mt-1 text-xs text-gray-500">{t('autoSave')}</p>
                                 </div>
-                                <button
-                                  type="button"
-                                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
-                                  onClick={() => setExpandedMemberId(null)}
-                                  aria-label={t('hideAccess')}
-                                >
-                                  <X size={17} />
-                                </button>
+                                <IconButton variant="ghost" size="sm" label={t('hideAccess')} icon={<X size={17} />} onClick={() => setExpandedMemberId(null)} />
                               </div>
                               <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-                                <label className="block min-w-0">
-                                  <span className="label">{t('gameClubs')}</span>
-                                  <select
-                                    className="input-field h-11 font-medium"
+                                <Field label={t('gameClubs')} htmlFor={`member-club-${profile.id}`}>
+                                  <Select
+                                    id={`member-club-${profile.id}`}
+                                    className="font-medium"
                                     value={membership.clubId}
                                     disabled={saving}
                                     onChange={(event) => {
@@ -792,31 +748,34 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                                     }}
                                   >
                                     {profile.memberships.map((item) => <option key={item.clubId} value={item.clubId}>{item.clubName}</option>)}
-                                  </select>
-                                </label>
-                                <label className="block min-w-0">
-                                  <span className="label">{t('memberRole')}</span>
-                                  <select
-                                    className="input-field h-11 font-medium disabled:bg-gray-100 disabled:text-gray-500"
+                                  </Select>
+                                </Field>
+                                <Field
+                                  label={t('memberRole')}
+                                  htmlFor={`member-role-${profile.id}`}
+                                  hint={protectedOwner ? (profile.id === currentUserId ? t('selfDemoteBlocked') : t('lastOwnerBlocked')) : t('autoSave')}
+                                >
+                                  <Select
+                                    id={`member-role-${profile.id}`}
+                                    className="font-medium"
                                     value={membership.role}
                                     disabled={saving || protectedOwner}
                                     onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
                                   >
                                     {ROLES.map((role) => <option key={role} value={role}>{t(`roles.${role}`)}</option>)}
-                                  </select>
-                                </label>
+                                  </Select>
+                                </Field>
                                 {hasAvailableClubs && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary h-11 border border-gray-200 bg-white"
+                                  <Button
+                                    variant="outline"
                                     disabled={saving}
                                     onClick={() => setExpandedAddAccessId(addAccessExpanded ? null : profile.id)}
                                     aria-expanded={addAccessExpanded}
                                     aria-controls={`add-access-${profile.id}`}
+                                    icon={<UserPlus size={16} aria-hidden="true" />}
                                   >
-                                    <UserPlus size={16} />
                                     {t('addAccess')}
-                                  </button>
+                                  </Button>
                                 )}
                               </div>
                               {addAccessExpanded && (
@@ -830,16 +789,17 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                                 <p className="text-xs leading-5 text-gray-500">
                                   {profile.id === currentUserId ? t('selfRemoveBlocked') : protectedOwner ? t('lastOwnerBlocked') : t('removeAccessHelp', { club: membership.clubName })}
                                 </p>
-                                <button
-                                  type="button"
-                                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-danger-600 transition hover:bg-danger-50 disabled:cursor-not-allowed disabled:text-gray-400"
+                                <Button
+                                  variant="dangerOutline"
+                                  size="sm"
+                                  className="shrink-0"
                                   disabled={saving || profile.id === currentUserId || protectedOwner}
                                   onClick={() => removeClubAccess(profile, membership)}
                                   aria-label={t('removeClubAccess', { club: membership.clubName })}
+                                  icon={<Trash2 size={15} aria-hidden="true" />}
                                 >
-                                  <Trash2 size={15} />
                                   {t('removeAccess')}
-                                </button>
+                                </Button>
                               </div>
                             </div>
                           )}
@@ -849,10 +809,13 @@ export default function TeamPageClient({ currentUserId: initialCurrentUserId }: 
                   </div>
                 </>
               )}
-            </section>
+            </Card>
           )}
         </div>
       )}
+
+      {toastElement}
+      {confirmDialog}
     </div>
   );
 }

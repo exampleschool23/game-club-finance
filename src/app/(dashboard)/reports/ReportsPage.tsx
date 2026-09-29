@@ -10,17 +10,30 @@ import {
   Filter,
   Gamepad2,
   Landmark,
-  LoaderCircle,
   ReceiptText,
   Trash2,
   WalletCards,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useClub } from '@/components/layout/DashboardShell';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { DateRangePicker } from '@/components/ui/CalendarPicker';
-import { Skeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
-import { Modal } from '@/components/ui/Modal';
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  DateRangePicker,
+  EmptyState,
+  InlineAlert,
+  Modal,
+  Money,
+  PageHeader,
+  SectionHeading,
+  Select,
+  Skeleton,
+  TableSkeleton,
+  useConfirm,
+  useToast,
+} from '@/components/PresentationFoundation';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import {
   buildFilteredMoneyReport,
@@ -43,7 +56,7 @@ import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
 import { canAccessFeature } from '@/lib/permissions';
-import ExpenseRegistrationForm from './ExpensesPanel';
+import ExpenseRegistrationForm, { EXPENSE_CATEGORIES, isKnownExpenseCategory, type KnownExpenseCategory } from './ExpensesPanel';
 
 const emptyReportRows = {
   cash: [] as MoneyReportCashRow[],
@@ -67,31 +80,13 @@ interface MoneyReportSnapshotPayload {
 }
 
 function Amount({ value, className }: { value: number; className?: string }) {
-  return (
-    <span className={cn('tabular-nums', value < 0 && 'text-red-600', className)}>
-      {formatCurrency(value)} UZS
-    </span>
-  );
+  return <Money amount={value} signed className={className} />;
 }
 
-const knownExpenseCategories = [
-  'rent',
-  'salary',
-  'electricity',
-  'internet',
-  'repair',
-  'cleaning',
-  'food_drinks',
-  'marketing',
-  'equipment',
-  'tax',
-  'other',
-] as const;
-
-type KnownExpenseCategory = (typeof knownExpenseCategories)[number];
-
-function isKnownExpenseCategory(category: string): category is KnownExpenseCategory {
-  return knownExpenseCategories.includes(category as KnownExpenseCategory);
+function activityKindBadge(kind: MoneyReportActivity['kind']): string {
+  if (kind === 'income') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (kind === 'debt_payment') return 'border-cyan-200 bg-cyan-50 text-cyan-700';
+  return 'border-red-200 bg-red-50 text-red-700';
 }
 
 const expenseActivityStyles: Record<KnownExpenseCategory, string> = {
@@ -137,7 +132,7 @@ function SummaryCard({
   loading?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+    <Card>
       <div className={cn('flex h-10 w-10 items-center justify-center rounded-lg', iconBackground)}>
         <Icon size={20} className={iconClassName} aria-hidden="true" />
       </div>
@@ -152,7 +147,7 @@ function SummaryCard({
           <Amount value={value} />
         </p>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -176,7 +171,7 @@ function PaymentCard({
   leftLabel: string;
 }) {
   return (
-    <article className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <Card as="article" padding="none" className="overflow-hidden">
       <div className="p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl', iconBackground)}>
@@ -208,7 +203,7 @@ function PaymentCard({
           className={cn('shrink-0 text-base font-extrabold', data.left < 0 ? 'text-red-700' : 'text-emerald-700')}
         />
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -226,10 +221,12 @@ export default function ReportsPage() {
   const [categoryFilter, setCategoryFilter] = useState<MoneyReportCategoryFilter>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const { showToast, toastElement } = useToast();
+  const { confirm, confirmDialog } = useConfirm();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<{ activity: MoneyReportActivity; date: string } | null>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [allCustomCategories, setAllCustomCategories] = useState<string[] | null>(null);
   const requestSequence = useRef(0);
   const isOwner = role === 'owner';
   const report = useMemo(() => buildFilteredMoneyReport(
@@ -241,13 +238,33 @@ export default function ReportsPage() {
     reportRows.stockPurchases,
   ), [categoryFilter, reportRows]);
   const customExpenseCategories = useMemo(() => {
-    const knownCategories = new Set<string>(knownExpenseCategories);
+    const knownCategories = new Set<string>(EXPENSE_CATEGORIES);
     return Array.from(new Set(
       reportRows.expenses
         .map((expense) => expense.category)
         .filter((category) => category && !knownCategories.has(category)),
     )).sort((a, b) => a.localeCompare(b));
   }, [reportRows.expenses]);
+
+  // Custom expense categories are read once per club (not on every dialog open)
+  // so the expense form can offer categories used outside the visible range.
+  useEffect(() => {
+    if (!selectedClubId || !hasExpensesAccess) {
+      setAllCustomCategories(null);
+      return;
+    }
+    let cancelled = false;
+    const supabase = createClient();
+    fetchAllRows<{ category: string }>(() => supabase.from('expenses').select('category').eq('club_id', selectedClubId))
+      .then((result) => {
+        if (cancelled || result.error) return;
+        setAllCustomCategories(Array.from(new Set(
+          (result.data ?? []).map((row) => row.category).filter((category) => category && !isKnownExpenseCategory(category)),
+        )).sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [hasExpensesAccess, selectedClubId]);
 
   useEffect(() => {
     if (!categoryFilter.startsWith('expense:')) return;
@@ -257,7 +274,7 @@ export default function ReportsPage() {
     }
   }, [categoryFilter, customExpenseCategories]);
 
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++requestSequence.current;
 
     if (!selectedClubId || !hasReportsAccess) {
@@ -266,7 +283,7 @@ export default function ReportsPage() {
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError('');
     const supabase = createClient();
     const snapshotResult = await supabase.rpc('get_money_report_snapshot', {
@@ -397,6 +414,7 @@ export default function ReportsPage() {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
       setLoading(false);
     });
+    return () => { requestSequence.current += 1; };
   }, [loadReport]);
 
   useEffect(() => {
@@ -410,12 +428,12 @@ export default function ReportsPage() {
 
   async function handleDeleteActivity(activity: MoneyReportActivity) {
     if (!isOwner || !selectedClubId || !activity.id || activity.source === 'debt_payment') return;
-    if (!window.confirm(t('deleteEntryConfirm'))) return;
+    const confirmed = await confirm({ title: tc('delete'), description: t('deleteEntryConfirm'), confirmLabel: tc('delete') });
+    if (!confirmed) return;
 
     const key = `${activity.source}:${activity.id}`;
     setDeletingKey(key);
     setError('');
-    setSuccess('');
 
     let deleteError: { message: string } | null = null;
     if (activity.source === 'expense') {
@@ -426,7 +444,7 @@ export default function ReportsPage() {
       });
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
-        deleteError = { message: result?.code === 'SALARY_PAYMENT_IMMUTABLE' ? t('salaryPaymentProtected') : result?.error ?? 'Could not delete expense' };
+        deleteError = { message: result?.code === 'SALARY_PAYMENT_IMMUTABLE' ? t('salaryPaymentProtected') : result?.error ?? tc('error') };
       }
     } else {
       const supabase = createClient();
@@ -445,8 +463,8 @@ export default function ReportsPage() {
       return;
     }
 
-    setSuccess(t('entryDeleted'));
-    await loadReport();
+    showToast(t('entryDeleted'));
+    await loadReport({ silent: true });
   }
 
   function categoryLabel(activity: MoneyReportActivity): string {
@@ -505,8 +523,9 @@ export default function ReportsPage() {
 
   async function handleExpenseRegistered() {
     setExpenseDialogOpen(false);
-    setSuccess(t('expenseRegistered'));
-    if (hasReportsAccess) await loadReport();
+    setAllCustomCategories(null);
+    showToast(t('expenseRegistered'));
+    if (hasReportsAccess) await loadReport({ silent: true });
   }
 
   return (
@@ -515,21 +534,14 @@ export default function ReportsPage() {
         title={t('title')}
         description={t('description')}
         action={hasExpensesAccess ? (
-          <button type="button" className="btn-primary h-11" onClick={() => setExpenseDialogOpen(true)}>
-            <ReceiptText size={18} />
+          <Button onClick={() => setExpenseDialogOpen(true)} icon={<ReceiptText size={18} aria-hidden="true" />}>
             {t('registerExpense')}
-          </button>
+          </Button>
         ) : undefined}
       />
 
-      {(error || success) && (
-        <div className={cn(
-          'rounded-lg border px-4 py-3 text-sm font-semibold',
-          error ? 'border-red-200 bg-red-50 text-red-600' : 'border-emerald-200 bg-emerald-50 text-emerald-700',
-        )}>
-          {error || success}
-        </div>
-      )}
+      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
+      {!hasReportsAccess && <InlineAlert variant="info">{tc('accessDeniedDescription')}</InlineAlert>}
 
       <div className="grid max-w-5xl gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)]">
         <DateRangePicker
@@ -539,19 +551,14 @@ export default function ReportsPage() {
           toLabel={t('to')}
           onChange={setRange}
         />
-        <label className="relative block min-w-0">
-          <span className="sr-only">{t('filterByCategory')}</span>
-          <Filter
-            size={17}
-            className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-primary-600"
-            aria-hidden="true"
-          />
-          <select
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value as MoneyReportCategoryFilter)}
-            className="input-field h-14 w-full appearance-none pl-10 pr-9 font-bold text-gray-900"
-            aria-label={t('filterByCategory')}
-          >
+        <Select
+          controlSize="lg"
+          leadingIcon={<Filter size={17} className="text-primary-600" />}
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value as MoneyReportCategoryFilter)}
+          className="text-base font-bold text-gray-900"
+          aria-label={t('filterByCategory')}
+        >
             <option value="all">{t('allCategories')}</option>
             <optgroup label={t('incomeCategories')}>
               <option value="income">{t('dailyClubIncome')}</option>
@@ -559,7 +566,7 @@ export default function ReportsPage() {
             </optgroup>
             <optgroup label={t('expenseCategories')}>
               <option value="expense">{t('allExpenses')}</option>
-              {knownExpenseCategories.map((category) => (
+              {EXPENSE_CATEGORIES.map((category) => (
                 <option key={category} value={`expense:${category}`}>
                   {te(category)}
                 </option>
@@ -570,8 +577,7 @@ export default function ReportsPage() {
                 </option>
               ))}
             </optgroup>
-          </select>
-        </label>
+        </Select>
       </div>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -610,10 +616,7 @@ export default function ReportsPage() {
       </section>
 
       <section>
-        <div className="mb-3">
-          <h2 className="text-lg font-bold text-gray-950">{t('moneyLeftByPaymentMethod')}</h2>
-          <p className="mt-1 text-sm text-gray-500">{t('moneyLeftDescription')}</p>
-        </div>
+        <SectionHeading size="lg" title={t('moneyLeftByPaymentMethod')} description={t('moneyLeftDescription')} className="mb-3" />
         {loading ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((item) => (
@@ -639,15 +642,14 @@ export default function ReportsPage() {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-100 px-4 py-4 sm:px-5">
-          <h2 className="text-base font-bold text-gray-950">{t('dailyCloseout')}</h2>
-          <p className="mt-1 text-sm text-gray-500">{t('dailyCloseoutDescription')}</p>
-        </div>
+      <Card as="section" padding="none" className="overflow-hidden">
+        <CardHeader>
+          <SectionHeading title={t('dailyCloseout')} description={t('dailyCloseoutDescription')} />
+        </CardHeader>
         {loading ? (
           <TableSkeleton rows={6} columns={isOwner ? 6 : 5} className="rounded-none border-0 shadow-none" />
         ) : report.days.length === 0 ? (
-          <div className="p-8 text-center text-sm font-semibold text-gray-500">{t('noData')}</div>
+          <EmptyState compact title={t('noData')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
@@ -700,20 +702,8 @@ export default function ReportsPage() {
                     return (
                       <tr
                         key={activity.id ?? `${day.date}-${activity.source}-${index}`}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={t('viewEntryDetails', { category: categoryLabel(activity) })}
                         onClick={() => setSelectedEntry({ activity, date: day.date })}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            setSelectedEntry({ activity, date: day.date });
-                          }
-                        }}
-                        className={cn(
-                          'cursor-pointer border-l-4 transition-colors hover:brightness-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
-                          activityRowStyle(activity),
-                        )}
+                        className={cn('cursor-pointer border-l-4 transition-colors hover:bg-gray-50', activityRowStyle(activity))}
                       >
                         <td className="whitespace-nowrap px-4 py-4 align-top sm:px-5">
                           <p className="font-bold text-gray-700">{formatDateOnly(day.date, locale)}</p>
@@ -723,29 +713,19 @@ export default function ReportsPage() {
                           </p>
                         </td>
                         <td className="px-4 py-4 align-top">
-                          <span className={cn(
-                            'inline-flex rounded-full border px-2.5 py-1 text-xs font-bold',
-                            activity.kind === 'income'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : activity.kind === 'debt_payment'
-                                ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
-                                : 'border-red-200 bg-red-50 text-red-700',
-                          )}>
-                            {activity.kind === 'income'
-                              ? t('income')
-                              : activity.kind === 'debt_payment'
-                                ? t('debtPayment')
-                                : t('expense')}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); setSelectedEntry({ activity, date: day.date }); }}
+                            aria-label={t('viewEntryDetails', { category: categoryLabel(activity) })}
+                            className={cn('inline-flex rounded-full border px-2.5 py-1 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500', activityKindBadge(activity.kind))}
+                          >
+                            {activityTypeLabel(activity)}
+                          </button>
                         </td>
                         <td className="px-4 py-4 align-top">
                           <span className={cn(
                             'inline-flex rounded-full border px-2.5 py-1 text-xs font-bold',
-                            activity.kind === 'income'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : activity.kind === 'debt_payment'
-                                ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
-                                : expenseCategoryStyle(category),
+                            activity.kind === 'expense' ? expenseCategoryStyle(category) : activityKindBadge(activity.kind),
                           )}>
                             {categoryLabel(activity)}
                           </span>
@@ -754,7 +734,7 @@ export default function ReportsPage() {
                           'whitespace-nowrap px-4 py-4 text-right align-top font-black tabular-nums',
                           activity.amount < 0 ? 'text-red-600' : 'text-emerald-700',
                         )}>
-                          {activity.amount > 0 ? '+' : ''}{formatCurrency(activity.amount)} UZS
+                          <Money amount={activity.amount} showPlus />
                         </td>
                         <td className="max-w-[320px] px-4 py-4 align-top text-sm leading-5 text-gray-600">
                           {activity.comment || t('noDescription')}
@@ -762,20 +742,19 @@ export default function ReportsPage() {
                         {isOwner && (
                           <td className="px-4 py-4 text-right align-top sm:px-5">
                             {canDelete ? (
-                              <button
-                                type="button"
-                                disabled={deletingKey === deleteKey}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                                loading={deletingKey === deleteKey}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   handleDeleteActivity(activity);
                                 }}
-                                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-gray-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                icon={<Trash2 size={15} aria-hidden="true" />}
                               >
-                                {deletingKey === deleteKey
-                                  ? <LoaderCircle size={15} className="animate-spin" />
-                                  : <Trash2 size={15} />}
                                 {tc('delete')}
-                              </button>
+                              </Button>
                             ) : (
                               <span className="text-gray-300">—</span>
                             )}
@@ -789,13 +768,13 @@ export default function ReportsPage() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
 
       <Modal
         open={Boolean(selectedEntry)}
         onClose={() => setSelectedEntry(null)}
         title={t('entryDetails')}
-        className="sm:max-w-lg"
+        size="lg"
       >
         {selectedEntry && (
           <div className="space-y-5">
@@ -805,21 +784,14 @@ export default function ReportsPage() {
                 ? 'border-red-100 bg-red-50'
                 : 'border-emerald-100 bg-emerald-50',
             )}>
-              <span className={cn(
-                'inline-flex rounded-full border px-2.5 py-1 text-xs font-bold',
-                selectedEntry.activity.kind === 'income'
-                  ? 'border-emerald-200 bg-white text-emerald-700'
-                  : selectedEntry.activity.kind === 'debt_payment'
-                    ? 'border-cyan-200 bg-white text-cyan-700'
-                    : 'border-red-200 bg-white text-red-700',
-              )}>
+              <Badge variant="outline" className={activityKindBadge(selectedEntry.activity.kind)}>
                 {activityTypeLabel(selectedEntry.activity)}
-              </span>
+              </Badge>
               <p className={cn(
                 'mt-3 text-2xl font-black tabular-nums',
                 selectedEntry.activity.amount < 0 ? 'text-red-600' : 'text-emerald-700',
               )}>
-                {selectedEntry.activity.amount > 0 ? '+' : ''}{formatCurrency(selectedEntry.activity.amount)} UZS
+                <Money amount={selectedEntry.activity.amount} showPlus />
               </p>
             </div>
 
@@ -873,10 +845,16 @@ export default function ReportsPage() {
         open={expenseDialogOpen}
         onClose={() => setExpenseDialogOpen(false)}
         title={t('registerExpense')}
-        className="sm:max-w-xl"
+        size="xl"
       >
-        <ExpenseRegistrationForm onSaved={handleExpenseRegistered} />
+        <ExpenseRegistrationForm
+          knownCustomCategories={allCustomCategories ? Array.from(new Set([...allCustomCategories, ...customExpenseCategories])).sort((a, b) => a.localeCompare(b)) : undefined}
+          onSaved={handleExpenseRegistered}
+        />
       </Modal>
+
+      {toastElement}
+      {confirmDialog}
     </div>
   );
 }

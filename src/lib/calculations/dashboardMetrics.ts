@@ -160,7 +160,7 @@ export function localIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function parseLocalIsoDate(date: string): Date {
+function parseLocalIsoDate(date: string): Date {
   return new Date(`${date}T00:00:00`);
 }
 

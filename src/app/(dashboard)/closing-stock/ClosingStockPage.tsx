@@ -2,13 +2,30 @@
 
 // Route: /closing-stock
 
-import { useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { fetchStockOpeningBalances, fetchStockPurchasesForDate } from '@/lib/supabase/stockOpeningBalances';
 import { useClub } from '@/components/layout/DashboardShell';
-import { DatePicker } from '@/components/ui/CalendarPicker';
-import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  DatePicker,
+  EmptyState,
+  InlineAlert,
+  Input,
+  MetricCard,
+  MetricGridSkeleton,
+  PageHeader,
+  SearchInput,
+  SectionHeading,
+  SegmentedControl,
+  Stepper,
+  TableSkeleton,
+  useToast,
+} from '@/components/PresentationFoundation';
 import { BulkStockUpdateModal } from './BulkStockUpdateModal';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
 import { formatCurrency, formatUnitCurrency } from '@/lib/formatters';
@@ -25,6 +42,8 @@ import {
   buildClosingStockUpserts,
   calculatePurchaseCostsByProduct,
   clearClosingStockDraft,
+  isSignedWholeNumberInput,
+  isWholeNumberInput,
   normalizeStockCount,
   normalizeStockAdjustment,
   readClosingStockDraft,
@@ -41,13 +60,11 @@ import {
   Coins,
   FileBox,
   Info,
-  Minus,
   Package,
-  Plus,
   Save,
-  Search,
   ShoppingCart,
   TrendingUp,
+  Warehouse,
 } from 'lucide-react';
 import type { Product } from '@/types';
 
@@ -81,20 +98,6 @@ function parseNum(value: string): number {
 
 function parseAdjustment(value: string | undefined): number {
   return normalizeStockAdjustment(value);
-}
-
-function isWholeNumberInput(value: string): boolean {
-  return value === '' || /^\d+$/.test(value);
-}
-
-function isSignedWholeNumberInput(value: string): boolean {
-  return value === '' || value === '-' || /^-?\d+$/.test(value);
-}
-
-function preventNonIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
-  if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) {
-    event.preventDefault();
-  }
 }
 
 function preventNonSignedIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
@@ -166,6 +169,7 @@ function isMissingDeletedColumn(error: { message?: string } | null | undefined) 
 
 const stickyHeaderCellClass = 'sticky top-0 z-20 border-b border-gray-100 bg-gray-50 px-4 py-4';
 const addedTodayHeaderCellClass = 'sticky top-0 z-20 border-b border-success-500/20 bg-success-50 px-4 py-4 text-success-600';
+const stepperLabels = { decrease: 'decreaseClosingStock', increase: 'increaseClosingStock' } as const;
 
 async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
   const ordered = await supabase
@@ -214,8 +218,9 @@ export default function ClosingStockPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
-  const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const { showToast, toastElement } = useToast();
+  const requestSequence = useRef(0);
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
   const isAdmin = currentRole === 'admin';
@@ -247,6 +252,8 @@ export default function ClosingStockPage() {
   );
 
   const loadData = useCallback(async (selectedDate: string) => {
+    const requestId = ++requestSequence.current;
+    const isCurrent = () => requestId === requestSequence.current;
     if (!selectedClubId) {
       setRows([]);
       setPurchaseCostsByProduct({});
@@ -255,7 +262,6 @@ export default function ClosingStockPage() {
     }
 
     setLoading(true);
-    setPurchaseCostsByProduct({});
     setError('');
     const supabase = createClient();
     const readOnlyDate = selectedDate < today;
@@ -268,6 +274,7 @@ export default function ClosingStockPage() {
         .eq('club_id', selectedClubId)
         .eq('date', selectedDate)
         .order('updated_at', { ascending: false });
+      if (!isCurrent()) return;
 
       let data: unknown = countsWithOrder.data;
       let countsError = countsWithOrder.error;
@@ -280,6 +287,7 @@ export default function ClosingStockPage() {
           .eq('date', selectedDate)
           .order('updated_at', { ascending: false });
 
+        if (!isCurrent()) return;
         data = countsWithoutOrder.data;
         countsError = countsWithoutOrder.error;
       }
@@ -299,6 +307,7 @@ export default function ClosingStockPage() {
           fetchStockPurchasesForDate(supabase, selectedDate, selectedClubId),
           fetchStockOpeningBalances(supabase, selectedDate, selectedClubId, selectedDate === today),
         ]);
+        if (!isCurrent()) return;
 
         if (productsRes.error || purchasesRes.error || previousClosingsRes.error) {
           setError(productsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? 'Error');
@@ -328,6 +337,7 @@ export default function ClosingStockPage() {
       }
 
       const purchasesRes = await fetchStockPurchasesForDate(supabase, selectedDate, selectedClubId);
+      if (!isCurrent()) return;
 
       if (purchasesRes.error) {
         setError(purchasesRes.error.message);
@@ -381,6 +391,7 @@ export default function ClosingStockPage() {
       fetchStockPurchasesForDate(supabase, selectedDate, selectedClubId),
       fetchStockOpeningBalances(supabase, selectedDate, selectedClubId, selectedDate === today),
     ]);
+    if (!isCurrent()) return;
 
     if (productsRes.error || countsRes.error || purchasesRes.error || previousClosingsRes.error) {
       setError(productsRes.error?.message ?? countsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? 'Error');
@@ -400,6 +411,7 @@ export default function ClosingStockPage() {
     if (missingIds.length > 0) {
       const result = await supabase.from('products').select('*')
         .eq('club_id', selectedClubId).eq('is_deleted', true).in('id', missingIds);
+      if (!isCurrent()) return;
       if (result.error) {
         setError(result.error.message);
         setRows([]);
@@ -438,6 +450,7 @@ export default function ClosingStockPage() {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
     });
+    return () => { requestSequence.current += 1; };
   }, [date, loadData]);
 
   useEffect(() => {
@@ -598,14 +611,13 @@ export default function ClosingStockPage() {
     }
 
     setError('');
-    setSuccess('');
 
     if (!selectedClubId || !saveClosingStockDraft(getBrowserStorage(), date, rows, undefined, selectedClubId)) {
       setError(t('draftSaveFailed'));
       return;
     }
 
-    setSuccess(t('draftSaved'));
+    showToast(t('draftSaved'));
   }
 
   function validationMessage(validationError: NonNullable<ReturnType<typeof validateClosingStockRows>>) {
@@ -646,7 +658,6 @@ export default function ClosingStockPage() {
 
     setSaving(true);
     setError('');
-    setSuccess('');
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
@@ -669,7 +680,7 @@ export default function ClosingStockPage() {
 
       clearClosingStockDraft(getBrowserStorage(), date, selectedClubId);
       await loadData(date);
-      setSuccess(successMessage);
+      showToast(successMessage);
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : tc('error'));
@@ -710,13 +721,31 @@ export default function ClosingStockPage() {
   }
 
   const kpis = [
-    { label: t('totalProducts'), value: filteredRows.length, unit: t('items'), detail: '', icon: Box, color: 'text-primary-600', bg: 'bg-primary-50' },
-    { label: t('stockPurchased'), value: totals.added, unit: t('pcs'), detail: `${formatCurrency(totals.purchaseCost)} ${tc('currency')}`, icon: Package, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: t('totalSold'), value: totals.sold, unit: t('pcs'), detail: '', icon: FileBox, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: t('barIncomeEst'), value: formatCurrency(totals.income), unit: tc('currency'), detail: '', icon: Coins, color: 'text-success-600', bg: 'bg-success-50' },
-    { label: t('barProfitEst'), value: formatCurrency(totals.profit), unit: tc('currency'), detail: '', icon: TrendingUp, color: 'text-success-600', bg: 'bg-success-50' },
-    { label: t('stockValue'), value: formatCurrency(totals.stockValue), unit: tc('currency'), detail: '', icon: Coins, color: 'text-gray-900', bg: 'bg-gray-100' },
+    { label: t('totalProducts'), value: `${rows.length} ${t('items')}`, icon: Box, iconClassName: 'bg-primary-50 text-primary-600', tone: 'primary' as const, helper: filteredRows.length !== rows.length ? `${filteredRows.length} / ${rows.length}` : undefined },
+    { label: t('stockPurchased'), value: `${totals.added} ${t('pcs')}`, icon: Package, iconClassName: 'bg-orange-50 text-orange-600', tone: 'default' as const, helper: `${formatCurrency(totals.purchaseCost)} ${tc('currency')}` },
+    { label: t('totalSold'), value: `${totals.sold} ${t('pcs')}`, icon: FileBox, iconClassName: 'bg-indigo-50 text-indigo-600', tone: 'default' as const },
+    { label: t('barIncomeEst'), value: `${formatCurrency(totals.income)} ${tc('currency')}`, icon: Coins, iconClassName: 'bg-success-50 text-success-600', tone: 'success' as const },
+    { label: t('barProfitEst'), value: `${formatCurrency(totals.profit)} ${tc('currency')}`, icon: TrendingUp, iconClassName: 'bg-success-50 text-success-600', tone: 'success' as const },
+    { label: t('stockValue'), value: `${formatCurrency(totals.stockValue)} ${tc('currency')}`, icon: Warehouse, iconClassName: 'bg-gray-100 text-gray-700', tone: 'default' as const },
   ];
+  const categoryChipOptions = [{ value: '', label: tc('all') }, ...categoryOptions.map((category) => ({ value: category, label: category }))];
+  const stepper = (
+    index: number,
+    value: string,
+    onChange: (value: string) => void,
+    onStep: (delta: 1 | -1) => void,
+    labels: { decrease: string; increase: string; label: string },
+  ) => (
+    <Stepper
+      className="mx-auto flex w-fit"
+      label={labels.label}
+      decreaseLabel={labels.decrease}
+      increaseLabel={labels.increase}
+      value={value}
+      onChange={onChange}
+      onStep={onStep}
+    />
+  );
 
   return (
     <div className="space-y-5">
@@ -728,158 +757,104 @@ export default function ClosingStockPage() {
         onSave={handleBulkStockSave}
       />
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-950">{t('title')}</h1>
-          <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
-            <span>{t('dashboard')}</span>
-            <span>›</span>
-            <span>{t('title')}</span>
-          </div>
-        </div>
+      <PageHeader
+        title={t('title')}
+        description={isHistoricalReadOnly ? t('readOnlyBody') : isHistoricalDate ? t('ownerHistoricalEditBody') : t('infoBody')}
+        action={(
+          <>
+            <DatePicker
+              ariaLabel={t('title')}
+              value={date}
+              max={today}
+              className="w-full sm:w-[240px]"
+              onChange={(value) => {
+                setDate(value);
+                setError('');
+              }}
+            />
+            <Button
+              variant="outline"
+              className="border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100"
+              onClick={() => {
+                setError('');
+                setBulkUpdateOpen(true);
+              }}
+              disabled={saving || loading || isReadOnly || rows.length === 0}
+              icon={<ShoppingCart size={17} aria-hidden="true" />}
+            >
+              {t('bulkUpdate')}
+            </Button>
+            <Button variant="outline" onClick={handleSaveDraft} disabled={saving || loading || isReadOnly} icon={<Save size={16} aria-hidden="true" />}>
+              {t('saveDraft')}
+            </Button>
+            <Button onClick={handleSubmitStockCounts} disabled={loading || isReadOnly} loading={saving} loadingLabel={tc('saving')} icon={<Package size={16} aria-hidden="true" />}>
+              {t('submit')}
+            </Button>
+          </>
+        )}
+      />
 
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap xl:w-auto xl:flex-nowrap">
-          <DatePicker
-            value={date}
-            max={today}
-            className="w-full sm:w-[260px]"
-            onChange={(value) => {
-              setDate(value);
-              setSuccess('');
-              setError('');
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setError('');
-              setSuccess('');
-              setBulkUpdateOpen(true);
-            }}
-            disabled={saving || loading || isReadOnly || rows.length === 0}
-            className="btn-secondary min-h-11 w-full border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 sm:w-auto"
-          >
-            <ShoppingCart size={17} />
-            {t('bulkUpdate')}
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={saving || loading || isReadOnly}
-            className="btn-secondary min-h-11 w-full border border-gray-200 bg-white sm:w-auto"
-          >
-            <Save size={16} />
-            {t('saveDraft')}
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmitStockCounts}
-            disabled={saving || loading || isReadOnly}
-            className="btn-primary min-h-11 w-full px-5 sm:w-auto"
-          >
-            <Package size={16} />
-            {saving ? tc('saving') : t('submit')}
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-primary-200 bg-primary-50/40 px-5 py-4">
-        <div className="flex gap-3">
-          <Info size={20} className="mt-0.5 flex-shrink-0 text-primary-600" />
-          <div>
-            <p className="font-semibold text-gray-900">
-              {isHistoricalReadOnly ? t('readOnlyTitle') : isHistoricalDate ? t('ownerHistoricalEditTitle') : t('infoTitle')}
-            </p>
-            <p className="mt-1 text-sm text-gray-600">
-              {isHistoricalReadOnly ? t('readOnlyBody') : isHistoricalDate ? t('ownerHistoricalEditBody') : t('infoBody')}
-            </p>
-          </div>
-        </div>
-      </div>
+      {(isHistoricalDate || isReadOnly) && (
+        <InlineAlert variant={isHistoricalReadOnly ? 'warning' : 'info'} title={isHistoricalReadOnly ? t('readOnlyTitle') : t('ownerHistoricalEditTitle')}>
+          {isHistoricalReadOnly ? t('readOnlyBody') : t('ownerHistoricalEditBody')}
+        </InlineAlert>
+      )}
 
       {loading ? (
         <MetricGridSkeleton count={6} className="lg:grid-cols-3 2xl:grid-cols-6" />
       ) : (
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        {kpis.map(({ label, value, unit, detail, icon: Icon, color, bg }) => (
-          <div key={label} className="min-w-0 rounded-lg border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 sm:gap-4">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full sm:h-12 sm:w-12 ${bg}`}>
-                <Icon size={22} className={color} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-600">{label}</p>
-                <p className={`mt-1 break-words text-xl font-bold leading-tight tabular-nums sm:text-2xl ${color}`}>{value}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs font-medium text-gray-500">
-                  <span>{unit}</span>
-                  {detail && <span className={`font-bold ${color}`}>· {detail}</span>}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </section>
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          {kpis.map((kpi) => (
+            <MetricCard key={kpi.label} label={kpi.label} value={kpi.value} icon={kpi.icon} iconClassName={kpi.iconClassName} tone={kpi.tone} helper={kpi.helper} />
+          ))}
+        </section>
       )}
 
-      {error && <p className="rounded-lg bg-danger-50 px-4 py-3 text-sm font-medium text-danger-600">{error}</p>}
-      {success && <p className="rounded-lg bg-success-50 px-4 py-3 text-sm font-medium text-success-600">{success}</p>}
+      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
 
       <div>
-        <section className="min-w-0 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-gray-100 px-4 py-4 md:flex-row md:items-center md:justify-between sm:px-5">
-            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center">
-              <h2 className="text-lg font-bold text-gray-900">{t('products')}</h2>
-              <div className="relative w-full md:w-72">
-                <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="search"
-                  className="input-field h-10 pl-9"
-                  placeholder={t('searchPlaceholder')}
+        <Card as="section" padding="none" className="overflow-hidden">
+          <CardHeader>
+            <SectionHeading
+              size="lg"
+              title={t('products')}
+              action={(
+                <SearchInput
+                  className="w-full md:w-72"
+                  controlSize="sm"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={setQuery}
+                  placeholder={t('searchPlaceholder')}
+                  clearLabel={tc('cancel')}
                 />
-              </div>
-            </div>
-          </div>
+              )}
+            />
+          </CardHeader>
 
           {categoryOptions.length > 0 && (
             <div className="border-b border-gray-100 px-4 py-3 sm:px-5">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('')}
-                  className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                    selectedCategory === ''
-                      ? 'border-primary-600 bg-primary-600 text-white'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {tc('all')}
-                </button>
-                {categoryOptions.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setSelectedCategory(category)}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                      selectedCategory === category
-                        ? 'border-primary-600 bg-primary-600 text-white'
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {category}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                variant="chips"
+                label={t('products')}
+                className="flex-nowrap overflow-x-auto pb-1"
+                options={categoryChipOptions}
+                value={selectedCategory}
+                onChange={setSelectedCategory}
+              />
             </div>
           )}
 
           {loading ? (
             <TableSkeleton rows={8} columns={9} className="rounded-none border-0 shadow-none" />
           ) : rows.length === 0 ? (
-            <div className="p-8 text-gray-500">{tc('noData')}</div>
+            <EmptyState compact icon={Package} title={tc('noData')} />
           ) : filteredRows.length === 0 ? (
-            <div className="p-8 text-gray-500">{tc('noData')}</div>
+            <EmptyState
+              compact
+              icon={Package}
+              title={tc('noData')}
+              action={<Button variant="outline" size="sm" onClick={() => { setQuery(''); setSelectedCategory(''); }}>{tc('all')}</Button>}
+            />
           ) : (
             <div className="max-h-[calc(100vh-14rem)] overflow-auto">
               <table className="w-full min-w-[1460px] text-sm">
@@ -899,9 +874,9 @@ export default function ClosingStockPage() {
                     <th className={`${stickyHeaderCellClass} text-center`}>
                       {t('closingStock')}
                       <br />
-                      <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
+                      <Badge variant="primary" size="sm" className="normal-case">
                         {isReadOnly ? t('snapshot') : usesSoldEntry ? t('calculated') : t('youEnter')}
-                      </span>
+                      </Badge>
                     </th>
                     <th className={`${stickyHeaderCellClass} text-center`}>
                       {t('soldQty')}
@@ -910,9 +885,7 @@ export default function ClosingStockPage() {
                       {canSave && (usesSoldEntry || filteredRows.some((row) => row.product.tracks_inventory === false)) && (
                         <>
                           <br />
-                          <span className="rounded-full bg-primary-100 px-2 py-0.5 text-primary-700 normal-case">
-                            {t('youEnter')}
-                          </span>
+                          <Badge variant="primary" size="sm" className="normal-case">{t('youEnter')}</Badge>
                         </>
                       )}
                     </th>
@@ -922,7 +895,7 @@ export default function ClosingStockPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredRows.map((row) => {
-                    const isReadOnly = !canSave || !!row.product.is_deleted;
+                    const rowReadOnly = !canSave || !!row.product.is_deleted;
                     const originalIndex = rows.findIndex((candidate) => candidate.product.id === row.product.id);
                     const summary = rowSummary(row);
                     return (
@@ -936,9 +909,7 @@ export default function ClosingStockPage() {
                             <div className="min-w-0">
                               <p className="font-bold text-gray-900">{row.product.name}</p>
                               {row.product.tracks_inventory === false && (
-                                <span className="mt-1 inline-flex rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-700">
-                                  {t('madeToOrder')}
-                                </span>
+                                <Badge variant="purple" size="sm" className="mt-1">{t('madeToOrder')}</Badge>
                               )}
                               <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatUnitCurrency(row.product.cost_price)} {tc('currency')}</p>
                             </div>
@@ -961,16 +932,17 @@ export default function ClosingStockPage() {
                             <div className="flex flex-col items-center gap-1">
                               <span>{parseNum(row.addedToday)}</span>
                               {row.hasPurchaseMismatch && (
-                                <span
-                                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                                <Badge
+                                  variant="warning"
+                                  size="sm"
+                                  icon={<Info size={12} aria-hidden="true" />}
                                   title={t('purchaseMismatch', {
                                     purchased: row.purchaseQuantity ?? 0,
                                     saved: parseNum(row.addedToday),
                                   })}
                                 >
-                                  <Info size={12} />
                                   {t('purchasesBadge', { purchased: row.purchaseQuantity ?? 0 })}
-                                </span>
+                                </Badge>
                               )}
                             </div>
                           )}
@@ -978,12 +950,13 @@ export default function ClosingStockPage() {
                         <td className="px-4 py-4">
                           {row.product.tracks_inventory === false ? (
                             <p className="text-center font-semibold text-gray-400">—</p>
-                          ) : isOwner && !isReadOnly ? (
+                          ) : isOwner && !rowReadOnly ? (
                             <div className="mx-auto w-44 space-y-2">
-                              <input
+                              <Input
                                 type="text"
                                 inputMode="numeric"
-                                className="input-field h-10 w-full text-center font-semibold"
+                                controlSize="sm"
+                                className="text-center font-semibold"
                                 value={row.adjustmentQuantity ?? '0'}
                                 aria-label={t('adjustment')}
                                 onKeyDown={preventNonSignedIntegerNumberInput}
@@ -991,9 +964,10 @@ export default function ClosingStockPage() {
                                 onChange={(event) => updateAdjustment(originalIndex, event.target.value)}
                               />
                               {parseAdjustment(row.adjustmentQuantity) !== 0 && (
-                                <input
+                                <Input
                                   type="text"
-                                  className="input-field h-9 w-full text-xs"
+                                  controlSize="sm"
+                                  className="text-xs"
                                   value={row.adjustmentReason ?? ''}
                                   placeholder={t('adjustmentReason')}
                                   aria-label={t('adjustmentReason')}
@@ -1013,71 +987,27 @@ export default function ClosingStockPage() {
                         <td className="px-4 py-4">
                           {row.product.tracks_inventory === false ? (
                             <p className="text-center font-semibold text-gray-400">—</p>
-                          ) : isReadOnly || usesSoldEntry ? (
+                          ) : rowReadOnly || usesSoldEntry ? (
                             <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
                           ) : (
-                            <div className="mx-auto flex w-fit items-center gap-2">
-                              <button
-                                type="button"
-                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                aria-label={t('decreaseClosingStock')}
-                                disabled={parseNum(row.closingStock) === 0}
-                                onClick={() => adjustClosingStock(originalIndex, -1)}
-                              >
-                                <Minus size={18} strokeWidth={2.5} />
-                              </button>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                className="input-field h-10 w-20 text-center font-semibold"
-                                value={row.closingStock}
-                                onKeyDown={preventNonIntegerNumberInput}
-                                onWheel={(event) => event.currentTarget.blur()}
-                                onChange={(event) => updateRow(originalIndex, 'closingStock', event.target.value)}
-                              />
-                              <button
-                                type="button"
-                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
-                                aria-label={t('increaseClosingStock')}
-                                onClick={() => adjustClosingStock(originalIndex, 1)}
-                              >
-                                <Plus size={18} strokeWidth={2.5} />
-                              </button>
-                            </div>
+                            stepper(
+                              originalIndex,
+                              row.closingStock,
+                              (value) => updateRow(originalIndex, 'closingStock', value),
+                              (delta) => adjustClosingStock(originalIndex, delta),
+                              { label: `${t('closingStock')} · ${row.product.name}`, decrease: t(stepperLabels.decrease), increase: t(stepperLabels.increase) },
+                            )
                           )}
                         </td>
                         <td className="px-4 py-4">
-                          {!isReadOnly && (usesSoldEntry || row.product.tracks_inventory === false) ? (
-                            <div className="mx-auto flex w-fit items-center gap-2">
-                              <button
-                                type="button"
-                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                aria-label={t('decreaseSoldQty')}
-                                disabled={parseNum(row.soldQuantity) === 0}
-                                onClick={() => adjustSoldQuantity(originalIndex, -1)}
-                              >
-                                <Minus size={18} strokeWidth={2.5} />
-                              </button>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                className="input-field h-10 w-20 text-center font-semibold"
-                                value={row.soldQuantity}
-                                onKeyDown={preventNonIntegerNumberInput}
-                                onWheel={(event) => event.currentTarget.blur()}
-                                onChange={(event) => updateSoldQuantity(originalIndex, event.target.value)}
-                              />
-                              <button
-                                type="button"
-                                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
-                                aria-label={t('increaseSoldQty')}
-                                onClick={() => adjustSoldQuantity(originalIndex, 1)}
-                              >
-                                <Plus size={18} strokeWidth={2.5} />
-                              </button>
-                            </div>
+                          {!rowReadOnly && (usesSoldEntry || row.product.tracks_inventory === false) ? (
+                            stepper(
+                              originalIndex,
+                              row.soldQuantity,
+                              (value) => updateSoldQuantity(originalIndex, value),
+                              (delta) => adjustSoldQuantity(originalIndex, delta),
+                              { label: `${t('soldQty')} · ${row.product.name}`, decrease: t('decreaseSoldQty'), increase: t('increaseSoldQty') },
+                            )
                           ) : (
                             <p className="text-center font-semibold text-gray-900">{summary.soldQuantity}</p>
                           )}
@@ -1104,8 +1034,10 @@ export default function ClosingStockPage() {
               </table>
             </div>
           )}
-        </section>
+        </Card>
       </div>
+
+      {toastElement}
     </div>
   );
 }

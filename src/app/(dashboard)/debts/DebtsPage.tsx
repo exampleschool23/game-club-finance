@@ -2,23 +2,35 @@
 
 // Route: /debts
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { Badge } from '@/components/ui/Badge';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { DetailListSkeleton } from '@/components/ui/LoadingSkeleton';
-import { DatePicker } from '@/components/ui/CalendarPicker';
+import {
+  Badge,
+  Button,
+  Card,
+  CurrencyInput,
+  DatePicker,
+  DetailListSkeleton,
+  EmptyState,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  Money,
+  PageHeader,
+  SegmentedControl,
+  useToast,
+} from '@/components/PresentationFoundation';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatCurrencyInput, formatDate, parseCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatDate, parseCurrencyInput } from '@/lib/formatters';
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
 import { getDebtDateIssue, validateDebtPayment } from '@/lib/validation';
-import { Plus, X, Users } from 'lucide-react';
+import { Plus, Users, Wallet } from 'lucide-react';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
-import type { NewDebt, DebtPayment } from '@/types';
+import type { NewDebt, DebtPayment, EntryPaymentMethod } from '@/types';
 
 type DebtStatusVariant = 'danger' | 'warning' | 'success';
 
@@ -33,6 +45,7 @@ export default function DebtsPage() {
   const tc = useTranslations('common');
   const { selectedClubId, businessDayStartHour, enabledPaymentMethods, role } = useClub();
   const { locale } = useAppLocale();
+  const { showToast, toastElement } = useToast();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
 
   const [debts, setDebts] = useState<NewDebt[]>([]);
@@ -43,6 +56,8 @@ export default function DebtsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [showPaid, setShowPaid] = useState(false);
+  const requestSequence = useRef(0);
   const canManage = canManageDebts(role);
 
   const [addForm, setAddForm] = useState({
@@ -71,8 +86,9 @@ export default function DebtsPage() {
     }));
   }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
-  const fetchDebts = useCallback(async () => {
-    setLoading(true);
+  const fetchDebts = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++requestSequence.current;
+    if (!silent) setLoading(true);
     if (!selectedClubId) {
       setDebts([]);
       setLoading(false);
@@ -85,6 +101,7 @@ export default function DebtsPage() {
       .select('*')
       .eq('club_id', selectedClubId)
       .order('date', { ascending: false });
+    if (requestId !== requestSequence.current) return;
     if (fetchError) {
       setLoadError(fetchError.message);
       setLoading(false);
@@ -100,6 +117,7 @@ export default function DebtsPage() {
       setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
+    return () => { requestSequence.current += 1; };
   }, [fetchDebts]);
 
   async function loadPayments(debtId: string) {
@@ -161,7 +179,7 @@ export default function DebtsPage() {
       remaining_amount: amount,
       date: addForm.date,
       category: addForm.category,
-      comment: addForm.comment || null,
+      comment: addForm.comment.trim() || null,
       status: 'unpaid',
       created_by: session?.user?.id ?? null,
     });
@@ -171,8 +189,8 @@ export default function DebtsPage() {
       setError(err.message);
     } else {
       setAddOpen(false);
-      setAddForm({ person_name: '', amount: '', date: businessToday, category: 'other', comment: '' });
-      await fetchDebts();
+      showToast(t('debtSaved'));
+      await fetchDebts({ silent: true });
     }
   }
 
@@ -214,7 +232,7 @@ export default function DebtsPage() {
       amount,
       payment_method: payForm.payment_method,
       date: payForm.date,
-      comment: payForm.comment || null,
+      comment: payForm.comment.trim() || null,
     });
 
     setSaving(false);
@@ -222,13 +240,19 @@ export default function DebtsPage() {
       setError(err.message);
     } else {
       setPayDebtId(null);
-      await fetchDebts();
+      showToast(t('paymentSaved'));
+      await fetchDebts({ silent: true });
     }
   }
 
   const activeDebt = payDebtId ? debts.find((d) => d.id === payDebtId) : null;
   const unpaid = debts.filter((d) => d.status !== 'paid');
   const paid = debts.filter((d) => d.status === 'paid');
+  const outstandingTotal = unpaid.reduce((sum, debt) => sum + calculateRemainingDebt(debt.amount, debt.paid_amount), 0);
+  const paymentMethodOptions = enabledPaymentMethods.map((method) => ({
+    value: method,
+    label: tc(`paymentMethods.${method}`),
+  }));
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -236,265 +260,239 @@ export default function DebtsPage() {
         title={t('title')}
         description={t('description')}
         action={canManage ? (
-          <button className="btn-primary flex items-center gap-2" onClick={() => openAddDebtModal()}>
-            <Plus size={16} />
+          <Button onClick={() => openAddDebtModal()} icon={<Plus size={16} aria-hidden="true" />}>
             {t('addDebt')}
-          </button>
+          </Button>
         ) : undefined}
       />
 
-      {loadError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-          {loadError}
-        </div>
-      )}
+      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
 
       {loading ? (
         <DetailListSkeleton rows={7} />
       ) : debts.length === 0 ? (
-        <EmptyState icon={Users} title={tc('noData')} />
+        <Card>
+          <EmptyState
+            icon={Users}
+            title={tc('noData')}
+            action={canManage ? (
+              <Button onClick={() => openAddDebtModal()} icon={<Plus size={16} aria-hidden="true" />}>{t('addDebt')}</Button>
+            ) : undefined}
+          />
+        </Card>
       ) : (
         <div className="space-y-6">
-          {/* Unpaid / Partial */}
           {unpaid.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                {t('unpaid')} / {t('partial')}
-              </h2>
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  {t('unpaid')} / {t('partial')}
+                </h2>
+                <Badge variant="danger">
+                  {t('remaining')}: <Money amount={outstandingTotal} />
+                </Badge>
+              </div>
               <div className="space-y-3">
                 {unpaid.map((debt) => {
                   const remaining = calculateRemainingDebt(debt.amount, debt.paid_amount);
                   const status = getDebtStatus(debt.amount, debt.paid_amount);
                   return (
-                    <div key={debt.id} className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex-1 min-w-0">
+                    <Card key={debt.id} as="article" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="break-words font-semibold text-gray-900">{debt.person_name}</p>
                           <Badge variant={statusVariant(status)}>{t(status)}</Badge>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">
+                        <p className="mt-0.5 text-xs text-gray-400">
                           {formatDate(debt.date, locale)}
                           {debt.comment ? ` · ${debt.comment}` : ''}
                         </p>
                         {debt.paid_amount > 0 && (
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {t('paidAmount')}: {formatCurrency(debt.paid_amount)} |{' '}
-                            {t('remaining')}: {formatCurrency(remaining)}
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            {t('paidAmount')}: {formatCurrency(debt.paid_amount)} · {t('remaining')}: {formatCurrency(remaining)}
                           </p>
                         )}
                       </div>
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-                        <span className="break-words font-bold text-danger-700 sm:text-right">
-                          {formatCurrency(debt.amount)}
+                        <span className="break-words font-bold text-danger-600 sm:text-right">
+                          <Money amount={debt.amount} />
                         </span>
-                        {canManage && <div className="flex flex-wrap gap-2">
-                          <button
-                            className="btn-secondary flex-1 whitespace-nowrap px-3 py-1.5 text-xs sm:flex-none"
-                            onClick={() => openAddDebtModal(debt.person_name)}
-                          >
-                            <Plus size={14} />
-                            {t('addDebt')}
-                          </button>
-                          <button
-                            className="btn-secondary flex-1 whitespace-nowrap px-3 py-1.5 text-xs sm:flex-none"
-                            onClick={() => openPayModal(debt.id)}
-                          >
-                            {t('addPayment')}
-                          </button>
-                        </div>}
+                        {canManage && (
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => openAddDebtModal(debt.person_name)} icon={<Plus size={14} aria-hidden="true" />}>
+                              {t('addDebt')}
+                            </Button>
+                            <Button variant="secondary" size="sm" className="flex-1 sm:flex-none" onClick={() => openPayModal(debt.id)} icon={<Wallet size={14} aria-hidden="true" />}>
+                              {t('addPayment')}
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    </Card>
                   );
                 })}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* Paid */}
           {paid.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                {t('paid')}
-              </h2>
-              <div className="space-y-2">
-                {paid.map((debt) => (
-                  <div key={debt.id} className="card flex flex-col gap-2 opacity-60 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="font-medium text-gray-700">{debt.person_name}</p>
-                      <p className="text-xs text-gray-400">{formatDate(debt.date, locale)}</p>
-                    </div>
-                    <span className="break-words font-bold text-success-600 sm:text-right">{formatCurrency(debt.amount)}</span>
-                  </div>
-                ))}
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  {t('paid')} <span className="font-medium normal-case text-gray-400">({paid.length})</span>
+                </h2>
+                <Button variant="ghost" size="sm" aria-expanded={showPaid} onClick={() => setShowPaid((value) => !value)}>
+                  {showPaid ? t('hidePaid') : t('showPaid')}
+                </Button>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Add Debt Modal */}
-      {addOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">{t('addDebt')}</h2>
-              <button onClick={() => setAddOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleAddDebt} className="p-6 space-y-4">
-              <div>
-                <label className="label">{t('personName')}</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={addForm.person_name}
-                  onChange={(e) => setAddForm((p) => ({ ...p, person_name: e.target.value }))}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">{t('amount')}</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="input-field"
-                  value={addForm.amount}
-                  onChange={(e) => setAddForm((p) => ({ ...p, amount: formatCurrencyInput(e.target.value) }))}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">{t('date')}</label>
-                <DatePicker
-                  value={addForm.date}
-                  onChange={(value) => setAddForm((previous) => ({ ...previous, date: value }))}
-                  max={businessToday}
-                  buttonClassName="h-10"
-                />
-              </div>
-              <div>
-                <label className="label">{t('comment')}</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={addForm.comment}
-                  onChange={(e) => setAddForm((p) => ({ ...p, comment: e.target.value }))}
-                />
-              </div>
-              {error && <p className="text-sm text-danger-500">{error}</p>}
-              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-                <button type="button" className="btn-secondary flex-1" onClick={() => setAddOpen(false)}>
-                  {tc('cancel')}
-                </button>
-                <button type="submit" className="btn-primary flex-1" disabled={saving}>
-                  {saving ? tc('saving') : tc('save')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Payment Modal */}
-      {payDebtId && activeDebt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">{t('partialPayment')}</h2>
-              <button onClick={() => setPayDebtId(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="px-6 pt-4">
-              <div className="bg-gray-50 rounded-lg p-3 text-sm mb-4">
-                <p className="font-semibold text-gray-800">{activeDebt.person_name}</p>
-                <p className="text-gray-500">
-                  {t('remaining')}: {formatCurrency(activeDebt.remaining_amount)}
-                </p>
-              </div>
-
-              {/* Payment history */}
-              {(paymentsMap[payDebtId] ?? []).length > 0 && (
-                <div className="mb-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                    {t('debtPayments')}
-                  </p>
-                  <div className="space-y-1">
-                    {(paymentsMap[payDebtId] ?? []).map((p) => (
-                      <div key={p.id} className="flex flex-col gap-1 text-sm text-gray-600 sm:flex-row sm:justify-between">
-                        <span>{formatDate(p.date, locale)}</span>
-                        <span className="font-medium text-success-600">+{formatCurrency(p.amount)}</span>
+              {showPaid && (
+                <div className="space-y-2">
+                  {paid.map((debt) => (
+                    <Card key={debt.id} as="article" padding="sm" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-700">{debt.person_name}</p>
+                        <p className="text-xs text-gray-400">{formatDate(debt.date, locale)}</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleAddPayment} className="px-6 pb-6 space-y-4">
-              <div>
-                <label className="label">{t('amount')}</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="input-field"
-                  value={payForm.amount}
-                  onChange={(e) => setPayForm((p) => ({ ...p, amount: formatCurrencyInput(e.target.value) }))}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">{t('paymentMethod')}</label>
-                <div className={`grid gap-2 ${enabledPaymentMethods.length === 1 ? 'grid-cols-1' : enabledPaymentMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                  {enabledPaymentMethods.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPayForm((p) => ({ ...p, payment_method: m }))}
-                      className={`py-2 text-sm rounded-lg border font-medium transition-all ${
-                        payForm.payment_method === m
-                          ? 'bg-primary-600 text-white border-primary-600'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-primary-400'
-                      }`}
-                    >
-                      {tc(`paymentMethods.${m}`)}
-                    </button>
+                      <span className="break-words font-bold text-success-600 sm:text-right"><Money amount={debt.amount} /></span>
+                    </Card>
                   ))}
                 </div>
-              </div>
-              <div>
-                <label className="label">{t('date')}</label>
-                <DatePicker
-                  value={payForm.date}
-                  onChange={(value) => setPayForm((previous) => ({ ...previous, date: value }))}
-                  min={activeDebt.date}
-                  max={businessToday}
-                  buttonClassName="h-10"
-                />
-              </div>
-              <div>
-                <label className="label">{t('comment')}</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={payForm.comment}
-                  onChange={(e) => setPayForm((p) => ({ ...p, comment: e.target.value }))}
-                />
-              </div>
-              {error && <p className="text-sm text-danger-500">{error}</p>}
-              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-                <button type="button" className="btn-secondary flex-1" onClick={() => setPayDebtId(null)}>
-                  {tc('cancel')}
-                </button>
-                <button type="submit" className="btn-primary flex-1" disabled={saving}>
-                  {saving ? tc('saving') : tc('save')}
-                </button>
-              </div>
-            </form>
-          </div>
+              )}
+            </section>
+          )}
         </div>
       )}
+
+      <Modal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title={t('addDebt')}
+        locked={saving}
+        footer={(
+          <>
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>{tc('cancel')}</Button>
+            <Button type="submit" form="add-debt-form" loading={saving} loadingLabel={tc('saving')}>{tc('save')}</Button>
+          </>
+        )}
+      >
+        <form id="add-debt-form" onSubmit={handleAddDebt} className="space-y-4">
+          <Field label={t('personName')} htmlFor="debt-person" required>
+            <Input
+              id="debt-person"
+              type="text"
+              maxLength={120}
+              value={addForm.person_name}
+              onChange={(e) => setAddForm((p) => ({ ...p, person_name: e.target.value }))}
+              required
+            />
+          </Field>
+          <Field label={t('amount')} htmlFor="debt-amount" required>
+            <CurrencyInput
+              id="debt-amount"
+              value={addForm.amount}
+              onValueChange={(value) => setAddForm((p) => ({ ...p, amount: value }))}
+              trailingAddon={tc('currency')}
+              required
+            />
+          </Field>
+          <Field label={t('date')}>
+            <DatePicker
+              ariaLabel={t('date')}
+              value={addForm.date}
+              onChange={(value) => setAddForm((previous) => ({ ...previous, date: value }))}
+              max={businessToday}
+            />
+          </Field>
+          <Field label={t('comment')} htmlFor="debt-comment">
+            <Input
+              id="debt-comment"
+              type="text"
+              maxLength={250}
+              value={addForm.comment}
+              onChange={(e) => setAddForm((p) => ({ ...p, comment: e.target.value }))}
+            />
+          </Field>
+          {error && <InlineAlert variant="danger">{error}</InlineAlert>}
+        </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(payDebtId && activeDebt)}
+        onClose={() => setPayDebtId(null)}
+        title={t('partialPayment')}
+        locked={saving}
+        footer={(
+          <>
+            <Button variant="outline" onClick={() => setPayDebtId(null)} disabled={saving}>{tc('cancel')}</Button>
+            <Button type="submit" form="add-payment-form" loading={saving} loadingLabel={tc('saving')}>{tc('save')}</Button>
+          </>
+        )}
+      >
+        {activeDebt && payDebtId && (
+          <form id="add-payment-form" onSubmit={handleAddPayment} className="space-y-4">
+            <Card tone="muted" padding="sm">
+              <p className="font-semibold text-gray-800">{activeDebt.person_name}</p>
+              <p className="text-sm text-gray-500">
+                {t('remaining')}: <Money amount={activeDebt.remaining_amount} className="font-semibold text-gray-900" />
+              </p>
+            </Card>
+
+            {(paymentsMap[payDebtId] ?? []).length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase text-gray-500">{t('debtPayments')}</p>
+                <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+                  {(paymentsMap[payDebtId] ?? []).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm text-gray-600">
+                      <span>{formatDate(p.date, locale)} · {tc.has(`paymentMethods.${p.payment_method}`) ? tc(`paymentMethods.${p.payment_method as EntryPaymentMethod}`) : p.payment_method}</span>
+                      <span className="font-medium text-success-600">+<Money amount={p.amount} /></span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <Field label={t('amount')} htmlFor="payment-amount" required>
+              <CurrencyInput
+                id="payment-amount"
+                value={payForm.amount}
+                onValueChange={(value) => setPayForm((p) => ({ ...p, amount: value }))}
+                trailingAddon={tc('currency')}
+                required
+                autoFocus
+              />
+            </Field>
+            <Field label={t('paymentMethod')}>
+              <SegmentedControl
+                label={t('paymentMethod')}
+                options={paymentMethodOptions}
+                value={payForm.payment_method}
+                onChange={(method) => setPayForm((p) => ({ ...p, payment_method: method }))}
+              />
+            </Field>
+            <Field label={t('date')}>
+              <DatePicker
+                ariaLabel={t('date')}
+                value={payForm.date}
+                onChange={(value) => setPayForm((previous) => ({ ...previous, date: value }))}
+                min={activeDebt.date}
+                max={businessToday}
+              />
+            </Field>
+            <Field label={t('comment')} htmlFor="payment-comment">
+              <Input
+                id="payment-comment"
+                type="text"
+                maxLength={250}
+                value={payForm.comment}
+                onChange={(e) => setPayForm((p) => ({ ...p, comment: e.target.value }))}
+              />
+            </Field>
+            {error && <InlineAlert variant="danger">{error}</InlineAlert>}
+          </form>
+        )}
+      </Modal>
+
+      {toastElement}
     </div>
   );
 }

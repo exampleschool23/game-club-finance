@@ -16,7 +16,10 @@
     "settings": "Sozlamalar",
     "logout": "Chiqish",
     "club": "Klub",
-    "salaries": "Ish haqi"
+    "salaries": "Ish haqi",
+    "openNavigation": "Menyuni ochish",
+    "closeNavigation": "Menyuni yopish",
+    "signOut": "Chiqish"
   },
   "dashboard": {
     "title": "Boshqaruv paneli",
@@ -247,7 +250,8 @@
     "adminEditNote": "Adminlar bu yozuvni 15 daqiqa ichida tahrirlashi mumkin. Uni faqat owner o'chira oladi. Qoldi: {remaining}.",
     "entryUpdated": "Yozuv yangilandi.",
     "entrySaved": "Yozuv saqlandi.",
-    "entryDeleted": "Yozuv o'chirildi."
+    "entryDeleted": "Yozuv o'chirildi.",
+    "deleteConfirm": "Ushbu kunlik kassa yozuvi oʻchirilsinmi? Bar savdosi va xarajatlarga taʼsir qilmaydi."
   },
   "closingStock": {
     "title": "Ombor yopilishi",
@@ -401,7 +405,8 @@
     "paginationPage": "{page}/{total} sahifa",
     "previousPage": "Oldingi",
     "nextPage": "Keyingi",
-    "reset": "Qayta o'rnatish"
+    "reset": "Qayta o'rnatish",
+    "outOfStock": "Omborda yoʻq"
   },
   "products": {
     "title": "Mahsulotlar",
@@ -442,7 +447,9 @@
     "resultCount": "{total} ta mahsulotdan {count} tasi",
     "noResults": "Filtrlarga mos mahsulot topilmadi",
     "clearFilters": "Filtrlarni tozalash",
-    "stockUnits": "{count} dona"
+    "stockUnits": "{count} dona",
+    "deleted": "Mahsulot oʻchirildi",
+    "ownerOnlyStock": "Qoldiqni faqat egasi oʻzgartira oladi."
   },
   "expenses": {
     "title": "Xarajatlar",
@@ -516,7 +523,11 @@
     "success": "Qarz saqlandi",
     "paymentExceedsRemaining": "To'lov qarz qoldig'idan oshmasligi kerak.",
     "futureDateError": "Qarz va to'lovlarni kelajakdagi ish sanasiga saqlab bo'lmaydi.",
-    "paymentBeforeDebtDate": "To'lov sanasi qarz sanasidan oldin bo'lishi mumkin emas."
+    "paymentBeforeDebtDate": "To'lov sanasi qarz sanasidan oldin bo'lishi mumkin emas.",
+    "debtSaved": "Qarz saqlandi",
+    "paymentSaved": "Toʻlov qayd etildi",
+    "showPaid": "Toʻlanganlarni koʻrsatish",
+    "hidePaid": "Toʻlanganlarni yashirish"
   },
   "dailyReport": {
     "title": "Kunlik hisobot",
@@ -818,6 +829,7 @@
     "saving": "Saqlanmoqda...",
     "save": "Saqlash",
     "cancel": "Bekor qilish",
+    "close": "Yopish",
     "delete": "O'chirish",
     "edit": "Tahrirlash",
     "add": "Qo'shish",
@@ -941,5 +953,34 @@
     "deactivated": "Xodim faolsizlantirildi. Tarix va to‘lanmagan qoldiq saqlandi.",
     "changeRole": "Lavozimni o‘zgartirish",
     "lastRateHelp": "Kamida bitta ish haqi stavkasi saqlanishi kerak. Xodim sozlamalarini o‘zgartiring yoki uni faolsizlantiring."
+  },
+  "testChecklist": {
+    "title": "Tizim tekshiruvlari",
+    "subtitle": "{date} uchun avtomatik tekshiruvlar. Faqat egalar uchun.",
+    "allPassed": "Barcha {count} tekshiruv oʻtdi",
+    "somePassed": "{count} tadan {passed} tasi oʻtdi. Quyidagi xatolarni koʻring.",
+    "goToPage": "Sahifaga oʻtish",
+    "note": "Tekshiruvlar faqat bugungi maʼlumotlardan foydalanadi. Kassa va qoldiqlarni kiritgandan soʻng ishga tushiring.",
+    "cashFields": "Kunlik kassa maydonlari manfiy emas",
+    "cashFieldsDetail": "Naqd {cash}, Terminal {terminal}, Karta {card}, PlayStation {playstation}. Jami {total} UZS.",
+    "cashMissing": "Bugungi kassa yozuvi mavjud",
+    "cashMissingDetail": "Bugun uchun kassa yozuvi topilmadi.",
+    "negativeSold": "Manfiy sotilgan miqdorlar yoʻq",
+    "negativeSoldOk": "Barcha {count} qoldiq yozuvlari toʻgʻri.",
+    "negativeSoldFail": "{count} yozuvda manfiy sotuv miqdori bor.",
+    "barIncome": "Bar daromadi = sotilgan × sotuv narxi",
+    "barIncomeOk": "Barcha bar daromadlari mos.",
+    "barIncomeFail": "{count} yozuvda bar daromadi mos emas.",
+    "barProfit": "Bar foydasi = daromad − tannarx",
+    "barProfitOk": "Barcha bar foydalari mos.",
+    "barProfitFail": "{count} yozuvda bar foydasi mos emas.",
+    "netProfit": "Sof foyda = daromad − xarajatlar",
+    "netProfitDetail": "Game Club {gameClub} + Xaridlardan keyingi bar {bar} (xaridlar {purchases}) − Xarajatlar {expenses} = {net} UZS.",
+    "debts": "Manfiy qarz qoldiqlari yoʻq",
+    "debtsOk": "Barcha {count} faol qarz toʻgʻri.",
+    "debtsFail": "{count} qarzda manfiy qoldiq bor.",
+    "expenses": "Barcha xarajatlar musbat",
+    "expensesOk": "Bugungi barcha {count} xarajat toʻgʻri.",
+    "expensesFail": "{count} xarajat nol yoki manfiy."
   }
 }

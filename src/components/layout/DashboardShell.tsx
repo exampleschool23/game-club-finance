@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Clock3, Gamepad2, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { Sidebar } from './Sidebar';
-import { DashboardContentLoading } from './DashboardContentLoading';
+import { Button, Card, EmptyState, PageSkeleton } from '@/components/PresentationFoundation';
 import { createClient } from '@/lib/supabase/client';
 import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import { normalizePaymentMethods } from '@/lib/paymentMethods';
@@ -105,8 +105,10 @@ function persistSelectedClubId(clubId: string) {
 function PendingApproval({ fullName }: { fullName: string }) {
   const router = useRouter();
   const t = useTranslations('approval');
+  const [signingOut, setSigningOut] = useState(false);
 
   async function handleLogout() {
+    setSigningOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
@@ -114,27 +116,22 @@ function PendingApproval({ fullName }: { fullName: string }) {
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-xl items-center justify-center">
-      <div className="w-full rounded-xl border border-amber-100 bg-white p-6 text-center shadow-sm sm:p-8">
+      <Card tone="warning" padding="lg" className="w-full border-amber-100 bg-white text-center">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-          <Clock3 size={28} />
+          <Clock3 size={28} aria-hidden="true" />
         </div>
         <h1 className="mt-5 text-2xl font-bold text-gray-950">{t('title')}</h1>
         <p className="mt-3 text-sm leading-6 text-gray-600">
           {t('description', { name: fullName || t('fallbackName') })}
         </p>
         <div className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800">
-          <ShieldCheck size={17} />
+          <ShieldCheck size={17} aria-hidden="true" />
           {t('ownerOnly')}
         </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-        >
-          <LogOut size={16} />
+        <Button variant="outline" className="mt-6" onClick={handleLogout} loading={signingOut} icon={<LogOut size={16} />}>
           {t('signOut')}
-        </button>
-      </div>
+        </Button>
+      </Card>
     </div>
   );
 }
@@ -163,6 +160,7 @@ export function DashboardShell({
   const router = useRouter();
   const pathname = usePathname();
   const tc = useTranslations('common');
+  const tn = useTranslations('nav');
   const initialMemberships = useMemo(() => membershipOptions(initialMembershipRows), [initialMembershipRows]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayIso);
@@ -382,14 +380,15 @@ export function DashboardShell({
           <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/95 px-4 shadow-sm backdrop-blur xl:hidden">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm"
-              aria-label="Open navigation"
+              type="button"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              aria-label={tn('openNavigation')}
             >
               <Menu size={20} />
             </button>
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-600 text-white">
-                <Gamepad2 size={20} />
+                <Gamepad2 size={20} aria-hidden="true" />
               </div>
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-sm font-extrabold text-gray-950">{selectedClub?.name ?? 'Game Club'}</p>
@@ -401,15 +400,13 @@ export function DashboardShell({
           <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="mx-auto w-full max-w-[1680px] px-3 pb-5 pt-16 sm:px-5 md:px-6 xl:px-8 xl:py-6 2xl:px-10">
               {clubLoading || (!pathAllowed && Boolean(fallbackPath)) ? (
-                <DashboardContentLoading />
+                <PageSkeleton />
               ) : memberships.length === 0 ? (
                 <PendingApproval fullName={fullName} />
               ) : !pathAllowed ? (
-                <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-white p-8 text-center shadow-sm">
-                  <ShieldCheck className="mx-auto text-amber-500" size={32} />
-                  <h1 className="mt-4 text-xl font-bold text-gray-950">{tc('accessDeniedTitle')}</h1>
-                  <p className="mt-2 text-sm text-gray-600">{tc('accessDeniedDescription')}</p>
-                </div>
+                <Card className="mx-auto max-w-xl border-amber-200">
+                  <EmptyState icon={ShieldCheck} title={tc('accessDeniedTitle')} description={tc('accessDeniedDescription')} compact />
+                </Card>
               ) : (
                 children
               )}

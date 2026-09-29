@@ -2,32 +2,51 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertCircle, Banknote, Building2, CreditCard, LoaderCircle, Save, WalletCards } from 'lucide-react';
+import { Banknote, Building2, CreditCard, Save, WalletCards } from 'lucide-react';
 import { useClub } from '@/components/layout/DashboardShell';
-import { DatePicker } from '@/components/ui/CalendarPicker';
-import { formatCurrencyInput, parseCurrencyInput } from '@/lib/formatters';
+import {
+  Button,
+  CurrencyInput,
+  DatePicker,
+  Field,
+  InlineAlert,
+  Input,
+  SegmentedControl,
+  Select,
+  Textarea,
+} from '@/components/PresentationFoundation';
+import { parseCurrencyInput } from '@/lib/formatters';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient, mutateFinanceRequest } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
-import type { Expense } from '@/types';
+import type { EntryPaymentMethod, Expense } from '@/types';
 
-const CATEGORIES = [
+export const EXPENSE_CATEGORIES = [
   'rent', 'salary', 'electricity', 'internet', 'repair',
   'cleaning', 'food_drinks', 'marketing', 'equipment', 'tax', 'other',
-];
+] as const;
+export type KnownExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export function isKnownExpenseCategory(category: string): category is KnownExpenseCategory {
+  return (EXPENSE_CATEGORIES as readonly string[]).includes(category);
+}
+
 const CUSTOM_CATEGORY_VALUE = '__custom__';
 const PAYMENT_SOURCES = ['game_club', 'bar'] as const;
+type PaymentSource = (typeof PAYMENT_SOURCES)[number];
 
 function normalizeCustomCategory(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
 interface ExpenseRegistrationFormProps {
+  /** Custom categories already known by the parent; avoids an extra read. */
+  knownCustomCategories?: string[];
   onSaved?: () => void | Promise<void>;
 }
 
-export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistrationFormProps) {
+export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved }: ExpenseRegistrationFormProps) {
   const t = useTranslations('expenses');
   const tc = useTranslations('common');
   const { selectedClubId, businessDayStartHour, enabledPaymentMethods } = useClub();
@@ -35,17 +54,18 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     () => todayIso(new Date(), businessDayStartHour),
     [businessDayStartHour],
   );
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>(knownCustomCategories ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const categoryLoadSequence = useRef(0);
+  const customCategoryRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     date: businessToday,
     amount: '',
     category: 'other',
     custom_category: '',
     payment_method: defaultPaymentMethod(enabledPaymentMethods),
-    payment_source: 'game_club',
+    payment_source: 'game_club' as PaymentSource,
     comment: '',
   });
 
@@ -60,6 +80,12 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
   }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
   useEffect(() => {
+    // The parent already knows the custom categories in the visible range;
+    // only read the full ledger when nothing was passed in.
+    if (knownCustomCategories) {
+      setCustomCategories(knownCustomCategories);
+      return;
+    }
     const requestId = ++categoryLoadSequence.current;
 
     if (!selectedClubId) {
@@ -74,33 +100,27 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
       .eq('club_id', selectedClubId))
       .then((result) => {
         if (requestId !== categoryLoadSequence.current) return;
-        if (result.error) {
-          setError(result.error.message);
-          return;
-        }
-
-        const knownCategories = new Set(CATEGORIES);
+        if (result.error) return;
         setCustomCategories(Array.from(new Set(
           (result.data ?? [])
             .map((expense) => expense.category)
-            .filter((category) => category && !knownCategories.has(category)),
+            .filter((category) => category && !isKnownExpenseCategory(category)),
         )).sort((a, b) => a.localeCompare(b)));
       })
-      .catch((loadError) => {
-        if (requestId === categoryLoadSequence.current) {
-          setError(loadError instanceof Error ? loadError.message : String(loadError));
-        }
-      });
-  }, [selectedClubId]);
+      .catch(() => {});
+    return () => { categoryLoadSequence.current += 1; };
+  }, [knownCustomCategories, selectedClubId]);
 
-  function set(field: string, value: string) {
+  useEffect(() => {
+    if (form.category === CUSTOM_CATEGORY_VALUE) customCategoryRef.current?.focus();
+  }, [form.category]);
+
+  function set<K extends keyof typeof form>(field: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
   function categoryLabel(category: string): string {
-    return CATEGORIES.includes(category)
-      ? t(`categories.${category}` as Parameters<typeof t>[0])
-      : category;
+    return isKnownExpenseCategory(category) ? t(`categories.${category}`) : category;
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -118,7 +138,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
       setError(tc('invalidAmount'));
       return;
     }
-    if (!category || !PAYMENT_SOURCES.includes(form.payment_source as (typeof PAYMENT_SOURCES)[number])) {
+    if (!category) {
       setError(tc('required'));
       return;
     }
@@ -136,7 +156,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
         category,
         paymentMethod: form.payment_method,
         paymentSource: form.payment_source,
-        comment: form.comment || null,
+        comment: form.comment.trim() || null,
       }),
     });
 
@@ -160,131 +180,98 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     await onSaved?.();
   }
 
+  const methodIcon = (method: EntryPaymentMethod) =>
+    method === 'cash' ? <Banknote size={16} aria-hidden="true" /> : method === 'terminal' ? <CreditCard size={16} aria-hidden="true" /> : <WalletCards size={16} aria-hidden="true" />;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700" role="alert">
-          <AlertCircle size={17} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
 
-      <div>
-        <label className="label" htmlFor="expense-amount">{t('amount')}</label>
-        <div className="relative">
-          <input
-            id="expense-amount"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            autoFocus
-            className="input-field h-14 pr-16 text-xl font-bold tabular-nums text-gray-950 placeholder:text-gray-300"
-            value={form.amount}
-            onChange={(event) => set('amount', formatCurrencyInput(event.target.value))}
-            placeholder="0"
-            required
-          />
-          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs font-bold uppercase tracking-wide text-gray-400">
-            {tc('currency')}
-          </span>
-        </div>
-      </div>
+      <Field label={t('amount')} htmlFor="expense-amount" required>
+        <CurrencyInput
+          id="expense-amount"
+          controlSize="lg"
+          autoFocus
+          required
+          value={form.amount}
+          onValueChange={(value) => set('amount', value)}
+          trailingAddon={tc('currency')}
+          className="text-gray-950 placeholder:text-gray-300"
+        />
+      </Field>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="label">{t('date')}</label>
-          <DatePicker value={form.date} onChange={(value) => set('date', value)} />
-        </div>
-        <div>
-          <label className="label" htmlFor="expense-category">{t('category')}</label>
-          <select id="expense-category" className="input-field h-11" value={form.category} onChange={(event) => set('category', event.target.value)}>
-            {CATEGORIES.map((category) => (
+        <Field label={t('date')}>
+          <DatePicker ariaLabel={t('date')} value={form.date} max={businessToday} onChange={(value) => set('date', value)} />
+        </Field>
+        <Field label={t('category')} htmlFor="expense-category">
+          <Select id="expense-category" value={form.category} onChange={(event) => set('category', event.target.value)}>
+            {EXPENSE_CATEGORIES.map((category) => (
               <option key={category} value={category}>{categoryLabel(category)}</option>
             ))}
             {customCategories.map((category) => (
               <option key={category} value={category}>{category}</option>
             ))}
             <option value={CUSTOM_CATEGORY_VALUE}>{t('addCategory')}</option>
-          </select>
-        </div>
+          </Select>
+        </Field>
       </div>
 
       {form.category === CUSTOM_CATEGORY_VALUE && (
-        <div>
-          <label className="label" htmlFor="expense-custom-category">{t('customCategoryPlaceholder')}</label>
-          <input
+        <Field label={t('customCategoryPlaceholder')} htmlFor="expense-custom-category" required>
+          <Input
+            ref={customCategoryRef}
             id="expense-custom-category"
             type="text"
-            className="input-field h-11"
             value={form.custom_category}
             onChange={(event) => set('custom_category', event.target.value)}
             maxLength={80}
             required
           />
-        </div>
+        </Field>
       )}
 
-      <fieldset>
-        <legend className="label">{t('paymentSource')}</legend>
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1.5">
-          {PAYMENT_SOURCES.map((source) => {
-            const selected = form.payment_source === source;
-            const SourceIcon = source === 'game_club' ? Building2 : WalletCards;
-            return (
-              <button
-                key={source}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => set('payment_source', source)}
-                className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${selected ? 'bg-white text-primary-700 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-800'}`}
-              >
-                <SourceIcon size={16} />
-                <span className="truncate">{t(`paymentSources.${source}` as Parameters<typeof t>[0])}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="mt-1.5 text-xs leading-5 text-gray-500">{t('paymentSourceHelp')}</p>
-      </fieldset>
+      <Field label={t('paymentSource')} hint={t('paymentSourceHelp')}>
+        <SegmentedControl
+          variant="soft"
+          label={t('paymentSource')}
+          value={form.payment_source}
+          onChange={(source) => set('payment_source', source)}
+          options={PAYMENT_SOURCES.map((source) => ({
+            value: source,
+            label: t(`paymentSources.${source}`),
+            icon: source === 'game_club' ? <Building2 size={16} aria-hidden="true" /> : <WalletCards size={16} aria-hidden="true" />,
+          }))}
+        />
+      </Field>
 
-      <fieldset>
-        <legend className="label">{t('paymentMethod')}</legend>
-        <div className={`grid gap-2 ${enabledPaymentMethods.length === 1 ? 'grid-cols-1' : enabledPaymentMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-          {enabledPaymentMethods.map((method) => {
-            const selected = form.payment_method === method;
-            const MethodIcon = method === 'cash' ? Banknote : method === 'terminal' ? CreditCard : WalletCards;
-            return (
-              <button
-                key={method}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => set('payment_method', method)}
-                className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition sm:text-sm ${selected ? 'border-primary-600 bg-primary-50 text-primary-700 ring-1 ring-primary-600' : 'border-gray-200 bg-white text-gray-500 hover:border-primary-500 hover:text-gray-800'}`}
-              >
-                <MethodIcon size={16} />
-                <span className="truncate">{tc(`paymentMethods.${method}`)}</span>
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <Field label={t('paymentMethod')}>
+        <SegmentedControl
+          label={t('paymentMethod')}
+          value={form.payment_method}
+          onChange={(method) => set('payment_method', method)}
+          options={enabledPaymentMethods.map((method) => ({
+            value: method,
+            label: tc(`paymentMethods.${method}`),
+            icon: methodIcon(method),
+          }))}
+        />
+      </Field>
 
-      <div>
-        <label className="label" htmlFor="expense-comment">{t('comment')}</label>
-        <textarea
+      <Field label={t('comment')} htmlFor="expense-comment">
+        <Textarea
           id="expense-comment"
-          className="input-field min-h-24 resize-y"
           value={form.comment}
           onChange={(event) => set('comment', event.target.value)}
           placeholder={t('commentPlaceholder')}
           maxLength={300}
+          showCount
         />
-      </div>
+      </Field>
 
-      <button type="submit" className="btn-primary h-12 w-full text-base shadow-sm" disabled={saving}>
-        {saving ? <LoaderCircle size={18} className="animate-spin" /> : <Save size={18} />}
-        {saving ? tc('saving') : t('submit')}
-      </button>
+      <Button type="submit" size="lg" fullWidth loading={saving} loadingLabel={tc('saving')} icon={<Save size={18} aria-hidden="true" />}>
+        {t('submit')}
+      </Button>
     </form>
   );
 }

@@ -16,6 +16,7 @@ import { useTranslations } from 'next-intl';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDatePickerValue, formatYearMonth } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
+import { Button } from './Button';
 
 function parseIsoDate(value: string): Date {
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -336,9 +337,9 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
             {formatDatePickerValue(draftFrom, locale)}
             {mode === 'range' && draftTo && ` → ${formatDatePickerValue(draftTo, locale)}`}
           </p>
-          <button type="button" onClick={onClose} className="btn-secondary min-h-10 sm:flex-none">
+          <Button variant="outline" size="sm" onClick={onClose} className="sm:flex-none">
             {t('cancel')}
-          </button>
+          </Button>
         </footer>
       </section>
     </div>
@@ -542,7 +543,7 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
               </div>
             </div>
             <footer className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
-              <button type="button" onClick={() => setOpen(false)} className="btn-secondary min-h-10">{t('cancel')}</button>
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>{t('cancel')}</Button>
             </footer>
           </section>
         </div>

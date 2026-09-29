@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const DEFAULT_BUSINESS_DAY_START_HOUR = 0;
+const DEFAULT_BUSINESS_DAY_START_HOUR = 0;
 
 function isoDate(date: Date): string {
   const year = date.getFullYear();

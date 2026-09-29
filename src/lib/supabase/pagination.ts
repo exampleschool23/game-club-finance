@@ -1,4 +1,4 @@
-export const DEFAULT_PAGE_SIZE = 1_000;
+const DEFAULT_PAGE_SIZE = 1_000;
 
 export interface PagedQueryError {
   message: string;

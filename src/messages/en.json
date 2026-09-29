@@ -16,7 +16,10 @@
     "settings": "Settings",
     "logout": "Logout",
     "club": "Club",
-    "salaries": "Salaries"
+    "salaries": "Salaries",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
+    "signOut": "Sign out"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -247,7 +250,8 @@
     "adminEditNote": "Admins can edit this entry within 15 minutes of saving. Only owners can delete it. {remaining} remaining.",
     "entryUpdated": "Entry updated.",
     "entrySaved": "Entry saved.",
-    "entryDeleted": "Entry deleted."
+    "entryDeleted": "Entry deleted.",
+    "deleteConfirm": "Delete this daily cash entry? Bar sales and expenses are not affected."
   },
   "closingStock": {
     "title": "Closing Stock",
@@ -401,7 +405,8 @@
     "paginationPage": "Page {page} of {total}",
     "previousPage": "Previous",
     "nextPage": "Next",
-    "reset": "Reset"
+    "reset": "Reset",
+    "outOfStock": "Out of stock"
   },
   "products": {
     "title": "Products",
@@ -442,7 +447,9 @@
     "resultCount": "{count} of {total} products",
     "noResults": "No products match your filters",
     "clearFilters": "Clear filters",
-    "stockUnits": "{count} units"
+    "stockUnits": "{count} units",
+    "deleted": "Product deleted",
+    "ownerOnlyStock": "Only owners can edit the stock count."
   },
   "expenses": {
     "title": "Expenses",
@@ -516,7 +523,11 @@
     "success": "Debt saved",
     "paymentExceedsRemaining": "Payment cannot exceed the remaining debt.",
     "futureDateError": "Debts and payments cannot use a future business date.",
-    "paymentBeforeDebtDate": "A payment cannot be dated before the debt."
+    "paymentBeforeDebtDate": "A payment cannot be dated before the debt.",
+    "debtSaved": "Debt saved",
+    "paymentSaved": "Payment recorded",
+    "showPaid": "Show paid",
+    "hidePaid": "Hide paid"
   },
   "dailyReport": {
     "title": "Daily Report",
@@ -818,6 +829,7 @@
     "saving": "Saving...",
     "save": "Save",
     "cancel": "Cancel",
+    "close": "Close",
     "delete": "Delete",
     "edit": "Edit",
     "add": "Add",
@@ -941,5 +953,34 @@
     "deactivated": "Employee deactivated. Previous history and unpaid balance are preserved.",
     "changeRole": "Change role",
     "lastRateHelp": "Keep at least one salary rate. Edit the employee settings or deactivate the employee instead."
+  },
+  "testChecklist": {
+    "title": "System sanity checks",
+    "subtitle": "Automated checks for {date}. Owners only.",
+    "allPassed": "All {count} checks passed",
+    "somePassed": "{passed} / {count} checks passed. Review the failures below.",
+    "goToPage": "Go to page",
+    "note": "These checks use today's data only. Run them after entering daily cash and closing stock.",
+    "cashFields": "Daily cash fields are all non-negative",
+    "cashFieldsDetail": "Cash {cash}, Terminal {terminal}, Card {card}, PlayStation {playstation}. Total {total} UZS.",
+    "cashMissing": "Daily cash entry exists for today",
+    "cashMissingDetail": "No daily cash entry found for today.",
+    "negativeSold": "No negative sold quantities in closing stock",
+    "negativeSoldOk": "All {count} stock entries have valid sold quantities.",
+    "negativeSoldFail": "{count} entries have a negative sold quantity.",
+    "barIncome": "Bar income matches sold quantity × sale price",
+    "barIncomeOk": "All bar income values are consistent.",
+    "barIncomeFail": "{count} entries have a bar income mismatch.",
+    "barProfit": "Bar profit = bar income − bar cost",
+    "barProfitOk": "All bar profit values are consistent.",
+    "barProfitFail": "{count} entries have a bar profit mismatch.",
+    "netProfit": "Net profit = total income − total expenses",
+    "netProfitDetail": "Game Club {gameClub} + Bar after stock purchases {bar} (purchases {purchases}) − Expenses {expenses} = {net} UZS.",
+    "debts": "No negative remaining debt amounts",
+    "debtsOk": "All {count} active debts have valid remaining amounts.",
+    "debtsFail": "{count} debts have a negative remaining amount.",
+    "expenses": "All expenses have positive amounts",
+    "expensesOk": "All {count} expenses for today are valid.",
+    "expensesFail": "{count} expenses have a zero or negative amount."
   }
 }

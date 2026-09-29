@@ -1,6 +1,6 @@
 import DashboardPage from './DashboardPage';
 import { Suspense } from 'react';
-import { DashboardContentLoading } from '@/components/layout/DashboardContentLoading';
+import { PageSkeleton } from '@/components/PresentationFoundation';
 import type { Club, ClubMembership } from '@/types';
 import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
@@ -37,7 +37,7 @@ export default function DashboardRoute(props: {
   searchParams: Promise<PageSearchParams>;
 }) {
   return (
-    <Suspense fallback={<DashboardContentLoading />}>
+    <Suspense fallback={<PageSkeleton />}>
       <DashboardSnapshotRoute {...props} />
     </Suspense>
   );

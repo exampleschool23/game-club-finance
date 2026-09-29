@@ -1,3 +1,5 @@
-import SettingsPage from './SettingsPage';
+import { SettingsPageClient } from './SettingsPageClient';
 
-export default SettingsPage;
+export default function SettingsPage() {
+  return <SettingsPageClient />;
+}

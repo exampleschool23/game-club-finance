@@ -6,7 +6,10 @@ guide relevant to the task; do not load every document or migration by default.
 ## Project map
 
 - `src/app`: Next.js App Router pages and API routes.
-- `src/components`: shared layout, UI, dashboard, and i18n components.
+- `src/components/PresentationFoundation`: every reusable presentational
+  component (buttons, fields, cards, modals, tables, pickers, skeletons). Pages
+  compose these instead of writing bespoke Tailwind markup. See its `README.md`.
+- `src/components`: layout shell, dashboard charts, money-details, and i18n.
 - `src/lib/calculations`: pure financial and inventory calculations. Reuse these
   functions instead of recreating formulas in components.
 - `src/lib/supabase`: browser, server, and service clients plus query helpers.
@@ -61,7 +64,7 @@ guide relevant to the task; do not load every document or migration by default.
 - Prefer `@/` imports for `src` modules.
 - Format every user-facing date and monetary amount, including form inputs.
   Use the shared `DatePicker`/`MonthPicker` from
-  `src/components/ui/CalendarPicker.tsx` and date formatters from
+  `src/components/PresentationFoundation` and date formatters from
   `src/lib/formatters.ts` so dates follow the selected app language; keep stored
   dates in ISO format. Do not use raw native date inputs for visible forms.
   Show prices and money with thousands separators (for example, `1 000 000`).
@@ -72,6 +75,12 @@ guide relevant to the task; do not load every document or migration by default.
   required precision.
 - Keep business logic pure and tested under `src/lib`; components should mainly
   coordinate queries, state, and rendering.
+- Build UI from `@/components/PresentationFoundation`: `Button`/`IconButton`
+  for actions, `Field` + `Input`/`CurrencyInput`/`Select`/`Textarea` for forms,
+  `Card`/`SectionHeading`/`PageHeader` for structure, `InlineAlert`/`useToast`
+  for feedback, `Modal`/`useConfirm` for dialogs (never `window.confirm`),
+  `DataTable`/`MetricCard`/`StatTile` for data. Do not reintroduce global
+  `.btn-*`/`.input-field`/`.card` CSS classes.
 - Use `src/lib/supabase/client.ts` only in browser code,
   `src/lib/supabase/server.ts` in authenticated server code, and
   `src/lib/supabase/service.ts` only in trusted server-only operations.

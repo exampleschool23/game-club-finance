@@ -1,13 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { Minus, Plus, Search, ShoppingCart, Trash2 } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { ShoppingCart, Trash2 } from 'lucide-react';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  InlineAlert,
+  Modal,
+  Money,
+  SearchInput,
+  StatTile,
+  Stepper,
+} from '@/components/PresentationFoundation';
 import { formatCurrency } from '@/lib/formatters';
 import {
   calculateBulkStockOrderSummary,
   getBulkStockAvailableQuantity,
+  isWholeNumberInput,
   type BulkStockOrderItem,
   type BulkStockOrderSummary,
   type ClosingStockRowData,
@@ -21,23 +32,7 @@ interface BulkStockUpdateModalProps {
   onSave: (items: BulkStockOrderItem[], summary: BulkStockOrderSummary) => Promise<boolean>;
 }
 
-function isWholeNumberInput(value: string): boolean {
-  return value === '' || /^\d+$/.test(value);
-}
-
-function preventNonIntegerNumberInput(event: KeyboardEvent<HTMLInputElement>) {
-  if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) {
-    event.preventDefault();
-  }
-}
-
-export function BulkStockUpdateModal({
-  open,
-  rows,
-  saving,
-  onClose,
-  onSave,
-}: BulkStockUpdateModalProps) {
+export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: BulkStockUpdateModalProps) {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
   const [query, setQuery] = useState('');
@@ -58,10 +53,7 @@ export function BulkStockUpdateModal({
       : [];
   }), [quantities, rows]);
 
-  const summary = useMemo(
-    () => calculateBulkStockOrderSummary(rows, items),
-    [items, rows],
-  );
+  const summary = useMemo(() => calculateBulkStockOrderSummary(rows, items), [items, rows]);
 
   const invalidItem = useMemo(() => items.find((item) => {
     const row = rows.find((candidate) => candidate.product.id === item.productId);
@@ -101,14 +93,6 @@ export function BulkStockUpdateModal({
   function adjustQuantity(row: ClosingStockRowData, amount: number) {
     const currentQuantity = Number(quantities[row.product.id] ?? 0);
     const nextQuantity = Math.max(0, currentQuantity + amount);
-    const available = getBulkStockAvailableQuantity(row);
-    if (available !== null && nextQuantity > available) {
-      setError(t('bulkInsufficientStock', {
-        product: row.product.name,
-        available,
-      }));
-      return;
-    }
     updateQuantity(row, nextQuantity === 0 ? '' : String(nextQuantity));
   }
 
@@ -138,39 +122,49 @@ export function BulkStockUpdateModal({
   return (
     <Modal
       open={open}
-      onClose={() => { if (!saving) onClose(); }}
+      onClose={onClose}
+      locked={saving}
       title={t('bulkTitle')}
-      className="sm:max-w-2xl"
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="rounded-xl border border-primary-100 bg-primary-50/60 p-4">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-primary-600 shadow-sm">
-              <ShoppingCart size={20} />
-            </div>
-            <div>
-              <p className="font-semibold text-gray-900">{t('bulkDescriptionTitle')}</p>
-              <p className="mt-1 text-sm leading-5 text-gray-600">{t('bulkDescription')}</p>
-            </div>
+      size="xl"
+      bodyClassName="pb-2"
+      footer={(
+        <div className="flex w-full flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-3">
+            <StatTile variant="flat" size="sm" label={t('bulkTotalItems')} value={summary.totalQuantity} unit={t('pcs')} />
+            <StatTile variant="flat" size="sm" align="center" className="text-right" label={t('bulkOrderTotal')} value={formatCurrency(summary.totalPrice)} unit={tc('currency')} tone="primary" />
+          </div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              disabled={saving || summary.totalQuantity === 0}
+              onClick={() => { setQuantities({}); setError(''); }}
+              icon={<Trash2 size={16} aria-hidden="true" />}
+            >
+              {t('bulkClear')}
+            </Button>
+            <Button
+              type="submit"
+              form="bulk-stock-form"
+              className="sm:min-w-56"
+              loading={saving}
+              loadingLabel={tc('saving')}
+              disabled={summary.totalQuantity === 0 || Boolean(invalidItem)}
+              icon={<ShoppingCart size={17} aria-hidden="true" />}
+            >
+              {t('bulkSave')}
+            </Button>
           </div>
         </div>
+      )}
+    >
+      <form id="bulk-stock-form" onSubmit={handleSubmit} className="space-y-4">
+        <InlineAlert variant="info" title={t('bulkDescriptionTitle')}>{t('bulkDescription')}</InlineAlert>
 
-        <div className="relative">
-          <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            className="input-field h-11 pl-9"
-            placeholder={t('bulkSearchPlaceholder')}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
+        <SearchInput value={query} onChange={setQuery} placeholder={t('bulkSearchPlaceholder')} clearLabel={tc('cancel')} />
 
-        <div className="max-h-[46dvh] space-y-2 overflow-y-auto pr-1 sm:max-h-[50vh]">
+        <div className="max-h-[42dvh] space-y-2 overflow-y-auto pr-1 sm:max-h-[46vh]">
           {visibleRows.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
-              {tc('noData')}
-            </p>
+            <EmptyState compact bordered title={tc('noData')} />
           ) : visibleRows.map((row) => {
             const quantity = Number(quantities[row.product.id] ?? 0);
             const available = getBulkStockAvailableQuantity(row);
@@ -180,21 +174,15 @@ export function BulkStockUpdateModal({
             return (
               <div
                 key={row.product.id}
-                className={`rounded-xl border p-3 transition ${
-                  quantity > 0 ? 'border-primary-200 bg-primary-50/30' : 'border-gray-100 bg-white'
-                }`}
+                className={`rounded-xl border p-3 transition ${quantity > 0 ? 'border-primary-200 bg-primary-50/30' : 'border-gray-100 bg-white'}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-gray-900">{row.product.name}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
-                      <span className="font-semibold text-gray-700">
-                        {formatCurrency(row.product.sale_price)} {tc('currency')}
-                      </span>
+                      <span className="font-semibold text-gray-700"><Money amount={row.product.sale_price} /></span>
                       {available === null ? (
-                        <span className="rounded-full bg-purple-50 px-2 py-0.5 font-semibold text-purple-700">
-                          {t('bulkMadeToOrder')}
-                        </span>
+                        <Badge variant="purple" size="sm">{t('bulkMadeToOrder')}</Badge>
                       ) : (
                         <span className={isOutOfStock ? 'font-semibold text-danger-600' : ''}>
                           {t('bulkAvailable', { count: available })}
@@ -203,44 +191,18 @@ export function BulkStockUpdateModal({
                     </div>
                   </div>
 
-                  <div className="flex flex-shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label={t('bulkDecrease', { product: row.product.name })}
-                      disabled={quantity <= 0 || saving}
-                      onClick={() => adjustQuantity(row, -1)}
-                    >
-                      <Minus size={16} strokeWidth={2.5} />
-                    </button>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      min={0}
-                      max={available ?? undefined}
-                      className={`h-9 w-14 rounded-lg border px-1 text-center text-sm font-bold outline-none focus:ring-2 ${
-                        hasStockError
-                          ? 'border-danger-400 text-danger-600 focus:ring-danger-200'
-                          : 'border-gray-200 text-gray-900 focus:border-primary-500 focus:ring-primary-100'
-                      }`}
-                      aria-label={t('bulkQuantityFor', { product: row.product.name })}
-                      value={quantities[row.product.id] ?? ''}
-                      disabled={isOutOfStock || saving}
-                      onKeyDown={preventNonIntegerNumberInput}
-                      onWheel={(event) => event.currentTarget.blur()}
-                      onChange={(event) => updateQuantity(row, event.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label={t('bulkIncrease', { product: row.product.name })}
-                      disabled={saving || isOutOfStock || (available !== null && quantity >= available)}
-                      onClick={() => adjustQuantity(row, 1)}
-                    >
-                      <Plus size={16} strokeWidth={2.5} />
-                    </button>
-                  </div>
+                  <Stepper
+                    size="sm"
+                    label={t('bulkQuantityFor', { product: row.product.name })}
+                    decreaseLabel={t('bulkDecrease', { product: row.product.name })}
+                    increaseLabel={t('bulkIncrease', { product: row.product.name })}
+                    value={quantities[row.product.id] ?? ''}
+                    max={available}
+                    disabled={saving || isOutOfStock}
+                    invalid={hasStockError}
+                    onChange={(value) => updateQuantity(row, value)}
+                    onStep={(delta) => adjustQuantity(row, delta)}
+                  />
                 </div>
 
                 {quantity > 0 && (
@@ -250,9 +212,7 @@ export function BulkStockUpdateModal({
                         ? t('bulkInsufficientStock', { product: row.product.name, available: available ?? 0 })
                         : t('bulkLine', { quantity })}
                     </span>
-                    <span className="font-bold text-primary-700">
-                      {formatCurrency(quantity * row.product.sale_price)} {tc('currency')}
-                    </span>
+                    <span className="font-bold text-primary-700"><Money amount={quantity * row.product.sale_price} /></span>
                   </div>
                 )}
               </div>
@@ -260,48 +220,7 @@ export function BulkStockUpdateModal({
           })}
         </div>
 
-        {error && (
-          <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm font-medium text-danger-600">{error}</p>
-        )}
-
-        <div className="sticky bottom-0 -mx-4 -mb-5 border-t border-gray-100 bg-white px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 sm:-mx-6 sm:px-6">
-          <div className="mb-3 grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-3">
-            <div>
-              <p className="text-xs font-medium text-gray-500">{t('bulkTotalItems')}</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-gray-900">
-                {summary.totalQuantity} {t('pcs')}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-medium text-gray-500">{t('bulkOrderTotal')}</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-primary-700">
-                {formatCurrency(summary.totalPrice)} {tc('currency')}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              className="btn-secondary min-h-11 bg-white sm:min-w-28"
-              disabled={saving || summary.totalQuantity === 0}
-              onClick={() => {
-                setQuantities({});
-                setError('');
-              }}
-            >
-              <Trash2 size={16} />
-              {t('bulkClear')}
-            </button>
-            <button
-              type="submit"
-              className="btn-primary min-h-11 sm:min-w-56"
-              disabled={saving || summary.totalQuantity === 0 || Boolean(invalidItem)}
-            >
-              <ShoppingCart size={17} />
-              {saving ? tc('saving') : t('bulkSave')}
-            </button>
-          </div>
-        </div>
+        {error && <InlineAlert variant="danger">{error}</InlineAlert>}
       </form>
     </Modal>
   );

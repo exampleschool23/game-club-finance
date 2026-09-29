@@ -14,11 +14,27 @@ import {
 import { useTranslations } from 'next-intl';
 import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { MetricCard } from '@/components/ui/MetricCard';
-import { FormSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
-import { MonthPicker } from '@/components/ui/CalendarPicker';
-import { Toast, useToast } from '@/components/ui/Toast';
+import {
+  Badge,
+  Button,
+  Card,
+  CurrencyInput,
+  EmptyState,
+  Field,
+  FormSkeleton,
+  IconButton,
+  InlineAlert,
+  Input,
+  MetricCard,
+  MonthPicker,
+  PageHeader,
+  SectionHeading,
+  SegmentedControl,
+  TableSkeleton,
+  toneForAmount,
+  useConfirm,
+  useToast,
+} from '@/components/PresentationFoundation';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -59,7 +75,8 @@ export default function MoneyTakenPage() {
   const tc = useTranslations('common');
   const { locale } = useAppLocale();
   const { selectedClubId, role, businessDayStartHour } = useClub();
-  const { toast, showToast, hideToast } = useToast();
+  const { showToast, toastElement } = useToast();
+  const { confirm, confirmDialog } = useConfirm();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const currentMonth = useMemo(() => currentYearMonth(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [balancesByMonth, setBalancesByMonth] = useState<AvailableMoneyByMonth>({});
@@ -93,11 +110,8 @@ export default function MoneyTakenPage() {
     setForm({ month: currentMonth, source: 'game_club', amount: '', comment: '' });
   }, [currentMonth, selectedClubId]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ silent = false } = {}) => {
     const id = ++requestId.current;
-    setBalancesByMonth({});
-    setPaymentMethodBalancesByMonth({});
-    setWithdrawals([]);
     try {
       if (!selectedClubId) {
         setBalancesByMonth({});
@@ -107,7 +121,7 @@ export default function MoneyTakenPage() {
         return;
       }
 
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError('');
       const supabase = createClient();
       const snapshotResult = await supabase.rpc('get_owner_profit_snapshot', {
@@ -253,10 +267,10 @@ export default function MoneyTakenPage() {
   }, [sourceAvailable]);
 
   const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
-  const monthlyOverallProfit = balancesByMonth[form.month]?.totalEarned ?? 0;
   const monthlyBalance = balancesByMonth[form.month];
-  const monthlyGameClubMoney = monthlyBalance?.gameClub.available ?? 0;
-  const monthlyBarMoney = balancesByMonth[form.month]?.bar.available ?? 0;
+  const monthlyOverallProfit = monthlyBalance?.totalEarned ?? 0;
+  const amountValue = parseCurrencyInput(form.amount);
+  const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= sourceAvailable;
 
   function setField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -294,17 +308,17 @@ export default function MoneyTakenPage() {
         showToast(isMissingDatabaseFunction(insertError, 'withdraw_owner_money_for_month')
           ? t('migrationRequired')
           : insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
-        await loadData();
+        await loadData({ silent: true });
         return;
       }
 
       setForm((current) => ({ ...current, comment: '', amount: '' }));
       showToast(t('saved'), 'success');
-      await loadData();
+      await loadData({ silent: true });
     } catch (saveError: unknown) {
       if (operationRequestId !== requestId.current) return;
       showToast(saveError instanceof Error ? saveError.message : String(saveError), 'error');
-      await loadData();
+      await loadData({ silent: true });
     } finally {
       mutationPending.current = false;
       setSaving(false);
@@ -313,7 +327,9 @@ export default function MoneyTakenPage() {
 
   async function handleDelete(row: OwnerWithdrawal) {
     if (mutationPending.current || loading || error || row.club_id !== selectedClubId) return;
-    if (!selectedClubId || !isOwner || !window.confirm(t('deleteConfirm'))) return;
+    if (!selectedClubId || !isOwner) return;
+    const confirmed = await confirm({ title: tc('delete'), description: t('deleteConfirm'), confirmLabel: tc('delete') });
+    if (!confirmed) return;
 
     const operationRequestId = requestId.current;
     mutationPending.current = true;
@@ -333,89 +349,90 @@ export default function MoneyTakenPage() {
       }
 
       showToast(t('deleted'), 'success');
-      await loadData();
+      await loadData({ silent: true });
     } catch (deleteError: unknown) {
       if (operationRequestId !== requestId.current) return;
       showToast(deleteError instanceof Error ? deleteError.message : String(deleteError), 'error');
-      await loadData();
+      await loadData({ silent: true });
     } finally {
       mutationPending.current = false;
       setDeletingId(null);
     }
   }
 
-  return (
-    <div className="mx-auto w-full max-w-6xl [&_.truncate]:whitespace-normal [&_.truncate]:overflow-visible [&_.truncate]:text-clip">
-      <PageHeader title={t('title')} description={t('description')} />
+  const currency = (amount: number) => `${formatCurrency(amount)} ${tc('currency')}`;
+  const sourceOptions = PROFIT_SOURCES.map((source) => ({ value: source, label: t(`sources.${source}`) }));
 
-      {error ? (
-        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-          {error}
+  function renderSourceSection(
+    source: 'game_club' | 'bar',
+    balance: { earned: number; withdrawn: number; available: number } | undefined,
+    icon: typeof Gamepad2,
+  ) {
+    return (
+      <Card as="section" tone={source === 'bar' ? 'orange' : 'info'} className="mt-5" aria-labelledby={`profit-source-${source}`}>
+        <h2 id={`profit-source-${source}`} className="mb-4 font-bold text-gray-950">
+          {t(`sources.${source}`)} · {formatYearMonth(form.month, locale)}
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MetricCard loading={loading} label={t('earnedBeforeWithdrawals')} value={currency(balance?.earned ?? 0)} icon={icon} tone={toneForAmount(balance?.earned ?? 0, 'primary')} />
+          <MetricCard loading={loading} label={t('monthlyWithdrawn')} value={currency(balance?.withdrawn ?? 0)} icon={ArrowDownToLine} tone="danger" />
+          <MetricCard loading={loading} label={t('monthlyRemaining')} value={currency(balance?.available ?? 0)} icon={CircleDollarSign} tone={toneForAmount(balance?.available ?? 0)} />
         </div>
-      ) : null}
+        {source === 'game_club' && (
+          <>
+            <p className="mb-3 mt-4 text-sm text-gray-600">{t('clubMethodsBeforeWithdrawals')}</p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {([
+                ['cash', Banknote],
+                ['terminal', Landmark],
+                ['card', CreditCard],
+                ['playstation', Gamepad2],
+              ] as const).map(([method, Icon]) => (
+                <MetricCard
+                  key={method}
+                  loading={loading}
+                  label={method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`)}
+                  value={currency(paymentMethodBalances[method])}
+                  icon={Icon}
+                  tone={toneForAmount(paymentMethodBalances[method], 'primary')}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
+    );
+  }
 
-      <div className="mt-5 max-w-sm">
-        <label className="label">{t('month')}</label>
-        <MonthPicker value={form.month} max={currentMonth} onChange={(value) => setField('month', value)} />
-      </div>
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <PageHeader
+        title={t('title')}
+        description={t('description')}
+        action={(
+          <Field label={t('month')} className="sm:w-64">
+            <MonthPicker value={form.month} max={currentMonth} onChange={(value) => setField('month', value)} />
+          </Field>
+        )}
+      />
 
-      <section className="mt-5" aria-label={t('monthlyOverallProfit')}>
+      {error ? <InlineAlert variant="danger" className="mb-5">{error}</InlineAlert> : null}
+
+      <section aria-label={t('monthlyOverallProfit')}>
         <MetricCard
           loading={loading}
           label={`${t('monthlyOverallProfit')} · ${formatYearMonth(form.month, locale)}`}
-          value={`${formatCurrency(monthlyOverallProfit, locale)} ${tc('currency')}`}
+          value={currency(monthlyOverallProfit)}
           icon={CircleDollarSign}
-          valueClassName={monthlyOverallProfit < 0 ? 'text-red-600' : 'text-blue-700'}
+          tone={toneForAmount(monthlyOverallProfit, 'primary')}
+          helper={t('monthlyOverallProfitDescription')}
         />
-        <p className="mt-2 text-sm text-gray-500">{t('monthlyOverallProfitDescription')}</p>
       </section>
 
-      <section className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
-        <h2 className="mb-4 font-bold text-gray-950">{t('sources.game_club')} · {formatYearMonth(form.month, locale)}</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {([
-            ['earnedBeforeWithdrawals', monthlyBalance?.gameClub.earned ?? 0, Gamepad2],
-            ['monthlyWithdrawn', monthlyBalance?.gameClub.withdrawn ?? 0, ArrowDownToLine],
-            ['monthlyRemaining', monthlyGameClubMoney, CircleDollarSign],
-          ] as const).map(([label, amount, icon]) => (
-            <MetricCard key={label} loading={loading} label={t(label)}
-              value={`${formatCurrency(amount, locale)} ${tc('currency')}`} icon={icon}
-              valueClassName={label === 'monthlyWithdrawn' || amount < 0 ? 'text-red-600' : label === 'earnedBeforeWithdrawals' ? 'text-blue-700' : 'text-emerald-700'} />
-          ))}
-        </div>
-        <p className="mb-3 mt-4 text-sm text-gray-600">{t('clubMethodsBeforeWithdrawals')}</p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {([
-            ['cash', Banknote],
-            ['terminal', Landmark],
-            ['card', CreditCard],
-            ['playstation', Gamepad2],
-          ] as const).map(([method, Icon]) => (
-            <MetricCard key={method} loading={loading}
-              label={method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`)}
-              value={`${formatCurrency(paymentMethodBalances[method], locale)} ${tc('currency')}`}
-              icon={Icon}
-              valueClassName={paymentMethodBalances[method] < 0 ? 'text-red-600' : 'text-blue-700'} />
-          ))}
-        </div>
-      </section>
+      {renderSourceSection('game_club', monthlyBalance?.gameClub, Gamepad2)}
+      {renderSourceSection('bar', monthlyBalance?.bar, GlassWater)}
 
-      <section className="mt-5 rounded-xl border border-orange-100 bg-orange-50 p-5 shadow-sm">
-        <h2 className="mb-4 font-bold text-gray-950">{t('sources.bar')} · {formatYearMonth(form.month, locale)}</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {([
-            ['earnedBeforeWithdrawals', monthlyBalance?.bar.earned ?? 0, GlassWater],
-            ['monthlyWithdrawn', monthlyBalance?.bar.withdrawn ?? 0, ArrowDownToLine],
-            ['monthlyRemaining', monthlyBarMoney, CircleDollarSign],
-          ] as const).map(([label, amount, icon]) => (
-            <MetricCard key={label} loading={loading} label={t(label)}
-              value={`${formatCurrency(amount, locale)} ${tc('currency')}`} icon={icon}
-              valueClassName={label === 'monthlyWithdrawn' || amount < 0 ? 'text-red-600' : label === 'earnedBeforeWithdrawals' ? 'text-blue-700' : 'text-emerald-700'} />
-          ))}
-        </div>
-      </section>
-
-      {loading ? (
+      {loading && withdrawals.length === 0 ? (
         <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
           {isOwner ? <FormSkeleton /> : null}
           <TableSkeleton rows={5} columns={4} />
@@ -423,87 +440,73 @@ export default function MoneyTakenPage() {
       ) : (
         <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
           {isOwner ? (
-            <form onSubmit={handleSubmit} className="h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-5 flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-                <ArrowDownToLine size={21} />
-              </span>
-              <div>
-                <h2 className="font-bold text-gray-950">{t('recordTitle')}</h2>
-                <p className="mt-0.5 text-sm text-gray-500">{t('notAnExpense')}</p>
-              </div>
-            </div>
+            <Card as="form" onSubmit={handleSubmit} className="h-fit">
+              <SectionHeading
+                icon={<ArrowDownToLine size={21} aria-hidden="true" />}
+                title={t('recordTitle')}
+                description={t('notAnExpense')}
+                className="mb-5"
+              />
 
-            <div className="space-y-4">
-              <div>
-                <label className="label">{t('source')}</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {PROFIT_SOURCES.map((source) => (
-                    <button
-                      key={source}
-                      type="button"
-                      onClick={() => setField('source', source)}
-                      className={`min-h-11 rounded-lg border px-3 text-sm font-bold transition ${form.source === source ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300'}`}
-                    >
-                      {t(`sources.${source}`)}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs font-semibold text-gray-500">
-                  {t('availableForSource')}: <span className={sourceAvailable < 0 ? 'text-red-600' : 'text-emerald-700'}>{formatCurrency(sourceAvailable, locale)} {tc('currency')}</span>
-                </p>
-              </div>
+              <div className="space-y-4">
+                <Field
+                  label={t('source')}
+                  hint={(
+                    <>
+                      {t('availableForSource')}:{' '}
+                      <span className={sourceAvailable < 0 ? 'font-semibold text-danger-600' : 'font-semibold text-success-600'}>{currency(sourceAvailable)}</span>
+                    </>
+                  )}
+                >
+                  <SegmentedControl label={t('source')} options={sourceOptions} value={form.source} onChange={(source) => setField('source', source)} disabled={loading} />
+                </Field>
 
-              <div>
-                <label htmlFor="withdrawal-amount" className="label">{t('amount')} ({tc('currency')})</label>
-                <input
-                  id="withdrawal-amount"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
+                <Field
+                  label={`${t('amount')} (${tc('currency')})`}
+                  htmlFor="withdrawal-amount"
                   required
-                  value={form.amount}
-                  onChange={(event) => setField('amount', clampWithdrawalInput(event.target.value, sourceAvailable))}
-                  className="input-field"
-                  placeholder="0"
-                />
-                {form.source === 'all' ? <p className="mt-2 text-xs text-gray-500">{t('allAllocation')}</p> : null}
-              </div>
+                  hint={form.source === 'all' ? t('allAllocation') : undefined}
+                  error={form.amount && !amountValid ? t('exceedsAvailable') : undefined}
+                >
+                  <CurrencyInput
+                    id="withdrawal-amount"
+                    required
+                    value={form.amount}
+                    invalid={Boolean(form.amount) && !amountValid}
+                    onValueChange={(value) => setField('amount', clampWithdrawalInput(value, sourceAvailable))}
+                  />
+                </Field>
 
-              <div>
-                <label className="label">{t('comment')}</label>
-                <input
-                  type="text"
-                  value={form.comment}
-                  onChange={(event) => setField('comment', event.target.value)}
-                  className="input-field"
-                  placeholder={t('commentPlaceholder')}
-                  maxLength={250}
-                />
-              </div>
+                <Field label={t('comment')} htmlFor="withdrawal-comment">
+                  <Input
+                    id="withdrawal-comment"
+                    type="text"
+                    value={form.comment}
+                    onChange={(event) => setField('comment', event.target.value)}
+                    placeholder={t('commentPlaceholder')}
+                    maxLength={250}
+                  />
+                </Field>
 
-              <button
-                type="submit"
-                disabled={loading || !!error || deletingId !== null || saving || !Number.isFinite(parseCurrencyInput(form.amount)) || parseCurrencyInput(form.amount) <= 0 || parseCurrencyInput(form.amount) > sourceAvailable}
-                className="btn-primary min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ArrowDownToLine size={18} />
-                {saving ? tc('saving') : t('recordButton')}
-              </button>
-            </div>
-            </form>
+                <Button
+                  type="submit"
+                  fullWidth
+                  disabled={loading || !!error || deletingId !== null || !amountValid}
+                  loading={saving}
+                  loadingLabel={tc('saving')}
+                  icon={<ArrowDownToLine size={18} aria-hidden="true" />}
+                >
+                  {t('recordButton')}
+                </Button>
+              </div>
+            </Card>
           ) : null}
 
-          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4">
-              <h2 className="font-bold text-gray-950">{t('historyTitle')}</h2>
-              <p className="mt-0.5 text-sm text-gray-500">{t('historyDescription')}</p>
-            </div>
+          <Card as="section">
+            <SectionHeading title={t('historyTitle')} description={t('historyDescription')} className="mb-4" />
 
             {withdrawals.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-10 text-center text-sm font-semibold text-gray-400">
-                {t('noHistory')}
-              </div>
+              <EmptyState compact bordered title={t('noHistory')} />
             ) : (
               <div className="space-y-6">
                 {withdrawalMonths.map(([month, rows]) => (
@@ -516,27 +519,23 @@ export default function MoneyTakenPage() {
                         <article key={row.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`rounded-full px-2 py-1 text-xs font-bold ${row.source === 'bar' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
-                                  {t(`sources.${row.source}`)}
-                                </span>
-                              </div>
-                              <p className="mt-2 text-lg font-black text-red-600">− {formatCurrency(row.amount, locale)} {tc('currency')}</p>
+                              <Badge variant={row.source === 'bar' ? 'orange' : 'info'}>{t(`sources.${row.source}`)}</Badge>
+                              <p className="mt-2 text-lg font-bold tabular-nums text-danger-600">− {currency(row.amount)}</p>
                               {row.comment ? <p className="mt-1 break-words text-sm text-gray-600">{row.comment}</p> : null}
                               <p className="mt-1 text-xs font-medium text-gray-400">
                                 {t('recordedAt', { date: formatDateTime(row.created_at, locale) })}
                               </p>
                             </div>
                             {isOwner ? (
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(row)}
+                              <IconButton
+                                variant="danger"
+                                size="sm"
+                                label={tc('delete')}
+                                icon={<Trash2 size={16} />}
+                                loading={deletingId === row.id}
                                 disabled={loading || !!error || saving || deletingId !== null}
-                                aria-label={tc('delete')}
-                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                              >
-                                <Trash2 size={17} />
-                              </button>
+                                onClick={() => handleDelete(row)}
+                              />
                             ) : null}
                           </div>
                         </article>
@@ -546,11 +545,12 @@ export default function MoneyTakenPage() {
                 ))}
               </div>
             )}
-          </section>
+          </Card>
         </div>
       )}
 
-      {toast ? <Toast message={toast.message} type={toast.type} onClose={hideToast} /> : null}
+      {toastElement}
+      {confirmDialog}
     </div>
   );
 }

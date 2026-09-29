@@ -23,8 +23,7 @@ import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
 import { formatDateShort } from '@/lib/formatters';
 import { useClub } from '@/components/layout/DashboardShell';
-import { MetricCard } from '@/components/dashboard/MetricCard';
-import { DateRangePicker } from '@/components/ui/CalendarPicker';
+import { AmountCard, Button, ChartSkeleton, DateRangePicker, InlineAlert, PageHeader } from '@/components/PresentationFoundation';
 import {
   buildPeriodTrend,
   buildMonthlyAverageGameClubIncome,
@@ -64,7 +63,7 @@ import {
 import type { Product } from '@/types';
 
 function ChartLoading() {
-  return <div className="h-80 animate-pulse rounded-xl border border-gray-200 bg-gray-100" />;
+  return <ChartSkeleton />;
 }
 
 const DashboardBarChart = dynamic(
@@ -96,11 +95,7 @@ const MonthlyAverageIncomeChart = dynamic(
   { ssr: false, loading: ChartLoading },
 );
 
-interface MonthlyAverageIncomePoint {
-  month: string;
-  average_daily_income: number;
-  is_current: boolean;
-}
+import type { MonthlyAverageIncomePoint } from '@/components/dashboard/MonthlyAverageIncomeChart';
 
 interface StockPurchaseRow extends StockPurchaseCostRow {
   id: string;
@@ -179,17 +174,12 @@ function MetricSection({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className={`text-lg font-bold tracking-normal sm:text-xl ${titleClassName}`}>{title}</h2>
-          <p className="mt-1 max-w-4xl text-sm font-semibold leading-5 text-gray-700">{description}</p>
+          <p className="mt-1 max-w-4xl text-sm leading-5 text-gray-600">{description}</p>
         </div>
         {actionLabel && onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-lg bg-white px-4 py-2.5 text-base font-bold text-gray-900 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:self-center"
-          >
+          <Button variant="outline" className="shrink-0 self-start sm:self-center" onClick={onAction} iconRight={<ArrowRight size={18} aria-hidden="true" />}>
             {actionLabel}
-            <ArrowRight size={18} aria-hidden="true" />
-          </button>
+          </Button>
         ) : null}
       </div>
       <div className={gridClassName}>{children}</div>
@@ -661,36 +651,35 @@ export default function DashboardPage({
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{t('title')}</h1>
-        <p className="mt-1 text-base text-gray-600">{t('subtitle')}</p>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-          {error}
-        </div>
-      )}
-
-      <DateRangePicker
-        from={range.from}
-        to={range.to}
-        fromLabel={t('from')}
-        toLabel={t('to')}
-        className="max-w-3xl"
-        onChange={setRange}
+      <PageHeader
+        title={t('title')}
+        description={t('subtitle')}
+        className="mb-0"
+        action={(
+          <DateRangePicker
+            from={range.from}
+            to={range.to}
+            fromLabel={t('from')}
+            toLabel={t('to')}
+            max={businessToday}
+            className="sm:w-80"
+            onChange={setRange}
+          />
+        )}
       />
+
+      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
 
       <MetricSection
         title={t('gameClubPlaystationSection')}
         description={t('gameClubPlaystationSectionDesc')}
         gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
-        className="bg-cyan-200 ring-cyan-300"
+        className="bg-cyan-50 ring-cyan-200"
         titleClassName="text-cyan-950"
         actionLabel={t('details')}
         onAction={() => router.push(`/game-club-money-details?from=${range.from}&to=${range.to}`)}
       >
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('gameClubIncome')}
           amount={totals.computerIncome}
@@ -700,7 +689,7 @@ export default function DashboardPage({
           helper={t('gameClubIncomeMetricDesc')}
           comparison={comparisonFor(totals.computerIncome, previousTotals.computerIncome)}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('playstationIncome')}
           amount={totals.playstationIncome}
@@ -710,7 +699,7 @@ export default function DashboardPage({
           helper={t('playstationIncomeMetricDesc')}
           comparison={comparisonFor(totals.playstationIncome, previousTotals.playstationIncome)}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('activeDebts')}
           amount={totals.activeDebts}
@@ -719,7 +708,7 @@ export default function DashboardPage({
           iconClassName="text-rose-600"
           helper={t('activeDebtsDesc', { count: totals.activeDebtCount })}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('averageDailyIncome')}
           amount={averageGameClubIncome}
@@ -728,7 +717,7 @@ export default function DashboardPage({
           iconClassName="text-cyan-600"
           helper={t('averageDailyClubIncomeDesc')}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('totalMoneyLeft')}
           amount={totals.gameClubMoneyLeft}
@@ -744,12 +733,12 @@ export default function DashboardPage({
         title={t('barStatisticsSection')}
         description={t('barStatisticsSectionDesc')}
         gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
-        className="bg-orange-200 ring-orange-300"
+        className="bg-orange-50 ring-orange-200"
         titleClassName="text-orange-950"
         actionLabel={t('details')}
         onAction={() => router.push(`/bar-money-details?from=${range.from}&to=${range.to}`)}
       >
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('barMoneyLeft')}
           amount={totals.barIncome}
@@ -759,7 +748,7 @@ export default function DashboardPage({
           helper={t('barMoneyLeftDesc')}
           comparison={comparisonFor(totals.barIncome, previousTotals.barIncome)}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('averageDailyIncome')}
           amount={averageBarIncome}
@@ -768,7 +757,7 @@ export default function DashboardPage({
           iconClassName="text-sky-600"
           helper={t('averageDailyBarIncomeDesc')}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('barNetProfit')}
           amount={totals.barProfit}
@@ -778,7 +767,7 @@ export default function DashboardPage({
           helper={t('barNetProfitDesc')}
           comparison={comparisonFor(totals.barProfit, previousTotals.barProfit)}
         />
-        <MetricCard
+        <AmountCard
           loading={loading}
           label={t('inventoryValue')}
           amount={totals.inventoryValue}
@@ -821,7 +810,7 @@ export default function DashboardPage({
             <PaymentMethodChart
               title={`${t('incomeByPaymentMethod')} (${periodLabel})`}
               data={paymentData}
-              total={totals.computerIncome}
+              total={paymentData.reduce((sum, row) => sum + row.value, 0)}
             />
             <IncomeTrendChart data={trend} />
           </div>

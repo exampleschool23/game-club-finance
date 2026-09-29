@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { ShieldCheck } from 'lucide-react';
+import { Badge, Button, Card, InlineAlert, SectionHeading } from '@/components/PresentationFoundation';
 import { createClient } from '@/lib/supabase/client';
 import { loadMigrationHealth, type HealthResult } from '@/lib/supabase/migrationHealth';
 import migrations from '@/lib/supabase/migrationManifest.json';
@@ -26,53 +27,51 @@ export function MigrationHealthPanel({ clubId }: { clubId: string }) {
   }
 
   const data = result?.status === 'ready' ? result.data : null;
-  const ownerProfitChecksPass = data && [
-    'get_owner_profit_snapshot',
-    'enforce_owner_withdrawal_month_balance',
-    'withdraw_owner_money_for_month',
-  ].every((name) => data.checks.some((check) => check.name === name && check.status === 'matching'))
-    && data.checks.every((check) => check.status === 'matching');
+  const allChecksPass = Boolean(data && data.checks.every((check) => check.status === 'matching'));
+
   return (
-    <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6" aria-busy={loading}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex gap-3">
-          <ShieldCheck className="mt-1 shrink-0 text-primary-600" size={22} />
-          <div>
-            <h2 className="font-bold text-gray-950">{t('title')}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500">{t('description')}</p>
-          </div>
-        </div>
-        <button type="button" className="btn-primary" disabled={loading} onClick={check}>
-          {loading ? t('checking') : t('check')}
-        </button>
-      </div>
+    <Card as="section" padding="lg" className="mt-5" aria-busy={loading}>
+      <SectionHeading
+        icon={<ShieldCheck size={22} aria-hidden="true" />}
+        title={t('title')}
+        description={t('description')}
+        action={<Button loading={loading} loadingLabel={t('checking')} onClick={check}>{t('check')}</Button>}
+      />
       <div aria-live="polite" className="mt-4 text-sm">
-        {result?.status === 'unavailable' && <p className="rounded-lg bg-amber-50 p-3 text-amber-900">{t('unavailable')}</p>}
-        {result?.status === 'error' && <p role="alert" className="text-danger-600">{t('error')}</p>}
+        {result?.status === 'unavailable' && <InlineAlert variant="warning">{t('unavailable')}</InlineAlert>}
+        {result?.status === 'error' && <InlineAlert variant="danger">{t('error')}</InlineAlert>}
         {data && <>
-          {ownerProfitChecksPass && <p className="mb-4 rounded-lg bg-success-50 p-3 text-success-600">{t('checksPassed')}</p>}
+          {allChecksPass && <InlineAlert variant="success" className="mb-4">{t('checksPassed')}</InlineAlert>}
           <h3 className="font-semibold text-gray-900">{t('featureChecks')}</h3>
           <p className="mt-1 text-xs text-gray-500">{t('checksNote')}</p>
           <ul className="mt-2 divide-y divide-gray-100">
-            {data.checks.map((check) => <li key={check.name} className="flex flex-wrap justify-between gap-2 py-2">
-              <span className="min-w-0 break-all font-mono text-xs">{check.version} · {check.name}</span>
-              <span className={check.status === 'matching' ? 'text-success-600' : 'text-amber-800'}>{t(check.status)}</span>
-            </li>)}
+            {data.checks.map((check) => (
+              <li key={check.name} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="min-w-0 break-all font-mono text-xs">{check.version} · {check.name}</span>
+                <Badge variant={check.status === 'matching' ? 'success' : 'warning'}>{t(check.status)}</Badge>
+              </li>
+            ))}
           </ul>
           <details className="mt-4">
             <summary className="cursor-pointer font-semibold text-gray-900">{t('allMigrations', { count: migrations.length })}</summary>
             <p className="mt-2 text-gray-600">{t('historyNote')}</p>
             {!data.historyAvailable && <p className="mt-2 text-gray-500">{t('noHistory')}</p>}
-            {data.historyAvailable && <ul className="mt-2 max-h-96 divide-y divide-gray-100 overflow-auto">
-              {migrations.map((file) => <li key={file} className="flex flex-wrap justify-between gap-2 py-2">
-                <span className="min-w-0 break-all font-mono text-xs">{file}</span>
-                <span className="text-xs text-gray-600">{t(data.historyAvailable && data.recordedVersions.includes(file.split('_')[0]) ? 'recorded' : 'unconfirmed')}</span>
-              </li>)}
-            </ul>}
+            {data.historyAvailable && (
+              <ul className="mt-2 max-h-96 divide-y divide-gray-100 overflow-auto">
+                {migrations.map((file) => (
+                  <li key={file} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span className="min-w-0 break-all font-mono text-xs">{file}</span>
+                    <Badge variant={data.recordedVersions.includes(file.split('_')[0]) ? 'success' : 'neutral'} size="sm">
+                      {t(data.recordedVersions.includes(file.split('_')[0]) ? 'recorded' : 'unconfirmed')}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
           </details>
-          {!ownerProfitChecksPass && <p className="mt-4 text-xs text-gray-500">{t('nextSteps')}</p>}
+          {!allChecksPass && <p className="mt-4 text-xs text-gray-500">{t('nextSteps')}</p>}
         </>}
       </div>
-    </section>
+    </Card>
   );
 }

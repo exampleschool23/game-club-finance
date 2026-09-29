@@ -2,7 +2,7 @@ import { DashboardShell } from '@/components/layout/DashboardShell';
 import { getDashboardBootstrap } from '@/lib/supabase/dashboardBootstrap';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
-import { DashboardContentLoading } from '@/components/layout/DashboardContentLoading';
+import { PageSkeleton } from '@/components/PresentationFoundation';
 
 export default function DashboardLayout({
   children,
@@ -12,7 +12,7 @@ export default function DashboardLayout({
   return (
     <Suspense fallback={
       <main className="mx-auto w-full max-w-7xl p-4 sm:p-8" aria-busy="true">
-        <DashboardContentLoading />
+        <PageSkeleton />
       </main>
     }>
       <AuthenticatedDashboardLayout>{children}</AuthenticatedDashboardLayout>

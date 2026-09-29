@@ -15,58 +15,53 @@ import {
   X,
 } from 'lucide-react';
 import { MigrationHealthPanel } from './MigrationHealthPanel';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Field,
+  IconButton,
+  InlineAlert,
+  Input,
+  LanguageSwitcher,
+  PageHeader,
+  SectionHeading,
+  Select,
+  useToast,
+} from '@/components/PresentationFoundation';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import { normalizePaymentMethods } from '@/lib/paymentMethods';
+import { normalizeBusinessDayStartHour } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { PAYMENT_METHODS, type EntryPaymentMethod } from '@/types';
 
-interface SettingsPageClientProps {
-  email?: string | null;
-  fullName?: string | null;
-  role?: string | null;
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+function hourLabel(hour: number): string {
+  return `${String(hour).padStart(2, '0')}:00`;
 }
 
-function hourToTimeValue(hour: number | null | undefined): string {
-  const safeHour = Number.isInteger(hour) && Number(hour) >= 0 && Number(hour) <= 23 ? Number(hour) : 0;
-  return `${String(safeHour).padStart(2, '0')}:00`;
-}
-
-function timeValueToHour(value: string): number | null {
-  const [hour = '', minute = ''] = value.split(':');
-  const parsedHour = Number(hour);
-  const parsedMinute = Number(minute);
-
-  if (!Number.isInteger(parsedHour) || parsedHour < 0 || parsedHour > 23) return null;
-  if (!Number.isInteger(parsedMinute) || parsedMinute < 0 || parsedMinute > 59) return null;
-
-  return parsedHour;
-}
-
-export function SettingsPageClient({ email, fullName, role }: SettingsPageClientProps) {
+export function SettingsPageClient() {
   const t = useTranslations('settings');
   const tc = useTranslations('common');
   const { memberships, role: clubRole, selectedClub, setSelectedClubId, refreshClubs } = useClub();
-  const [account, setAccount] = useState({
-    email,
-    fullName,
-    role,
-  });
+  const { showToast, toastElement } = useToast();
+  const [account, setAccount] = useState<{ email?: string | null; fullName?: string | null; role?: string | null }>({});
+  const [accountLoading, setAccountLoading] = useState(true);
   const [clubForm, setClubForm] = useState({ name: '', address: '' });
   const [clubSaving, setClubSaving] = useState(false);
-  const [clubMessage, setClubMessage] = useState('');
   const [clubError, setClubError] = useState('');
   const [createClubOpen, setCreateClubOpen] = useState(false);
-  const [businessDayStartTime, setBusinessDayStartTime] = useState('00:00');
+  const [businessDayStartHour, setBusinessDayStartHour] = useState(0);
   const [businessDaySaving, setBusinessDaySaving] = useState(false);
-  const [businessDayMessage, setBusinessDayMessage] = useState('');
   const [businessDayError, setBusinessDayError] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<EntryPaymentMethod[]>([...PAYMENT_METHODS]);
   const [paymentMethodsSaving, setPaymentMethodsSaving] = useState(false);
-  const [paymentMethodsMessage, setPaymentMethodsMessage] = useState('');
   const [paymentMethodsError, setPaymentMethodsError] = useState('');
   const [accountLoadError, setAccountLoadError] = useState('');
+  const isOwner = clubRole === 'owner';
 
   useEffect(() => {
     let cancelled = false;
@@ -94,11 +89,15 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
       }
     }
 
-    loadAccount().catch((loadError) => {
-      if (!cancelled) {
-        setAccountLoadError(loadError instanceof Error ? loadError.message : String(loadError));
-      }
-    });
+    loadAccount()
+      .catch((loadError) => {
+        if (!cancelled) {
+          setAccountLoadError(loadError instanceof Error ? loadError.message : String(loadError));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAccountLoading(false);
+      });
 
     return () => {
       cancelled = true;
@@ -106,14 +105,12 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
   }, []);
 
   useEffect(() => {
-    setBusinessDayStartTime(hourToTimeValue(selectedClub?.business_day_start_hour));
-    setBusinessDayMessage('');
+    setBusinessDayStartHour(normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour));
     setBusinessDayError('');
   }, [selectedClub?.business_day_start_hour, selectedClub?.id]);
 
   useEffect(() => {
     setPaymentMethods(normalizePaymentMethods(selectedClub?.enabled_payment_methods));
-    setPaymentMethodsMessage('');
     setPaymentMethodsError('');
   }, [selectedClub?.enabled_payment_methods, selectedClub?.id]);
 
@@ -125,7 +122,6 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
     }
 
     setClubSaving(true);
-    setClubMessage('');
     setClubError('');
 
     const supabase = createClient();
@@ -146,29 +142,27 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
       setSelectedClubId(createdClub.id);
     }
     setClubForm({ name: '', address: '' });
-    setClubMessage(t('clubCreated'));
     setCreateClubOpen(false);
+    showToast(t('clubCreated'));
     await refreshClubs();
   }
 
   async function handleSaveBusinessDay(event: React.FormEvent) {
     event.preventDefault();
 
-    const hour = timeValueToHour(businessDayStartTime);
-    if (!selectedClub || clubRole !== 'owner' || hour === null) {
+    if (!selectedClub || !isOwner) {
       setBusinessDayError(t('businessDayInvalid'));
       return;
     }
 
     setBusinessDaySaving(true);
-    setBusinessDayMessage('');
     setBusinessDayError('');
 
     const supabase = createClient();
     const { error } = await supabase
       .from('clubs')
       .update({
-        business_day_start_hour: hour,
+        business_day_start_hour: businessDayStartHour,
         updated_at: new Date().toISOString(),
       })
       .eq('id', selectedClub.id);
@@ -180,34 +174,31 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
       return;
     }
 
-    setBusinessDayMessage(t('businessDaySaved'));
+    showToast(t('businessDaySaved'));
     await refreshClubs();
   }
 
   function togglePaymentMethod(method: EntryPaymentMethod) {
-    setPaymentMethodsMessage('');
     setPaymentMethodsError('');
-    setPaymentMethods((current) => {
-      if (!current.includes(method)) {
-        return PAYMENT_METHODS.filter((candidate) => current.includes(candidate) || candidate === method);
-      }
-      if (current.length === 1) {
-        setPaymentMethodsError(t('paymentMethodsRequired'));
-        return current;
-      }
-      return current.filter((candidate) => candidate !== method);
-    });
+    if (!paymentMethods.includes(method)) {
+      setPaymentMethods(PAYMENT_METHODS.filter((candidate) => paymentMethods.includes(candidate) || candidate === method));
+      return;
+    }
+    if (paymentMethods.length === 1) {
+      setPaymentMethodsError(t('paymentMethodsRequired'));
+      return;
+    }
+    setPaymentMethods(paymentMethods.filter((candidate) => candidate !== method));
   }
 
   async function handleSavePaymentMethods(event: React.FormEvent) {
     event.preventDefault();
-    if (!selectedClub || clubRole !== 'owner' || paymentMethods.length === 0) {
+    if (!selectedClub || !isOwner || paymentMethods.length === 0) {
       setPaymentMethodsError(t('paymentMethodsRequired'));
       return;
     }
 
     setPaymentMethodsSaving(true);
-    setPaymentMethodsMessage('');
     setPaymentMethodsError('');
 
     const supabase = createClient();
@@ -225,178 +216,171 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
       return;
     }
 
-    setPaymentMethodsMessage(t('paymentMethodsSaved'));
+    showToast(t('paymentMethodsSaved'));
     await refreshClubs();
   }
 
   const savedPaymentMethods = normalizePaymentMethods(selectedClub?.enabled_payment_methods);
   const paymentMethodsChanged = paymentMethods.join(',') !== savedPaymentMethods.join(',');
-  const businessDayChanged = businessDayStartTime !== hourToTimeValue(selectedClub?.business_day_start_hour);
+  const businessDayChanged = businessDayStartHour !== normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour);
 
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader title={t('title')} description={t('description')} action={<LanguageSwitcher />} />
 
-      {accountLoadError && (
-        <p className="mb-4 rounded-xl border border-danger-100 bg-danger-50 p-3 text-sm text-danger-600">{accountLoadError}</p>
-      )}
+      {accountLoadError && <InlineAlert variant="danger" className="mb-4">{accountLoadError}</InlineAlert>}
 
       <div className="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
-              <div>
-                <h2 className="font-bold text-gray-950">{t('clubs')}</h2>
-                <p className="mt-0.5 text-xs text-gray-500">{t('selectClubHelp')}</p>
-              </div>
-              {clubRole === 'owner' && (
-                <button
-                  type="button"
-                  aria-label={t('addClub')}
-                  onClick={() => {
-                    setCreateClubOpen((current) => !current);
-                    setClubError('');
-                    setClubMessage('');
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700 transition hover:bg-primary-100"
-                >
-                  {createClubOpen ? <X size={18} /> : <Plus size={18} />}
-                </button>
-              )}
-            </div>
+          <Card as="section" padding="none" className="overflow-hidden">
+            <CardHeader className="py-3.5">
+              <SectionHeading
+                size="sm"
+                title={t('clubs')}
+                description={t('selectClubHelp')}
+                action={isOwner ? (
+                  <IconButton
+                    variant="soft"
+                    size="sm"
+                    label={t('addClub')}
+                    aria-expanded={createClubOpen}
+                    icon={createClubOpen ? <X size={18} /> : <Plus size={18} />}
+                    onClick={() => {
+                      setCreateClubOpen((current) => !current);
+                      setClubError('');
+                    }}
+                  />
+                ) : undefined}
+              />
+            </CardHeader>
 
-            <div className="space-y-1.5 p-2">
+            <div className="space-y-1.5 p-2" role="listbox" aria-label={t('clubs')}>
               {memberships.map((membership) => {
                 const selected = selectedClub?.id === membership.club.id;
                 return (
                   <button
                     key={membership.club.id}
                     type="button"
+                    role="option"
+                    aria-selected={selected}
                     onClick={() => setSelectedClubId(membership.club.id)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
-                      selected ? 'bg-primary-50 text-primary-800' : 'text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                      selected ? 'bg-primary-50 text-primary-800' : 'text-gray-700 hover:bg-gray-50',
+                    )}
                   >
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                      <Building2 size={17} />
+                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', selected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500')}>
+                      <Building2 size={17} aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{membership.club.name}</span>
                       <span className="block text-xs capitalize text-gray-500">{membership.role}</span>
                     </span>
-                    {selected && <Check size={17} className="shrink-0 text-primary-600" />}
+                    {selected && <Check size={17} className="shrink-0 text-primary-600" aria-hidden="true" />}
                   </button>
                 );
               })}
             </div>
 
-            {createClubOpen && clubRole === 'owner' && (
+            {createClubOpen && isOwner && (
               <form onSubmit={handleCreateClub} className="space-y-3 border-t border-gray-100 bg-gray-50/70 p-4">
-                <div>
-                  <label className="label" htmlFor="new-club-name">{t('clubName')}</label>
-                  <input
+                <Field label={t('clubName')} htmlFor="new-club-name" required>
+                  <Input
                     id="new-club-name"
                     autoFocus
-                    className="input-field"
+                    maxLength={120}
                     value={clubForm.name}
                     onChange={(event) => setClubForm((current) => ({ ...current, name: event.target.value }))}
                   />
-                </div>
-                <div>
-                  <label className="label" htmlFor="new-club-address">{t('clubAddress')}</label>
-                  <input
+                </Field>
+                <Field label={t('clubAddress')} htmlFor="new-club-address">
+                  <Input
                     id="new-club-address"
-                    className="input-field"
+                    maxLength={200}
                     value={clubForm.address}
                     onChange={(event) => setClubForm((current) => ({ ...current, address: event.target.value }))}
                   />
-                </div>
-                {clubError && <p className="text-sm text-danger-500">{clubError}</p>}
-                <button type="submit" className="btn-primary w-full" disabled={clubSaving}>
-                  {clubSaving ? t('savingClub') : t('createClub')}
-                </button>
+                </Field>
+                {clubError && <InlineAlert variant="danger">{clubError}</InlineAlert>}
+                <Button type="submit" fullWidth loading={clubSaving} loadingLabel={t('savingClub')}>{t('createClub')}</Button>
               </form>
             )}
-            {clubMessage && <p className="border-t border-gray-100 px-4 py-3 text-sm text-success-600">{clubMessage}</p>}
-          </section>
+          </Card>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <Card as="section">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600">
-                <UserRound size={19} />
+                <UserRound size={19} aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900">{account.fullName || t('account')}</p>
-                <p className="truncate text-xs text-gray-500">{account.email ?? '-'}</p>
+                {accountLoading ? (
+                  <div className="space-y-2" role="status" aria-label={tc('loading')}>
+                    <div className="h-4 w-32 animate-pulse rounded bg-gray-200" />
+                    <div className="h-3 w-40 animate-pulse rounded bg-gray-100" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="truncate text-sm font-semibold text-gray-900">{account.fullName || t('account')}</p>
+                    <p className="truncate text-xs text-gray-500">{account.email ?? '—'}</p>
+                  </>
+                )}
               </div>
             </div>
-            {account.role && (
-              <span className="mt-3 inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold capitalize text-gray-600">
-                {account.role}
-              </span>
-            )}
-          </section>
+            {account.role && <Badge variant="neutral" className="mt-3 capitalize">{account.role}</Badge>}
+          </Card>
         </aside>
 
-        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-5 sm:px-6">
+        <Card as="section" padding="none" className="overflow-hidden">
+          <CardHeader className="py-5 sm:px-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-wider text-primary-600">{t('clubSettings')}</p>
                 <h2 className="mt-1 truncate text-xl font-bold text-gray-950">{selectedClub?.name ?? t('clubs')}</h2>
                 {selectedClub?.address && (
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500"><MapPin size={14} />{selectedClub.address}</p>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500"><MapPin size={14} aria-hidden="true" />{selectedClub.address}</p>
                 )}
               </div>
-              <span className="inline-flex w-fit rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold capitalize text-primary-700">
-                {clubRole}
-              </span>
+              <Badge variant="primary" className="w-fit capitalize">{clubRole}</Badge>
             </div>
-          </div>
+          </CardHeader>
 
-          <form onSubmit={handleSaveBusinessDay} className="grid gap-5 border-b border-gray-100 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_190px] sm:px-6">
-            <div className="flex gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Clock3 size={19} /></span>
-              <div>
-                <h3 className="font-bold text-gray-900">{t('businessDay')}</h3>
-                <p className="mt-1 max-w-xl text-sm leading-5 text-gray-500">{t('businessDayHelp')}</p>
-              </div>
-            </div>
+          <form onSubmit={handleSaveBusinessDay} className="grid gap-5 border-b border-gray-100 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_200px] sm:px-6">
+            <SectionHeading
+              icon={<Clock3 size={19} aria-hidden="true" />}
+              iconClassName="bg-amber-50 text-amber-600"
+              title={t('businessDay')}
+              description={t('businessDayHelp')}
+            />
             <div className="space-y-2">
-              <label className="label" htmlFor="business-day-time">{t('businessDayStartTime')}</label>
-              <input
-                id="business-day-time"
-                type="time"
-                step={3600}
-                className="input-field h-11"
-                value={businessDayStartTime}
-                disabled={!selectedClub || clubRole !== 'owner' || businessDaySaving}
-                onChange={(event) => {
-                  setBusinessDayStartTime(event.target.value);
-                  setBusinessDayMessage('');
-                  setBusinessDayError('');
-                }}
-              />
-              {businessDayError && <p className="text-sm text-danger-500">{businessDayError}</p>}
-              {businessDayMessage && <p className="text-sm text-success-600">{businessDayMessage}</p>}
-              {clubRole === 'owner' ? (
-                <button type="submit" className="btn-primary w-full" disabled={!selectedClub || businessDaySaving || !businessDayChanged}>
-                  {businessDaySaving ? t('savingBusinessDay') : t('saveBusinessDay')}
-                </button>
+              <Field label={t('businessDayStartTime')} htmlFor="business-day-hour" error={businessDayError || undefined}>
+                <Select
+                  id="business-day-hour"
+                  value={businessDayStartHour}
+                  disabled={!selectedClub || !isOwner || businessDaySaving}
+                  onChange={(event) => {
+                    setBusinessDayStartHour(Number(event.target.value));
+                    setBusinessDayError('');
+                  }}
+                >
+                  {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+                </Select>
+              </Field>
+              {isOwner ? (
+                <Button type="submit" fullWidth disabled={!selectedClub || !businessDayChanged} loading={businessDaySaving} loadingLabel={t('savingBusinessDay')}>
+                  {t('saveBusinessDay')}
+                </Button>
               ) : <p className="text-xs text-gray-500">{t('businessDayOwnerOnly')}</p>}
             </div>
           </form>
 
           <form onSubmit={handleSavePaymentMethods} className="px-5 py-5 sm:px-6">
-            <div className="flex gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600"><CreditCard size={19} /></span>
-              <div>
-                <h3 className="font-bold text-gray-900">{t('paymentMethods')}</h3>
-                <p className="mt-1 max-w-xl text-sm leading-5 text-gray-500">{t('paymentMethodsHelp')}</p>
-              </div>
-            </div>
+            <SectionHeading
+              icon={<CreditCard size={19} aria-hidden="true" />}
+              title={t('paymentMethods')}
+              description={t('paymentMethodsHelp')}
+            />
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3" role="group" aria-label={t('paymentMethods')}>
               {PAYMENT_METHODS.map((method) => {
                 const enabled = paymentMethods.includes(method);
                 const MethodIcon = method === 'cash' ? Banknote : method === 'terminal' ? CreditCard : WalletCards;
@@ -405,23 +389,22 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
                     key={method}
                     type="button"
                     aria-pressed={enabled}
-                    disabled={!selectedClub || clubRole !== 'owner' || paymentMethodsSaving}
+                    disabled={!selectedClub || !isOwner || paymentMethodsSaving}
                     onClick={() => togglePaymentMethod(method)}
-                    className={`group flex min-h-24 flex-col items-start justify-between rounded-xl border p-3.5 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      enabled
-                        ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500'
-                        : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
-                    }`}
+                    className={cn(
+                      'group flex min-h-24 flex-col items-start justify-between rounded-xl border p-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60',
+                      enabled ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50',
+                    )}
                   >
                     <span className="flex w-full items-center justify-between">
-                      <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${enabled ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500'}`}><MethodIcon size={18} /></span>
-                      <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${enabled ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 bg-white'}`}>
+                      <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', enabled ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500')}><MethodIcon size={18} aria-hidden="true" /></span>
+                      <span className={cn('flex h-5 w-5 items-center justify-center rounded-full border', enabled ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 bg-white')} aria-hidden="true">
                         {enabled && <Check size={13} strokeWidth={3} />}
                       </span>
                     </span>
                     <span>
-                      <span className={`block text-sm font-bold ${enabled ? 'text-primary-800' : 'text-gray-700'}`}>{tc(`paymentMethods.${method}`)}</span>
-                      <span className={`mt-0.5 block text-xs font-medium ${enabled ? 'text-primary-600' : 'text-gray-400'}`}>{enabled ? t('enabled') : t('disabled')}</span>
+                      <span className={cn('block text-sm font-bold', enabled ? 'text-primary-800' : 'text-gray-700')}>{tc(`paymentMethods.${method}`)}</span>
+                      <span className={cn('mt-0.5 block text-xs font-medium', enabled ? 'text-primary-600' : 'text-gray-400')}>{enabled ? t('enabled') : t('disabled')}</span>
                     </span>
                   </button>
                 );
@@ -429,24 +412,24 @@ export function SettingsPageClient({ email, fullName, role }: SettingsPageClient
             </div>
 
             <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                {paymentMethodsError && <p className="text-sm text-danger-500">{paymentMethodsError}</p>}
-                {paymentMethodsMessage && <p className="text-sm text-success-600">{paymentMethodsMessage}</p>}
-                {!paymentMethodsError && !paymentMethodsMessage && <p className="text-xs text-gray-400">{t('paymentMethodsHint')}</p>}
+              <div className="min-w-0 flex-1">
+                {paymentMethodsError
+                  ? <InlineAlert variant="danger" hideIcon className="py-2">{paymentMethodsError}</InlineAlert>
+                  : <p className="text-xs text-gray-400">{t('paymentMethodsHint')}</p>}
               </div>
-              {clubRole === 'owner' ? (
-                <button type="submit" className="btn-primary shrink-0" disabled={!selectedClub || paymentMethodsSaving || !paymentMethodsChanged}>
-                  {paymentMethodsSaving ? t('savingPaymentMethods') : t('savePaymentMethods')}
-                </button>
+              {isOwner ? (
+                <Button type="submit" className="shrink-0" disabled={!selectedClub || !paymentMethodsChanged} loading={paymentMethodsSaving} loadingLabel={t('savingPaymentMethods')}>
+                  {t('savePaymentMethods')}
+                </Button>
               ) : <p className="text-sm text-gray-500">{t('paymentMethodsOwnerOnly')}</p>}
             </div>
           </form>
-        </section>
+        </Card>
       </div>
 
-      {clubRole === 'owner' && selectedClub && <MigrationHealthPanel key={selectedClub.id} clubId={selectedClub.id} />}
+      {isOwner && selectedClub && <MigrationHealthPanel key={selectedClub.id} clubId={selectedClub.id} />}
 
-      <p className="mt-5 text-center text-xs text-gray-400">GameClub Finance · {t('version')} 2.0.0</p>
+      {toastElement}
     </div>
   );
 }

@@ -16,7 +16,7 @@ export interface BarMoneyResult {
   barMoney: number;
 }
 
-export function sumBarSales(rows: BarSalesRow[]): number {
+function sumBarSales(rows: BarSalesRow[]): number {
   return rows.reduce((sum, row) => sum + Number(row.bar_income ?? 0), 0);
 }
 

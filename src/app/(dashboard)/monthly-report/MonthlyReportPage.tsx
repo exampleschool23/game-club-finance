@@ -6,10 +6,19 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
-import { MonthPicker } from '@/components/ui/CalendarPicker';
+import {
+  Card,
+  DataTable,
+  EmptyState,
+  Field,
+  InlineAlert,
+  MetricCard,
+  MetricGridSkeleton,
+  MonthPicker,
+  PageHeader,
+  TableSkeleton,
+  toneForAmount,
+} from '@/components/PresentationFoundation';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { currentYearMonth, monthRange } from '@/lib/utils';
 import { formatCurrency, formatDate } from '@/lib/formatters';
@@ -32,6 +41,21 @@ interface DayRow {
   barCashLeft: number;
   accountingNetProfit: number;
 }
+
+type DayTotals = Omit<DayRow, 'date'>;
+
+const emptyTotals: DayTotals = {
+  manualIncome: 0,
+  barSales: 0,
+  debtIncome: 0,
+  totalIncome: 0,
+  barCost: 0,
+  stockPurchaseCost: 0,
+  barExpenses: 0,
+  expenses: 0,
+  barCashLeft: 0,
+  accountingNetProfit: 0,
+};
 
 interface MonthlyCashRow {
   date: string;
@@ -243,41 +267,62 @@ export default function MonthlyReportPage() {
   }, [selectedClubId]);
 
   useEffect(() => {
-    let cancelled = false;
     fetchData(month).catch((fetchError) => {
-      if (cancelled) return;
       setRows([]);
       setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => { requestSequence.current += 1; };
   }, [month, fetchData]);
 
   useEffect(() => {
     setMonth(businessYearMonth);
   }, [businessYearMonth, selectedClubId]);
 
-  const totalIncome = rows.reduce((s, r) => s + r.totalIncome, 0);
-  const totalBarCost = rows.reduce((s, r) => s + r.barCost, 0);
-  const totalStockPurchaseCost = rows.reduce((s, r) => s + r.stockPurchaseCost, 0);
-  const totalBarExpenses = rows.reduce((s, r) => s + r.barExpenses, 0);
-  const totalExpenses = rows.reduce((s, r) => s + r.expenses, 0);
-  const totalBarCashLeft = rows.reduce((s, r) => s + r.barCashLeft, 0);
-  const totalAccountingNetProfit = rows.reduce((s, r) => s + r.accountingNetProfit, 0);
+  const totals = useMemo(
+    () => rows.reduce<DayTotals>((sum, row) => ({
+      manualIncome: sum.manualIncome + row.manualIncome,
+      barSales: sum.barSales + row.barSales,
+      debtIncome: sum.debtIncome + row.debtIncome,
+      totalIncome: sum.totalIncome + row.totalIncome,
+      barCost: sum.barCost + row.barCost,
+      stockPurchaseCost: sum.stockPurchaseCost + row.stockPurchaseCost,
+      barExpenses: sum.barExpenses + row.barExpenses,
+      expenses: sum.expenses + row.expenses,
+      barCashLeft: sum.barCashLeft + row.barCashLeft,
+      accountingNetProfit: sum.accountingNetProfit + row.accountingNetProfit,
+    }), emptyTotals),
+    [rows],
+  );
   const currency = tc('currency');
+  const money = (amount: number) => `${formatCurrency(amount)} ${currency}`;
+  const signed = (amount: number) => (
+    <span className={amount >= 0 ? 'font-semibold text-success-600' : 'font-semibold text-danger-500'}>{formatCurrency(amount)}</span>
+  );
+  const danger = (amount: number) => <span className="text-danger-500">{formatCurrency(amount)}</span>;
+
+  const summaryCards = [
+    { label: t('totalIncome'), amount: totals.totalIncome, tone: 'success' as const },
+    { label: t('costOfGoodsSold'), amount: totals.barCost, tone: 'danger' as const },
+    { label: t('inventoryPurchases'), amount: totals.stockPurchaseCost, tone: 'danger' as const },
+    { label: t('barExpenses'), amount: totals.barExpenses, tone: 'danger' as const },
+    { label: t('expenses'), amount: totals.expenses, tone: 'danger' as const },
+    { label: t('barCashLeft'), amount: totals.barCashLeft, tone: toneForAmount(totals.barCashLeft) },
+    { label: t('accountingNetProfit'), amount: totals.accountingNetProfit, tone: toneForAmount(totals.accountingNetProfit) },
+  ];
 
   return (
     <div className="mx-auto w-full max-w-7xl">
-      <PageHeader title={t('title')} />
+      <PageHeader
+        title={t('title')}
+        action={(
+          <Field label={t('selectMonth')} className="sm:w-72">
+            <MonthPicker value={month} max={businessYearMonth} onChange={setMonth} />
+          </Field>
+        )}
+      />
 
-      {loadError && <p className="mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{loadError}</p>}
-
-      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-        <label className="label mb-0">{t('selectMonth')}</label>
-        <MonthPicker value={month} onChange={setMonth} className="w-full sm:w-72" />
-      </div>
+      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
 
       {loading ? (
         <div className="space-y-4">
@@ -285,181 +330,48 @@ export default function MonthlyReportPage() {
           <TableSkeleton rows={8} columns={11} />
         </div>
       ) : rows.length === 0 ? (
-        <EmptyState icon={BarChart2} title={t('noData')} />
+        <Card><EmptyState icon={BarChart2} title={t('noData')} /></Card>
       ) : (
         <div className="space-y-4">
-          {/* Summary row */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('totalIncome')}</p>
-              <p className="text-xl font-bold text-success-600">
-                {formatCurrency(totalIncome)} {currency}
-              </p>
-            </div>
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('inventoryPurchases')}</p>
-              <p className="text-xl font-bold text-danger-500">
-                {formatCurrency(totalStockPurchaseCost)} {currency}
-              </p>
-            </div>
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('barExpenses')}</p>
-              <p className="text-xl font-bold text-danger-500">
-                {formatCurrency(totalBarExpenses)} {currency}
-              </p>
-            </div>
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('barCashLeft')}</p>
-              <p className={`text-xl font-bold ${totalBarCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}`}>
-                {formatCurrency(totalBarCashLeft)} {currency}
-              </p>
-            </div>
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('costOfGoodsSold')}</p>
-              <p className="text-xl font-bold text-danger-500">
-                {formatCurrency(totalBarCost)} {currency}
-              </p>
-            </div>
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('expenses')}</p>
-              <p className="text-xl font-bold text-danger-500">
-                {formatCurrency(totalExpenses)} {currency}
-              </p>
-            </div>
-            <div className="card text-center">
-              <p className="text-sm text-gray-500">{t('accountingNetProfit')}</p>
-              <p
-                className={`text-xl font-bold ${
-                  totalAccountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'
-                }`}
-              >
-                {formatCurrency(totalAccountingNetProfit)} {currency}
-              </p>
-            </div>
+            {summaryCards.map((card) => (
+              <MetricCard key={card.label} label={card.label} value={money(card.amount)} tone={card.tone} />
+            ))}
           </div>
           <p className="text-xs text-gray-500">{t('barCashFormula')}</p>
 
-          {/* Day-by-day table */}
-          <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[1460px] text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                    {t('date')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('gameClubIncome')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('barSales')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('debtIncome')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('totalIncome')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('costOfGoodsSold')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('inventoryPurchases')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('barExpenses')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('expenses')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('barCashLeft')}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">
-                    {t('accountingNetProfit')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {rows.map((row) => (
-                  <tr key={row.date} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-700">{formatDate(row.date, locale)}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      {formatCurrency(row.manualIncome)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      {formatCurrency(row.barSales)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-danger-600">
-                      {formatCurrency(row.debtIncome)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-success-600">
-                      {formatCurrency(row.totalIncome)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-danger-500">
-                      {formatCurrency(row.barCost)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-danger-500">
-                      {formatCurrency(row.stockPurchaseCost)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-danger-500">
-                      {formatCurrency(row.barExpenses)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-danger-500">
-                      {formatCurrency(row.expenses)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold">
-                      <span className={row.barCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                        {formatCurrency(row.barCashLeft)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold">
-                      <span className={row.accountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                        {formatCurrency(row.accountingNetProfit)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {/* Totals row */}
-                <tr className="bg-gray-50 font-semibold border-t border-gray-200">
-                  <td className="px-4 py-3">{t('totals')}</td>
-                  <td className="px-4 py-3 text-right">
-                    {formatCurrency(rows.reduce((s, r) => s + r.manualIncome, 0))}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {formatCurrency(rows.reduce((s, r) => s + r.barSales, 0))}
-                  </td>
-                  <td className="px-4 py-3 text-right text-danger-600">
-                    {formatCurrency(rows.reduce((s, r) => s + r.debtIncome, 0))}
-                  </td>
-                  <td className="px-4 py-3 text-right text-success-600">
-                    {formatCurrency(totalIncome)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-danger-500">
-                    {formatCurrency(totalBarCost)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-danger-500">
-                    {formatCurrency(totalStockPurchaseCost)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-danger-500">
-                    {formatCurrency(totalBarExpenses)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-danger-500">
-                    {formatCurrency(totalExpenses)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={totalBarCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                      {formatCurrency(totalBarCashLeft)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={totalAccountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                      {formatCurrency(totalAccountingNetProfit)}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            stickyHeader
+            minWidth={1460}
+            keyExtractor={(row) => row.date}
+            data={rows}
+            columns={[
+              { key: 'date', header: t('date'), className: 'sticky left-0 z-10 bg-white', render: (row) => <span className="font-medium text-gray-700">{formatDate(row.date, locale)}</span> },
+              { key: 'manualIncome', header: t('gameClubIncome'), align: 'right', render: (row) => formatCurrency(row.manualIncome) },
+              { key: 'barSales', header: t('barSales'), align: 'right', render: (row) => formatCurrency(row.barSales) },
+              { key: 'debtIncome', header: t('debtIncome'), align: 'right', render: (row) => <span className="text-warning-600">{formatCurrency(row.debtIncome)}</span> },
+              { key: 'totalIncome', header: t('totalIncome'), align: 'right', render: (row) => <span className="font-medium text-success-600">{formatCurrency(row.totalIncome)}</span> },
+              { key: 'barCost', header: t('costOfGoodsSold'), align: 'right', render: (row) => danger(row.barCost) },
+              { key: 'stockPurchaseCost', header: t('inventoryPurchases'), align: 'right', render: (row) => danger(row.stockPurchaseCost) },
+              { key: 'barExpenses', header: t('barExpenses'), align: 'right', render: (row) => danger(row.barExpenses) },
+              { key: 'expenses', header: t('expenses'), align: 'right', render: (row) => danger(row.expenses) },
+              { key: 'barCashLeft', header: t('barCashLeft'), align: 'right', render: (row) => signed(row.barCashLeft) },
+              { key: 'accountingNetProfit', header: t('accountingNetProfit'), align: 'right', render: (row) => signed(row.accountingNetProfit) },
+            ]}
+            footer={{
+              date: t('totals'),
+              manualIncome: formatCurrency(totals.manualIncome),
+              barSales: formatCurrency(totals.barSales),
+              debtIncome: <span className="text-warning-600">{formatCurrency(totals.debtIncome)}</span>,
+              totalIncome: <span className="text-success-600">{formatCurrency(totals.totalIncome)}</span>,
+              barCost: danger(totals.barCost),
+              stockPurchaseCost: danger(totals.stockPurchaseCost),
+              barExpenses: danger(totals.barExpenses),
+              expenses: danger(totals.expenses),
+              barCashLeft: signed(totals.barCashLeft),
+              accountingNetProfit: signed(totals.accountingNetProfit),
+            }}
+          />
         </div>
       )}
     </div>

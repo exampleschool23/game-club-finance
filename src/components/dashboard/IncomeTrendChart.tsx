@@ -12,23 +12,17 @@ import {
 } from 'recharts';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/formatters';
+import { ChartCard, formatAxis } from './ChartCard';
 
 interface IncomeTrendChartProps {
   data: Array<{ date: string; income: number; expenses: number }>;
-}
-
-function formatAxis(value: number): string {
-  if (Math.abs(value) >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`;
-  if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}K`;
-  return String(value);
 }
 
 export function IncomeTrendChart({ data }: IncomeTrendChartProps) {
   const t = useTranslations('dashboard');
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <h2 className="text-base font-bold text-gray-950">{t('incomeTrend')}</h2>
+    <ChartCard title={t('incomeTrend')}>
       <div className="mt-4 h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
@@ -42,6 +36,6 @@ export function IncomeTrendChart({ data }: IncomeTrendChartProps) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </section>
+    </ChartCard>
   );
 }

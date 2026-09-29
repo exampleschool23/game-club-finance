@@ -283,7 +283,7 @@ function parseSheetDate(sheetName: string): string | null {
   return null;
 }
 
-export function parseClosingStockNumber(value: unknown): number | null {
+function parseClosingStockNumber(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }
@@ -438,7 +438,7 @@ export function closingStockDraftKey(date: string, clubId?: string): string {
   return clubId ? `closing-stock-draft:${clubId}:${date}` : `closing-stock-draft:${date}`;
 }
 
-export function createClosingStockDraft(
+function createClosingStockDraft(
   date: string,
   rows: ClosingStockRowData[],
   savedAt = new Date().toISOString(),
@@ -1047,4 +1047,14 @@ export function buildClosingStockUpserts({
       return acc;
     }, {}),
   };
+}
+
+/** True for an empty string or a non-negative whole number typed by the user. */
+export function isWholeNumberInput(value: string): boolean {
+  return value === '' || /^\d+$/.test(value);
+}
+
+/** True for an empty string, a lone minus, or a signed whole number typed by the user. */
+export function isSignedWholeNumberInput(value: string): boolean {
+  return value === '' || value === '-' || /^-?\d+$/.test(value);
 }

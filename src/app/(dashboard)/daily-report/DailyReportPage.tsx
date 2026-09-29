@@ -6,13 +6,24 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { MetricCard } from '@/components/ui/MetricCard';
-import { MetricGridSkeleton, TableSkeleton } from '@/components/ui/LoadingSkeleton';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { DatePicker } from '@/components/ui/CalendarPicker';
+import {
+  Card,
+  DataTable,
+  DatePicker,
+  EmptyState,
+  Field,
+  InlineAlert,
+  MetricCard,
+  MetricGridSkeleton,
+  Money,
+  PageHeader,
+  SectionHeading,
+  StatTile,
+  TableSkeleton,
+  toneForAmount,
+} from '@/components/PresentationFoundation';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, formatNumber } from '@/lib/formatters';
 import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { fetchFinanceReportSnapshot } from '@/lib/supabase/financeReportSnapshot';
@@ -182,9 +193,7 @@ export default function DailyReportPage() {
   }, [selectedClubId]);
 
   useEffect(() => {
-    let cancelled = false;
     fetchData(date).catch((fetchError) => {
-      if (cancelled) return;
       setCashEntry(null);
       setStockCounts([]);
       setStockPurchases([]);
@@ -193,9 +202,7 @@ export default function DailyReportPage() {
       setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       setLoading(false);
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => { requestSequence.current += 1; };
   }, [date, fetchData]);
 
   useEffect(() => {
@@ -221,17 +228,42 @@ export default function DailyReportPage() {
 
   const hasData = cashEntry !== null || stockCounts.length > 0 || stockPurchases.length > 0 || expenses.length > 0 || debtIncome > 0;
   const currency = tc('currency');
+  const money = (amount: number) => `${formatCurrency(amount)} ${currency}`;
+
+  const kpis = [
+    { label: t('manualIncome'), amount: manualIncome, icon: TrendingUp, tone: 'success' as const },
+    { label: t('barSales'), amount: reportTotals.barSales, icon: TrendingUp, tone: 'success' as const },
+    { label: t('debtIncome'), amount: debtIncome, icon: Users, tone: 'warning' as const },
+    { label: t('totalIncome'), amount: reportTotals.totalIncome, icon: TrendingUp, tone: 'success' as const },
+    { label: t('costOfGoodsSold'), amount: reportTotals.barCost, icon: TrendingDown, tone: 'danger' as const },
+    { label: t('totalExpenses'), amount: reportTotals.totalExpenses, icon: TrendingDown, tone: 'danger' as const },
+    { label: t('inventoryPurchases'), amount: reportTotals.stockPurchaseCost, icon: TrendingDown, tone: 'danger' as const },
+    { label: t('barExpenses'), amount: reportTotals.barExpenses, icon: TrendingDown, tone: 'danger' as const },
+    { label: t('barCashLeft'), amount: reportTotals.barCashLeft, icon: DollarSign, tone: toneForAmount(reportTotals.barCashLeft) },
+    { label: t('accountingNetProfit'), amount: reportTotals.accountingNetProfit, icon: DollarSign, tone: toneForAmount(reportTotals.accountingNetProfit) },
+  ];
+
+  const cashBreakdown = cashEntry
+    ? [
+        { label: tc('paymentMethods.cash'), amount: cashEntry.cash_income },
+        { label: tc('paymentMethods.terminal'), amount: cashEntry.terminal_income },
+        { label: t('card'), amount: cashEntry.card_income },
+        { label: t('playstation'), amount: cashEntry.playstation_income ?? 0 },
+      ].filter((item) => item.amount > 0)
+    : [];
 
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title={t('title')} />
+      <PageHeader
+        title={t('title')}
+        action={(
+          <Field label={t('date')} className="sm:w-64">
+            <DatePicker ariaLabel={t('date')} value={date} max={businessToday} onChange={setDate} />
+          </Field>
+        )}
+      />
 
-      {loadError && <p className="mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-600">{loadError}</p>}
-
-      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-        <label className="label mb-0">{t('date')}</label>
-        <DatePicker value={date} onChange={setDate} className="w-full sm:w-64" />
-      </div>
+      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
 
       {loading ? (
         <div className="space-y-6">
@@ -239,188 +271,76 @@ export default function DailyReportPage() {
           <TableSkeleton rows={4} columns={5} />
         </div>
       ) : !hasData ? (
-        <EmptyState icon={FileText} title={t('noData')} />
+        <Card><EmptyState icon={FileText} title={t('noData')} /></Card>
       ) : (
         <div className="space-y-6">
-          {/* KPIs */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <MetricCard
-              label={t('manualIncome')}
-              value={`${formatCurrency(manualIncome)} ${currency}`}
-              icon={TrendingUp}
-              valueClassName="text-success-600"
-            />
-            <MetricCard
-              label={t('barSales')}
-              value={`${formatCurrency(reportTotals.barSales)} ${currency}`}
-              icon={TrendingUp}
-              valueClassName="text-success-600"
-            />
-            <MetricCard
-              label={t('debtIncome')}
-              value={`${formatCurrency(debtIncome)} ${currency}`}
-              icon={Users}
-              valueClassName="text-danger-600"
-            />
-            <MetricCard
-              label={t('totalIncome')}
-              value={`${formatCurrency(reportTotals.totalIncome)} ${currency}`}
-              icon={TrendingUp}
-              valueClassName="text-success-600"
-            />
-            <MetricCard
-              label={t('costOfGoodsSold')}
-              value={`${formatCurrency(reportTotals.barCost)} ${currency}`}
-              icon={TrendingDown}
-              valueClassName="text-danger-500"
-            />
-            <MetricCard
-              label={t('totalExpenses')}
-              value={`${formatCurrency(reportTotals.totalExpenses)} ${currency}`}
-              icon={TrendingDown}
-              valueClassName="text-danger-500"
-            />
-            <MetricCard
-              label={t('inventoryPurchases')}
-              value={`${formatCurrency(reportTotals.stockPurchaseCost)} ${currency}`}
-              icon={TrendingDown}
-              valueClassName="text-danger-500"
-            />
-            <MetricCard
-              label={t('barExpenses')}
-              value={`${formatCurrency(reportTotals.barExpenses)} ${currency}`}
-              icon={TrendingDown}
-              valueClassName="text-danger-500"
-            />
-            <MetricCard
-              label={t('barCashLeft')}
-              value={`${formatCurrency(reportTotals.barCashLeft)} ${currency}`}
-              icon={DollarSign}
-              valueClassName={reportTotals.barCashLeft >= 0 ? 'text-success-600' : 'text-danger-500'}
-            />
-            <MetricCard
-              label={t('accountingNetProfit')}
-              value={`${formatCurrency(reportTotals.accountingNetProfit)} ${currency}`}
-              icon={DollarSign}
-              valueClassName={reportTotals.accountingNetProfit >= 0 ? 'text-success-600' : 'text-danger-500'}
-            />
+            {kpis.map((kpi) => (
+              <MetricCard key={kpi.label} label={kpi.label} value={money(kpi.amount)} icon={kpi.icon} tone={kpi.tone} />
+            ))}
           </div>
           <p className="text-xs text-gray-500">{t('barCashFormula')}</p>
 
-          {/* Cash Entry */}
           {cashEntry && (
-            <div className="card">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                {t('cashEntry')}
-              </h2>
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                {cashEntry.cash_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">{tc('paymentMethods.cash')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.cash_income)}</p>
-                  </div>
-                )}
-                {cashEntry.terminal_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">{tc('paymentMethods.terminal')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.terminal_income)}</p>
-                  </div>
-                )}
-                {cashEntry.card_income > 0 && (
-                  <div>
-                    <p className="text-gray-500">{t('card')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.card_income)}</p>
-                  </div>
-                )}
-                {(cashEntry.playstation_income ?? 0) > 0 && (
-                  <div>
-                    <p className="text-gray-500">{t('playstation')}</p>
-                    <p className="font-semibold">{formatCurrency(cashEntry.playstation_income ?? 0)}</p>
-                  </div>
-                )}
+            <Card>
+              <SectionHeading size="sm" title={t('cashEntry')} />
+              <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {cashBreakdown.map((item) => (
+                  <StatTile key={item.label} label={item.label} value={formatCurrency(item.amount)} unit={currency} variant="soft" size="sm" />
+                ))}
               </div>
-              {cashEntry.comment && (
-                <p className="mt-2 text-xs text-gray-400">{cashEntry.comment}</p>
-              )}
-            </div>
+              {cashEntry.comment && <p className="mt-3 text-sm text-gray-500">{cashEntry.comment}</p>}
+            </Card>
           )}
 
-          {/* Bar Stock Summary */}
           {stockCounts.length > 0 && (
-            <div className="card">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                {t('stockSummary')}
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 text-gray-500 font-medium">{t('product')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">{t('sold')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">{t('barSales')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">{t('costOfGoodsSold')}</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">{t('grossProfit')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stockCounts.map((sc) => (
-                      <tr key={sc.id} className="border-b border-gray-50">
-                        <td className="py-2">{sc.products?.name ?? sc.product_id}</td>
-                        <td className="py-2 text-right">{sc.sold_quantity}</td>
-                        <td className="py-2 text-right text-success-600">
-                          {formatCurrency(sc.bar_income)}
-                        </td>
-                        <td className="py-2 text-right text-danger-500">
-                          {formatCurrency(sc.bar_cost)}
-                        </td>
-                        <td className="py-2 text-right font-medium">
-                          <span className={sc.bar_profit >= 0 ? 'text-success-600' : 'text-danger-500'}>
-                            {formatCurrency(sc.bar_profit)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="font-semibold">
-                      <td className="py-2">{tc('total')}</td>
-                      <td />
-                      <td className="py-2 text-right text-success-600">
-                        {formatCurrency(reportTotals.barSales)}
-                      </td>
-                      <td className="py-2 text-right text-danger-500">
-                        {formatCurrency(reportTotals.barCost)}
-                      </td>
-                      <td className="py-2 text-right">
-                        {formatCurrency(stockCounts.reduce((s, r) => s + r.bar_profit, 0))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+            <Card padding="none">
+              <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+                <SectionHeading size="sm" title={t('stockSummary')} />
               </div>
-            </div>
+              <DataTable
+                bare
+                className="mt-3"
+                minWidth={680}
+                keyExtractor={(row) => row.id}
+                data={stockCounts}
+                columns={[
+                  { key: 'product', header: t('product'), render: (row) => <span className="font-medium text-gray-900">{row.products?.name ?? row.product_id}</span> },
+                  { key: 'sold', header: t('sold'), align: 'right', render: (row) => formatNumber(row.sold_quantity) },
+                  { key: 'income', header: t('barSales'), align: 'right', render: (row) => <span className="text-success-600">{formatCurrency(row.bar_income)}</span> },
+                  { key: 'cost', header: t('costOfGoodsSold'), align: 'right', render: (row) => <span className="text-danger-500">{formatCurrency(row.bar_cost)}</span> },
+                  { key: 'profit', header: t('grossProfit'), align: 'right', render: (row) => <Money amount={row.bar_profit} currency={null} signed className={row.bar_profit >= 0 ? 'font-medium text-success-600' : 'font-medium'} /> },
+                ]}
+                footer={{
+                  product: tc('total'),
+                  sold: formatNumber(stockCounts.reduce((sum, row) => sum + row.sold_quantity, 0)),
+                  income: <span className="text-success-600">{formatCurrency(reportTotals.barSales)}</span>,
+                  cost: <span className="text-danger-500">{formatCurrency(reportTotals.barCost)}</span>,
+                  profit: formatCurrency(stockCounts.reduce((s, r) => s + r.bar_profit, 0)),
+                }}
+              />
+            </Card>
           )}
 
-          {/* Expenses */}
           {expenses.length > 0 && (
-            <div className="card">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                {t('expensesList')}
-              </h2>
-              <div className="space-y-2">
+            <Card>
+              <SectionHeading size="sm" title={t('expensesList')} />
+              <ul className="mt-3 divide-y divide-gray-100">
                 {expenses.map((e) => (
-                  <div key={e.id} className="flex flex-col gap-1 text-sm sm:flex-row sm:justify-between">
+                  <li key={e.id} className="flex flex-col gap-1 py-2 text-sm sm:flex-row sm:justify-between">
                     <span className="text-gray-600">
-                      {te(`categories.${e.category}` as Parameters<typeof te>[0])}
+                      {te.has(`categories.${e.category}`) ? te(`categories.${e.category}` as Parameters<typeof te>[0]) : e.category}
                       {e.comment ? ` · ${e.comment}` : ''}
                     </span>
-                    <span className="font-medium text-danger-500">{formatCurrency(e.amount)}</span>
-                  </div>
+                    <span className="font-medium text-danger-500"><Money amount={e.amount} /></span>
+                  </li>
                 ))}
-                <div className="flex flex-col gap-1 border-t border-gray-100 pt-2 text-sm font-semibold sm:flex-row sm:justify-between">
+                <li className="flex flex-col gap-1 pt-3 text-sm font-semibold sm:flex-row sm:justify-between">
                   <span>{tc('total')}</span>
-                  <span className="text-danger-500">{formatCurrency(reportTotals.totalExpenses)}</span>
-                </div>
-              </div>
-            </div>
+                  <span className="text-danger-500"><Money amount={reportTotals.totalExpenses} /></span>
+                </li>
+              </ul>
+            </Card>
           )}
         </div>
       )}
