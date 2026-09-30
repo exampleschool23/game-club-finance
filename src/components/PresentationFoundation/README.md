@@ -30,6 +30,24 @@ import { Button, Card, Field, Input, InlineAlert, PageHeader } from '@/component
 | Nothing to show | `EmptyState` |
 | Loading | `Skeleton`, `MetricGridSkeleton`, `TableSkeleton`, `FormSkeleton`, `DetailListSkeleton`, `ChartSkeleton`, `PageSkeleton` |
 
+Design rules ("quiet surfaces, loud numbers"):
+
+- One accent (`primary-*`) for actions and the current nav item. Colour is
+  reserved for meaning: `success` money in / profit, `danger` money out /
+  debts, `warning` needs attention. Never tint a section just to label it;
+  `Card tone` is deliberately faint and should be rare.
+- Numbers are the loudest thing on a page: `MetricCard`/`AmountCard`/
+  `StatTile` set them bold with tight tracking and the currency as a small
+  muted suffix on the same line. Don't add a coloured icon chip or a sentence
+  of explanation under every number; use one subtitle per section or a
+  `title=` tooltip.
+- `PageHeader` no longer draws an icon tile, so every page opens the same way:
+  title, one-line description, actions on the right (they wrap on phones).
+- Disabled `Button`s are plainly grey; secondary actions are `outline` or
+  `ghost`, never a primary that happens to be disabled.
+- The currency label is always `tc('currency')` (сум / so'm / UZS), never a
+  hardcoded "UZS".
+
 Rules of thumb:
 
 - Components take already formatted strings for money and dates; format with

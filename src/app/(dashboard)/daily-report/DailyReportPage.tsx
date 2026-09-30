@@ -255,7 +255,7 @@ export default function DailyReportPage() {
     : [];
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div>
       <PageHeader
         title={t('title')}
         action={(
@@ -329,14 +329,14 @@ export default function DailyReportPage() {
                   { key: 'product', header: t('product'), className: 'sticky left-0 z-10 bg-gray-50', cellClassName: 'bg-white', render: (row) => <span className="font-medium text-gray-900">{row.products?.name ?? row.product_id}</span> },
                   { key: 'sold', header: t('sold'), align: 'right', render: (row) => formatNumber(row.sold_quantity) },
                   { key: 'income', header: t('barSales'), align: 'right', render: (row) => <span className="text-success-600">{formatCurrency(row.bar_income)}</span> },
-                  { key: 'cost', header: t('costOfGoodsSold'), align: 'right', render: (row) => <span className="text-danger-500">{formatCurrency(row.bar_cost)}</span> },
+                  { key: 'cost', header: t('costOfGoodsSold'), align: 'right', render: (row) => <span className="text-danger-600">{formatCurrency(row.bar_cost)}</span> },
                   { key: 'profit', header: t('grossProfit'), align: 'right', render: (row) => <Money amount={row.bar_profit} currency={null} signed className={row.bar_profit >= 0 ? 'font-medium text-success-600' : 'font-medium'} /> },
                 ]}
                 footer={{
                   product: tc('total'),
                   sold: formatNumber(stockCounts.reduce((sum, row) => sum + row.sold_quantity, 0)),
                   income: <span className="text-success-600">{formatCurrency(reportTotals.barSales)}</span>,
-                  cost: <span className="text-danger-500">{formatCurrency(reportTotals.barCost)}</span>,
+                  cost: <span className="text-danger-600">{formatCurrency(reportTotals.barCost)}</span>,
                   profit: formatCurrency(stockCounts.reduce((s, r) => s + r.bar_profit, 0)),
                 }}
               />
@@ -353,12 +353,12 @@ export default function DailyReportPage() {
                       {te.has(`categories.${e.category}`) ? te(`categories.${e.category}` as Parameters<typeof te>[0]) : e.category}
                       {e.comment ? ` · ${e.comment}` : ''}
                     </span>
-                    <span className="font-medium text-danger-500"><Money amount={e.amount} /></span>
+                    <span className="font-medium text-danger-600"><Money amount={e.amount} /></span>
                   </li>
                 ))}
                 <li className="flex flex-col gap-1 pt-3 text-sm font-semibold sm:flex-row sm:justify-between">
                   <span>{tc('total')}</span>
-                  <span className="text-danger-500"><Money amount={reportTotals.totalExpenses} /></span>
+                  <span className="text-danger-600"><Money amount={reportTotals.totalExpenses} /></span>
                 </li>
               </ul>
             </Card>

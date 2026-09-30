@@ -140,7 +140,7 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
       bodyClassName="pb-2"
       footer={(
         <div className="flex w-full flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-3">
+          <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
             <StatTile variant="flat" size="sm" label={t('bulkTotalItems')} value={formatNumber(summary.totalQuantity)} unit={t('pcs')} />
             <StatTile variant="flat" size="sm" align="center" className="text-right" label={t('bulkOrderTotal')} value={formatCurrency(summary.totalPrice)} unit={tc('currency')} tone="primary" />
           </div>
@@ -169,7 +169,7 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
       )}
     >
       <form id="bulk-stock-form" onSubmit={handleSubmit} className="space-y-4">
-        <InlineAlert variant="info" title={t('bulkDescriptionTitle')}>{t('bulkDescription')}</InlineAlert>
+        <p className="text-sm text-gray-500">{t('bulkDescription')}</p>
 
         <SearchInput value={query} onChange={setQuery} placeholder={t('bulkSearchPlaceholder')} />
 

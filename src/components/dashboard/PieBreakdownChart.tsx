@@ -14,7 +14,7 @@ export interface PieBreakdownChartProps {
   totalTone?: 'neutral' | 'danger' | 'success';
 }
 
-/** Donut + legend chart shared by payment-method, income-category and expense charts. */
+/** Donut + legend chart shared by the payment-method and income-category charts. */
 export function PieBreakdownChart({ title, data, total, totalLabel, emptyLabel, totalTone = 'neutral' }: PieBreakdownChartProps) {
   const t = useTranslations('dashboard');
   const tc = useTranslations('common');
@@ -23,33 +23,33 @@ export function PieBreakdownChart({ title, data, total, totalLabel, emptyLabel, 
 
   return (
     <ChartCard title={title}>
-      <div className="mt-4 grid min-h-72 grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_0.9fr]">
+      <div className="mt-4 flex flex-1 flex-col gap-4">
+        <ChartTotal value={total} label={totalLabel ?? t('total')} tone={totalTone} />
         {!hasData ? (
-          <ChartEmpty title={emptyLabel ?? t('noComparisonData')} className="sm:col-span-2" />
+          <ChartEmpty title={emptyLabel ?? t('noComparisonData')} />
         ) : (
-          <>
-            <div className="h-56">
+          // Pie above, legend below: side by side the legend has no room for
+          // "11 505 000 сум 16%" once the card shares a row with a chart.
+          <div className="flex flex-col gap-3">
+            <div className="h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart accessibilityLayer>
-                  <Pie data={data} dataKey="value" innerRadius="58%" outerRadius="88%" paddingAngle={2}>
+                  <Pie data={data} dataKey="value" innerRadius="62%" outerRadius="92%" paddingAngle={2} stroke="none">
                     {data.map((item) => <Cell key={item.name} fill={item.color} />)}
                   </Pie>
                   <Tooltip formatter={(value) => [`${formatCurrency(Number(value))} ${currency}`, t('amount')]} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <ChartTotal value={total} label={totalLabel ?? t('total')} tone={totalTone} />
-              <div
-                className="max-h-44 overflow-y-auto rounded-md pr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                role="region"
-                tabIndex={0}
-                aria-label={t('chartLegendLabel', { title })}
-              >
-                <ChartLegend items={data.map((item) => ({ key: item.name, ...item }))} total={total} />
-              </div>
+            <div
+              className="max-h-48 overflow-y-auto rounded-md pr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              role="region"
+              tabIndex={0}
+              aria-label={t('chartLegendLabel', { title })}
+            >
+              <ChartLegend items={data.map((item) => ({ key: item.name, ...item }))} total={total} />
             </div>
-          </>
+          </div>
         )}
       </div>
     </ChartCard>

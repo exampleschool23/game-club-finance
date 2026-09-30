@@ -7,16 +7,20 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
+  CardHeader,
   CurrencyInput,
   DatePicker,
   DetailListSkeleton,
   EmptyState,
   Field,
+  IconButton,
   InlineAlert,
   Input,
+  MetricCard,
   Modal,
   Money,
   PageHeader,
@@ -26,8 +30,8 @@ import {
   useToast,
 } from '@/components/PresentationFoundation';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
-import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatDate, parseCurrencyInput } from '@/lib/formatters';
+import { cn, todayIso } from '@/lib/utils';
+import { formatCurrency, formatDate, formatNumber, parseCurrencyInput } from '@/lib/formatters';
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
 import { getDebtDateIssue, validateDebtPayment } from '@/lib/validation';
 import { AlertTriangle, Plus, RefreshCw, Users, Wallet } from 'lucide-react';
@@ -322,14 +326,17 @@ export default function DebtsPage() {
   const unpaid = debts.filter((d) => d.status !== 'paid');
   const paid = debts.filter((d) => d.status === 'paid');
   const outstandingTotal = unpaid.reduce((sum, debt) => sum + remainingFor(debt), 0);
+  const debtorCount = new Set(unpaid.map((debt) => debt.person_name.trim().toLocaleLowerCase())).size;
+  const paidTotal = debts.reduce((sum, debt) => sum + (Number(debt.paid_amount) || 0), 0);
   const activePayments = payDebtId ? paymentsMap[payDebtId] ?? [] : [];
   const paymentMethodOptions = enabledPaymentMethods.map((method) => ({
     value: method,
     label: tc(`paymentMethods.${method}`),
   }));
+  const currencySuffix = <span className="ml-1.5 text-sm font-medium tracking-normal text-gray-500">{tc('currency')}</span>;
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="space-y-5">
       <PageHeader
         title={t('title')}
         description={t('description')}
@@ -365,91 +372,110 @@ export default function DebtsPage() {
           />
         </Card>
       ) : (
-        <div className="space-y-6">
+        <>
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <MetricCard
+              label={t('outstandingTotal')}
+              value={<>{formatCurrency(outstandingTotal)}{currencySuffix}</>}
+              tone={outstandingTotal > 0 ? 'danger' : 'default'}
+            />
+            <MetricCard label={t('debtorsCount')} value={formatNumber(debtorCount)} />
+            <MetricCard label={t('paidTotal')} value={<>{formatCurrency(paidTotal)}{currencySuffix}</>} />
+          </section>
+
           {unpaid.length > 0 && (
-            <section>
-              <SectionHeading
-                size="sm"
-                className="mb-3 sm:items-center"
-                title={t('outstanding')}
-                action={(
-                  <Badge variant="danger">
-                    {t('remaining')}: <Money amount={outstandingTotal} />
-                  </Badge>
-                )}
-              />
-              <div className="space-y-3">
+            <Card as="section" padding="none" className="overflow-hidden">
+              <CardHeader>
+                <SectionHeading
+                  size="sm"
+                  title={t('outstanding')}
+                  badge={<Badge variant="neutral" size="sm">{unpaid.length}</Badge>}
+                />
+              </CardHeader>
+              <ul className="divide-y divide-gray-100">
                 {unpaid.map((debt) => {
                   const remaining = remainingFor(debt);
                   const status = getDebtStatus(debt.amount, debt.paid_amount);
                   return (
-                    <Card key={debt.id} as="article" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="break-words font-semibold text-gray-900">{debt.person_name}</p>
-                          <Badge variant={statusVariant(status)}>{t(status)}</Badge>
-                        </div>
-                        <p className="mt-0.5 text-xs text-gray-400">
-                          {formatDate(debt.date, locale)}
-                          {debt.comment ? ` · ${debt.comment}` : ''}
-                        </p>
-                        {debt.paid_amount > 0 && (
-                          <p className="mt-0.5 text-xs text-gray-500">
-                            {t('paidAmount')}: {formatCurrency(debt.paid_amount)} · {t('remaining')}: {formatCurrency(remaining)}
+                    <li key={debt.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <Avatar name={debt.person_name} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="break-words font-semibold text-gray-900">{debt.person_name}</p>
+                            <Badge variant={statusVariant(status)} size="sm">{t(status)}</Badge>
+                          </div>
+                          <p className="mt-0.5 truncate text-xs text-gray-500" title={debt.comment ?? undefined}>
+                            {formatDate(debt.date, locale)}
+                            {debt.comment ? ` · ${debt.comment}` : ''}
                           </p>
-                        )}
+                        </div>
                       </div>
-                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-                        <span className="break-words font-bold text-danger-600 sm:text-right">
-                          <Money amount={debt.amount} />
-                        </span>
+                      <div className="flex items-center justify-between gap-3 sm:justify-end">
+                        <div className="text-right">
+                          <p className={cn('font-semibold tabular-nums', remaining > 0 ? 'text-danger-600' : 'text-gray-900')}>
+                            <Money amount={remaining} />
+                          </p>
+                          {debt.paid_amount > 0 && (
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {t('paidAmount')}: {formatCurrency(debt.paid_amount)} / {formatCurrency(debt.amount)}
+                            </p>
+                          )}
+                        </div>
                         {canManage && (
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => openAddDebtModal(debt.person_name)} icon={<Plus size={14} aria-hidden="true" />}>
-                              {t('addDebt')}
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button size="sm" onClick={() => openPayModal(debt.id)} icon={<Wallet size={14} aria-hidden="true" />}>
+                              {t('acceptPayment')}
                             </Button>
-                            <Button variant="secondary" size="sm" className="flex-1 sm:flex-none" onClick={() => openPayModal(debt.id)} icon={<Wallet size={14} aria-hidden="true" />}>
-                              {t('addPayment')}
-                            </Button>
+                            <IconButton
+                              variant="ghost"
+                              size="sm"
+                              label={`${t('addDebt')} · ${debt.person_name}`}
+                              icon={<Plus size={16} aria-hidden="true" />}
+                              onClick={() => openAddDebtModal(debt.person_name)}
+                            />
                           </div>
                         )}
                       </div>
-                    </Card>
+                    </li>
                   );
                 })}
-              </div>
-            </section>
+              </ul>
+            </Card>
           )}
 
           {paid.length > 0 && (
-            <section>
-              <SectionHeading
-                size="sm"
-                className="mb-3 sm:items-center"
-                title={t('paid')}
-                badge={<Badge variant="neutral" size="sm">{paid.length}</Badge>}
-                action={(
-                  <Button variant="ghost" size="sm" aria-expanded={showPaid} onClick={() => setShowPaid((value) => !value)}>
-                    {showPaid ? t('hidePaid') : t('showPaid')}
-                  </Button>
-                )}
-              />
+            <Card as="section" padding="none" className="overflow-hidden">
+              <CardHeader>
+                <SectionHeading
+                  size="sm"
+                  title={t('paid')}
+                  badge={<Badge variant="neutral" size="sm">{paid.length}</Badge>}
+                  action={(
+                    <Button variant="ghost" size="sm" aria-expanded={showPaid} onClick={() => setShowPaid((value) => !value)}>
+                      {showPaid ? t('hidePaid') : t('showPaid')}
+                    </Button>
+                  )}
+                />
+              </CardHeader>
               {showPaid && (
-                <div className="space-y-2">
+                <ul className="divide-y divide-gray-100">
                   {paid.map((debt) => (
-                    <Card key={debt.id} as="article" padding="sm" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-700">{debt.person_name}</p>
-                        <p className="text-xs text-gray-400">{formatDate(debt.date, locale)}</p>
+                    <li key={debt.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+                      <Avatar name={debt.person_name} size="sm" tone="neutral" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-gray-700">{debt.person_name}</p>
+                        <p className="text-xs text-gray-500">{formatDate(debt.date, locale)}</p>
                       </div>
-                      <span className="break-words font-bold text-success-600 sm:text-right"><Money amount={debt.amount} /></span>
-                    </Card>
+                      <span className="shrink-0 font-semibold tabular-nums text-gray-500"><Money amount={debt.amount} /></span>
+                      <Badge variant="success" size="sm">{t('paid')}</Badge>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
-            </section>
+            </Card>
           )}
-        </div>
+        </>
       )}
 
       <Modal

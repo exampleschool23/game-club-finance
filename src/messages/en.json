@@ -239,7 +239,8 @@
     "loadError": "Could not load the daily cash entry. Check your connection and try again.",
     "saveError": "Could not save the entry. Check your connection and try again.",
     "duplicateEntryError": "An entry for this date already exists. Reload the page to edit it.",
-    "deleteError": "Could not delete the entry. Try again."
+    "deleteError": "Could not delete the entry. Try again.",
+    "headerDescription": "Game club income only, by payment method. Bar sales are calculated from Closing stock."
   },
   "closingStock": {
     "viewerReadOnlyTitle": "View-only access",
@@ -461,7 +462,8 @@
     "clearFilters": "Clear filters",
     "stockUnits": "{count} units",
     "deleted": "Product deleted",
-    "ownerOnlyStock": "Only owners can edit the stock count."
+    "ownerOnlyStock": "Only owners can edit the stock count.",
+    "catalog": "Product catalog"
   },
   "expenses": {
     "title": "Expenses",
@@ -540,7 +542,11 @@
     "saveError": "Could not save. Check your connection and access, then try again.",
     "paymentsLoadError": "Could not load payment history.",
     "paymentsLoading": "Loading payment history…",
-    "clubChanged": "The selected club changed. Close this form and open it again."
+    "clubChanged": "The selected club changed. Close this form and open it again.",
+    "acceptPayment": "Accept payment",
+    "outstandingTotal": "Outstanding",
+    "debtorsCount": "Debtors",
+    "paidTotal": "Paid · all time"
   },
   "dailyReport": {
     "title": "Daily Report",
@@ -646,7 +652,14 @@
     "disabled": "Disabled",
     "paymentMethodsHint": "Changes apply only after saving.",
     "saveError": "Could not save. Check your connection and owner access, then try again.",
-    "accountLoadError": "Could not load your account details. Refresh the page to try again."
+    "accountLoadError": "Could not load your account details. Refresh the page to try again.",
+    "tabClub": "Club",
+    "tabClubs": "Clubs",
+    "tabProfile": "Profile",
+    "tabDeveloper": "Developer",
+    "unsavedChanges": "{count, plural, one {# unsaved change} other {# unsaved changes}}",
+    "discard": "Discard",
+    "selectedClub": "Selected"
   },
   "team": {
     "title": "Team",
@@ -736,7 +749,17 @@
     "promoteOwnerAction": "Make owner",
     "demoteOwnerTitle": "Remove owner rights?",
     "demoteOwnerConfirm": "{name} will no longer be an owner of {club} and will become {role}.",
-    "demoteOwnerAction": "Change role"
+    "demoteOwnerAction": "Change role",
+    "subtitle": "Who can open the cash desk, stock and reports",
+    "invite": "Invite",
+    "inviteTitle": "Invite a team member",
+    "inviteHelp": "Send this link. After the person signs in with Google, they will appear here under “Waiting for approval” and you can choose their club and role.",
+    "loginLink": "Sign-in link",
+    "copyLink": "Copy",
+    "linkCopied": "Link copied",
+    "copyFailed": "Could not copy the link. Select it and copy manually.",
+    "requestedAt": "requested {date}",
+    "everything": "Everything"
   },
   "approval": {
     "title": "Waiting for owner approval",
@@ -816,7 +839,9 @@
     "loadError": "Could not load owner profit balances. Check your connection and try again.",
     "saveError": "Could not record the withdrawal. Check your connection and try again.",
     "deleteError": "Could not delete the withdrawal. Try again.",
-    "deleteConfirmDetailed": "Delete the {source} withdrawal of {amount} for {month}? The amount will return to that month's available balance."
+    "deleteConfirmDetailed": "Delete the {source} withdrawal of {amount} for {month}? The amount will return to that month's available balance.",
+    "breakdownTitle": "Breakdown by source",
+    "recordedColumn": "Recorded"
   },
   "calendar": {
     "selectDate": "Select date",
@@ -933,7 +958,7 @@
     "effectiveDate": "Effective date",
     "rateHelp": "Changes apply today, or on the joining date for upcoming employees. Earlier rates are preserved.",
     "salaryType": "Salary type",
-    "amount": "Amount (UZS)",
+    "amount": "Amount",
     "kpiPercent": "KPI from owner profit (%)",
     "entryType": "Entry type",
     "payment": "Payment",
@@ -995,7 +1020,8 @@
     "noClubDescription": "Select a club to see its employees and salaries.",
     "noRates": "No salary rates yet.",
     "permissionError": "You do not have permission to change salaries in this club. Ask a club owner for salary editing access.",
-    "checkError": "The values were rejected. Check the amount, percentage and date, then try again."
+    "checkError": "The values were rejected. Check the amount, percentage and date, then try again.",
+    "viewSwitcher": "Section"
   },
   "testChecklist": {
     "title": "System sanity checks",

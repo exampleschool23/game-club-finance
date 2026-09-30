@@ -5,9 +5,11 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
+  CardHeader,
   Checkbox,
   CurrencyInput,
   DataTable,
@@ -19,11 +21,12 @@ import {
   Modal,
   PageHeader,
   SearchInput,
+  SectionHeading,
   SegmentedControl,
-  Select,
   TableSkeleton,
   useConfirm,
   useToast,
+  type SegmentedOption,
 } from '@/components/PresentationFoundation';
 import { formatCurrency, formatCurrencyInput, formatNumber, formatUnitCurrency } from '@/lib/formatters';
 import {
@@ -33,7 +36,8 @@ import {
   type ProductWriteForm,
 } from '@/lib/productWrites';
 import { LOW_STOCK_DEFAULT, resolveLowStockThreshold, stockLevel } from '@/lib/calculations/stock';
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ListOrdered, Lock, Package, Plus, RefreshCcw, Search, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ListOrdered, Lock, Package, Pencil, Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import type { Product } from '@/types';
 
 type ProductForm = ProductWriteForm;
@@ -370,6 +374,10 @@ export default function ProductsPage() {
     { value: 'out', label: t('outOfStock') },
     { value: 'inactive', label: tc('inactive') },
   ];
+  const categoryChipOptions: SegmentedOption<string>[] = [
+    { value: '', label: t('allCategories') },
+    ...categoryOptions.map((category) => ({ value: category, label: category })),
+  ];
   const editingProduct = editingId ? products.find((product) => product.id === editingId) : undefined;
   const editingInactive = Boolean(editingProduct && !editingProduct.is_active && !editingProduct.is_deleted);
   const editingArchived = Boolean(editingProduct?.is_deleted);
@@ -422,70 +430,77 @@ export default function ProductsPage() {
               {loadError}
             </InlineAlert>
           )}
-          <Card>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <SearchInput
-                className="flex-1"
-                value={search}
-                onChange={setSearch}
-                placeholder={t('search')}
-                clearLabel={t('clearFilters')}
-                disabled={reordering}
-              />
-              <Select
-                aria-label={t('category')}
-                className="sm:max-w-56"
-                value={selectedCategory}
-                disabled={reordering}
-                onChange={(event) => setSelectedCategory(event.target.value)}
-              >
-                <option value="">{t('allCategories')}</option>
-                {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-              </Select>
-              {canManageInventory && (
-                <Button
-                  variant={reordering ? 'primary' : 'outline'}
-                  aria-pressed={reordering}
-                  disabled={Boolean(movingId)}
-                  onClick={() => setReordering(!reordering)}
-                  icon={reordering ? <Check size={16} aria-hidden="true" /> : <ListOrdered size={16} aria-hidden="true" />}
-                >
-                  {t(reordering ? 'finishReordering' : 'reorder')}
-                </Button>
-              )}
-            </div>
-            {reordering ? (
-              <InlineAlert variant="info" className="mt-3">{t('reorderHelp')}</InlineAlert>
-            ) : (
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <SegmentedControl variant="chips" label={t('currentStock')} options={stockFilterOptions} value={stockFilter} onChange={setStockFilter} />
-                <span className="text-sm text-gray-500 sm:ml-auto" role="status">
-                  {t('resultCount', { count: filteredProducts.length, total: products.length })}
-                </span>
-              </div>
-            )}
-          </Card>
-
-          {filteredProducts.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={Search}
-                title={t('noResults')}
-                action={(
-                  <Button variant="outline" onClick={() => { setSearch(''); setSelectedCategory(''); setStockFilter('all'); }}>
-                    {t('clearFilters')}
+          <Card padding="none" className="overflow-hidden">
+            <CardHeader className="space-y-4">
+              <SectionHeading
+                title={t('catalog')}
+                description={<span role="status">{t('resultCount', { count: filteredProducts.length, total: products.length })}</span>}
+                action={canManageInventory ? (
+                  <Button
+                    variant={reordering ? 'primary' : 'outline'}
+                    size="sm"
+                    aria-pressed={reordering}
+                    disabled={Boolean(movingId)}
+                    onClick={() => setReordering(!reordering)}
+                    icon={reordering ? <Check size={16} aria-hidden="true" /> : <ListOrdered size={16} aria-hidden="true" />}
+                  >
+                    {t(reordering ? 'finishReordering' : 'reorder')}
                   </Button>
-                )}
+                ) : undefined}
               />
-            </Card>
-          ) : (
+              {reordering ? (
+                <InlineAlert variant="info">{t('reorderHelp')}</InlineAlert>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <SearchInput
+                      className="lg:max-w-sm lg:flex-1"
+                      controlSize="sm"
+                      value={search}
+                      onChange={setSearch}
+                      placeholder={t('search')}
+                      clearLabel={t('clearFilters')}
+                    />
+                    <SegmentedControl variant="chips" label={t('currentStock')} options={stockFilterOptions} value={stockFilter} onChange={setStockFilter} />
+                  </div>
+                  {categoryOptions.length > 0 && (
+                    <SegmentedControl variant="chips" label={t('category')} options={categoryChipOptions} value={selectedCategory} onChange={setSelectedCategory} />
+                  )}
+                </>
+              )}
+            </CardHeader>
+
             <DataTable
+              bare
+              label={t('catalog')}
               keyExtractor={(r) => r.id}
               data={filteredProducts}
               stickyHeader
-              minWidth={reordering ? 720 : 560}
+              minWidth={reordering ? 760 : 640}
+              emptyState={(
+                <EmptyState
+                  compact
+                  icon={Package}
+                  title={t('noResults')}
+                  action={(
+                    <Button variant="outline" size="sm" onClick={() => { setSearch(''); setSelectedCategory(''); setStockFilter('all'); }}>
+                      {t('clearFilters')}
+                    </Button>
+                  )}
+                />
+              )}
               columns={[
-                { key: 'name', header: t('name'), cellClassName: 'font-medium text-gray-900' },
+                {
+                  key: 'name',
+                  header: t('name'),
+                  className: 'min-w-[200px]',
+                  render: (r) => (
+                    <span className="flex items-center gap-3">
+                      <Avatar name={r.name} size="sm" tone="neutral" />
+                      <span className={cn('min-w-0 break-words font-medium', r.is_active ? 'text-gray-900' : 'text-gray-500')}>{r.name}</span>
+                    </span>
+                  ),
+                },
                 ...(canManageInventory && reordering ? [{
                   key: 'sort_order',
                   header: t('order'),
@@ -512,12 +527,18 @@ export default function ProductsPage() {
                     );
                   },
                 }] : []),
-                ...(!selectedCategory || reordering ? [{ key: 'category', header: t('category'), className: 'hidden lg:table-cell', render: (r: Product) => r.category || '—' }] : []),
+                ...(!selectedCategory || reordering ? [{
+                  key: 'category',
+                  header: t('category'),
+                  className: 'hidden lg:table-cell',
+                  render: (r: Product) => (r.category ? <Badge variant="neutral">{r.category}</Badge> : <span className="text-gray-300">—</span>),
+                }] : []),
                 {
                   key: 'sale_price',
                   header: `${t('salePrice')} (${tc('currency')})`,
                   align: 'right',
                   className: 'whitespace-nowrap',
+                  cellClassName: 'font-medium text-gray-900',
                   render: (r) => formatCurrency(r.sale_price),
                 },
                 {
@@ -525,6 +546,7 @@ export default function ProductsPage() {
                   header: `${t('costPrice')} (${tc('currency')})`,
                   align: 'right',
                   className: 'hidden whitespace-nowrap lg:table-cell',
+                  cellClassName: 'text-gray-600',
                   render: (r) => formatUnitCurrency(r.cost_price),
                 },
                 {
@@ -533,12 +555,12 @@ export default function ProductsPage() {
                   align: 'right',
                   className: 'whitespace-nowrap',
                   render: (r) => {
-                    if (r.tracks_inventory === false) return <Badge variant="purple">{t('madeToOrder')}</Badge>;
+                    if (r.tracks_inventory === false) return <Badge variant="outline">{t('madeToOrder')}</Badge>;
                     const quantity = t('stockUnits', { count: formatNumber(r.current_stock) });
                     const level = stockLevel(r.current_stock, r.low_stock_threshold);
                     if (level === 'out') return <Badge variant="danger">{t('outOfStock')} · {quantity}</Badge>;
                     if (level === 'low') return <Badge variant="warning">{t('lowStock')} · {quantity}</Badge>;
-                    return <span>{quantity}</span>;
+                    return <Badge variant="neutral">{quantity}</Badge>;
                   },
                 },
                 {
@@ -551,24 +573,24 @@ export default function ProductsPage() {
                 },
                 ...(canManageInventory ? [{
                   key: 'actions',
-                  header: tc('actions'),
+                  header: <span className="sr-only">{tc('actions')}</span>,
                   align: 'right' as const,
+                  className: 'w-14',
                   render: (r: Product) => (
-                    <Button
+                    <IconButton
                       variant="ghost"
                       size="sm"
-                      className="text-primary-700"
+                      label={`${tc('edit')}: ${r.name}`}
+                      icon={<Pencil size={15} aria-hidden="true" />}
                       disabled={Boolean(r.is_deleted)}
-                      title={r.is_deleted ? t('inactiveEditBlocked') : undefined}
+                      title={r.is_deleted ? t('inactiveEditBlocked') : `${tc('edit')}: ${r.name}`}
                       onClick={() => openEdit(r)}
-                    >
-                      {tc('edit')}
-                    </Button>
+                    />
                   ),
                 }] : []),
               ]}
             />
-          )}
+          </Card>
         </div>
       )}
 
@@ -639,16 +661,16 @@ export default function ProductsPage() {
               />
             </Field>
           </div>
-          <Card tone="muted" padding="sm" className="border-purple-100 bg-purple-50">
+          <Card tone="muted" padding="sm">
             <Checkbox
               id="made_to_order"
               checked={!form.tracks_inventory}
               disabled={!isOwner || Boolean(editingId)}
               onChange={(e) => set('tracks_inventory', !e.target.checked)}
-              label={<span className="text-purple-900">{t('madeToOrder')}</span>}
+              label={t('madeToOrder')}
               description={(
                 <>
-                  <span className="text-purple-700">{t('madeToOrderHelp')}</span>
+                  <span>{t('madeToOrderHelp')}</span>
                   {editingId
                     ? <span className="mt-1 block">{t('trackingModeLockedAfterCreation')}</span>
                     : !isOwner && <span className="mt-1 block">{t('ownerOnlyTrackingMode')}</span>}

@@ -10,7 +10,6 @@ import {
   CreditCard,
   Gamepad2,
   MonitorSmartphone,
-  RefreshCcw,
   RotateCw,
   Save,
   Trash2,
@@ -100,35 +99,29 @@ function entryToForm(entry: DailyCashEntry): CashFormData {
   };
 }
 
-interface PaymentCardProps {
+interface PaymentFieldProps {
   id: string;
   label: string;
   value: string;
   icon: ElementType;
-  iconClassName: string;
-  iconBgClassName: string;
+  currency: string;
   disabled: boolean;
   onChange: (value: string) => void;
 }
 
-function PaymentCard({ id, label, value, icon: Icon, iconClassName, iconBgClassName, disabled, onChange }: PaymentCardProps) {
-  const amount = parseAmount(value);
-
+function PaymentField({ id, label, value, icon: Icon, currency, disabled, onChange }: PaymentFieldProps) {
   return (
-    <Card padding="sm">
-      <label htmlFor={id} className="flex items-start gap-3">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconBgClassName}`}>
-          <Icon size={19} className={iconClassName} aria-hidden="true" />
+    <Field
+      htmlFor={id}
+      label={(
+        <span className="inline-flex items-center gap-1.5">
+          <Icon size={15} className="text-gray-400" aria-hidden="true" />
+          {label}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-xs font-bold text-gray-700">{label}</span>
-          <span className="mt-1 block break-words text-lg font-bold leading-tight tabular-nums text-gray-950">
-            <Money amount={amount} currencyClassName="text-[11px] text-gray-500" />
-          </span>
-        </span>
-      </label>
-      <CurrencyInput id={id} controlSize="sm" className="mt-3 font-semibold" value={value} disabled={disabled} onValueChange={onChange} />
-    </Card>
+      )}
+    >
+      <CurrencyInput id={id} className="font-semibold" value={value} disabled={disabled} onValueChange={onChange} trailingAddon={currency} />
+    </Field>
   );
 }
 
@@ -408,7 +401,7 @@ export default function DailyCashPage() {
   const header = (
     <PageHeader
       title={t('title')}
-      description={t('subtitle')}
+      description={t('headerDescription')}
       action={(
         <ButtonLink href="/reports" iconRight={<TrendingUp size={16} className="text-primary-600" aria-hidden="true" />}>
           {t('reports')}
@@ -427,11 +420,11 @@ export default function DailyCashPage() {
     );
   }
 
-  const paymentCards: Array<{ key: 'cash_income' | 'terminal_income' | 'card_income' | 'playstation_income'; label: string; icon: ElementType; bg: string; color: string; visible: boolean }> = [
-    { key: 'cash_income', label: t('cash'), icon: Banknote, bg: 'bg-success-50', color: 'text-success-600', visible: enabledPaymentMethods.includes('cash') },
-    { key: 'terminal_income', label: t('terminal'), icon: MonitorSmartphone, bg: 'bg-primary-50', color: 'text-primary-600', visible: enabledPaymentMethods.includes('terminal') },
-    { key: 'card_income', label: t('card'), icon: CreditCard, bg: 'bg-purple-50', color: 'text-purple-600', visible: enabledPaymentMethods.includes('card') },
-    { key: 'playstation_income', label: t('playstation'), icon: Gamepad2, bg: 'bg-warning-50', color: 'text-warning-600', visible: true },
+  const paymentCards: Array<{ key: 'cash_income' | 'terminal_income' | 'card_income' | 'playstation_income'; label: string; icon: ElementType; visible: boolean }> = [
+    { key: 'cash_income', label: t('cash'), icon: Banknote, visible: enabledPaymentMethods.includes('cash') },
+    { key: 'terminal_income', label: t('terminal'), icon: MonitorSmartphone, visible: enabledPaymentMethods.includes('terminal') },
+    { key: 'card_income', label: t('card'), icon: CreditCard, visible: enabledPaymentMethods.includes('card') },
+    { key: 'playstation_income', label: t('playstation'), icon: Gamepad2, visible: true },
   ];
 
   const savedBreakdown = entry
@@ -461,18 +454,21 @@ export default function DailyCashPage() {
       )}
 
       <Card as="form" onSubmit={handleSave} aria-busy={saving || undefined}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <Field label={t('date')} className="w-full sm:max-w-[300px]">
-            <DatePicker
-              ariaLabel={t('date')}
-              value={form.date}
-              max={businessToday}
-              onChange={(value) => setField('date', value)}
-            />
-          </Field>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-600">{t('date')}</span>
+            <div className="w-full max-w-[220px]">
+              <DatePicker
+                ariaLabel={t('date')}
+                value={form.date}
+                max={businessToday}
+                onChange={(value) => setField('date', value)}
+              />
+            </div>
+          </div>
 
           {entry && deadline && editable && (
-            <Badge variant="success" icon={<Clock3 size={15} aria-hidden="true" />} className="self-start px-3 py-2 text-sm sm:self-end">
+            <Badge variant="success" icon={<Clock3 size={15} aria-hidden="true" />} className="self-start px-3 py-2 text-sm sm:self-center">
               {isOwner ? t('ownerAccessEdit') : (
                 <>
                   {t('editUntil', { time: formatDateTime(deadline, locale) })}
@@ -483,19 +479,13 @@ export default function DailyCashPage() {
           )}
         </div>
 
-        <InlineAlert variant="info" title={t('gameClubOnly')} className="mt-4">
-          {t('barSalesNote')}
-        </InlineAlert>
-
         {locked && (
           <InlineAlert variant="warning" className="mt-4">{t('entryLocked')}</InlineAlert>
         )}
 
-        <SectionHeading title={t('incomeByMethod')} description={t('enterIncome')} className="mt-5" />
-
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {paymentCards.filter((card) => card.visible).map((card) => (
-            <PaymentCard
+            <PaymentField
               key={card.key}
               id={`daily-cash-${card.key}`}
               label={card.label}
@@ -503,31 +493,27 @@ export default function DailyCashPage() {
               disabled={disabled}
               onChange={(value) => setField(card.key, value)}
               icon={card.icon}
-              iconBgClassName={card.bg}
-              iconClassName={card.color}
+              currency={tc('currency')}
             />
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-success-500/30 bg-success-50 px-4 py-3" aria-live="polite">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('totalGameClubIncome')}</p>
-            <p className="mt-1 break-words text-2xl font-bold tabular-nums text-success-600">
-              <Money amount={total} />
-            </p>
-          </div>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/70">
-            <TrendingUp size={19} className="text-success-600" aria-hidden="true" />
-          </span>
+        <div className="mt-6" aria-live="polite">
+          <p className="text-sm font-medium text-gray-500">{t('totalGameClubIncome')}</p>
+          <p className="mt-1 break-words text-3xl font-bold tracking-tight tabular-nums text-gray-950">
+            <Money amount={total} currencyClassName="text-sm font-medium text-gray-500" />
+          </p>
         </div>
 
-        <div className={`mt-3 grid grid-cols-1 gap-3 ${canSeeNetProfit ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
-          <StatTile label={t('barSales')} value={formatCurrency(barSummary.sales)} unit={tc('currency')} />
-          <StatTile label={t('barProfit')} value={formatCurrency(barSummary.profit)} unit={tc('currency')} tone={toneForAmount(barSummary.profit)} />
-          {canSeeNetProfit && financeSummary && (
-            <StatTile label={t('netProfit')} value={formatCurrency(netProfit)} unit={tc('currency')} tone={toneForAmount(netProfit, 'primary')} />
-          )}
-        </div>
+        <Card tone="muted" padding="sm" className="mt-3">
+          <div className={`grid grid-cols-1 divide-y divide-gray-200 sm:divide-x sm:divide-y-0 ${canSeeNetProfit ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+            <StatTile variant="flat" size="sm" className="py-2 sm:pr-4 sm:py-0" label={t('barSales')} value={formatCurrency(barSummary.sales)} unit={tc('currency')} />
+            <StatTile variant="flat" size="sm" className="py-2 sm:px-4 sm:py-0" label={t('barProfit')} value={formatCurrency(barSummary.profit)} unit={tc('currency')} tone={toneForAmount(barSummary.profit)} />
+            {canSeeNetProfit && financeSummary && (
+              <StatTile variant="flat" size="sm" className="py-2 sm:px-4 sm:py-0" label={t('netProfit')} value={formatCurrency(netProfit)} unit={tc('currency')} tone={toneForAmount(netProfit)} />
+            )}
+          </div>
+        </Card>
 
         <Field label={t('commentOptional')} htmlFor="daily-cash-comment" className="mt-6">
           <Textarea
@@ -543,8 +529,8 @@ export default function DailyCashPage() {
 
         {error && <InlineAlert variant="danger" className="mt-4">{error}</InlineAlert>}
 
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.2fr]">
-          <Button variant="outline" size="lg" disabled={saving || loadFailed || !isDirty} onClick={handleReset} icon={<RefreshCcw size={18} aria-hidden="true" />}>
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Button type="button" variant="ghost" disabled={saving || loadFailed || !isDirty} onClick={handleReset}>
             {t('reset')}
           </Button>
           <Button type="submit" size="lg" disabled={disabled} loading={saving} loadingLabel={tc('saving')} icon={<Save size={18} aria-hidden="true" />}>

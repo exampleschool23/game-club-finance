@@ -13,6 +13,8 @@ import {
   Button,
   ButtonLink,
   Card,
+  CardFooter,
+  CardHeader,
   CurrencyInput,
   DataTable,
   DatePicker,
@@ -51,10 +53,10 @@ import { classifyStockWriteError, type StockWriteErrorLike } from '@/lib/stockWr
 import {
   AlertTriangle,
   Check,
-  CheckCircle,
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  HelpCircle,
   Package,
   RefreshCcw,
   ShoppingCart,
@@ -478,7 +480,6 @@ export default function StockPurchasePage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        icon={<ShoppingCart size={26} aria-hidden="true" />}
         title={t('title')}
         description={t('description')}
       />
@@ -511,13 +512,9 @@ export default function StockPurchasePage() {
         </Card>
       )}
 
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_480px]">
+      <div className={selectedProduct ? 'grid gap-5 2xl:grid-cols-[minmax(0,1fr)_480px]' : 'grid gap-5'}>
         <Card as="form" id="stock-purchase-form" onSubmit={handleSubmit}>
-          <SectionHeading
-            icon={<ShoppingCart size={18} aria-hidden="true" />}
-            title={t('addStockPurchase')}
-            className="mb-5"
-          />
+          <SectionHeading title={t('addStockPurchase')} className="mb-5" />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t('date')} required>
@@ -546,7 +543,6 @@ export default function StockPurchasePage() {
                 type="text"
                 inputMode="numeric"
                 className="font-semibold"
-                leadingIcon={<Package size={17} className="text-primary-600" />}
                 trailingAddon={t('pcs')}
                 value={form.quantity}
                 disabled={formDisabled}
@@ -570,7 +566,7 @@ export default function StockPurchasePage() {
             <Field label={`${t('salePrice')} (${t('perPcs')})`} htmlFor="purchase-sale" hint={salePriceChanged ? `${t('currentSavedPrice')} ${formatCurrency(savedSalePrice)} ${currency}` : undefined}>
               <CurrencyInput
                 id="purchase-sale"
-                className="bg-success-50/40 font-semibold"
+                className="font-semibold"
                 trailingAddon={currency}
                 value={form.sale_price}
                 disabled={formDisabled}
@@ -605,109 +601,107 @@ export default function StockPurchasePage() {
             </Field>
           </div>
 
-          <Card tone="success" className="mt-4">
-            <div className="mb-3 flex items-center gap-2">
-              <CheckCircle size={20} className="text-success-600" aria-hidden="true" />
-              <h3 className="font-bold text-success-800">{t('purchaseSummary')}</h3>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <StatTile variant="flat" align="center" label={t('totalCost')} value={formatCurrency(totalCost)} unit={currency} />
-              <StatTile variant="flat" align="center" className="sm:border-x sm:border-success-100" label={t('totalSaleValue')} value={formatCurrency(totalSaleValue)} unit={currency} />
-              <StatTile variant="flat" align="center" label={t('estimatedProfit')} value={formatCurrency(estimatedProfit)} unit={currency} tone={toneForAmount(estimatedProfit)} />
+          <Card tone="muted" padding="sm" className="mt-5">
+            <p className="text-xs font-medium text-gray-500">{t('purchaseSummary')}</p>
+            <div className="mt-2 grid grid-cols-1 divide-y divide-gray-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <StatTile variant="flat" size="sm" className="py-2 sm:pr-4 sm:py-0" label={t('totalCost')} value={formatCurrency(totalCost)} unit={currency} />
+              <StatTile variant="flat" size="sm" className="py-2 sm:px-4 sm:py-0" label={t('totalSaleValue')} value={formatCurrency(totalSaleValue)} unit={currency} />
+              <StatTile variant="flat" size="sm" className="py-2 sm:px-4 sm:py-0" label={t('estimatedProfit')} value={formatCurrency(estimatedProfit)} unit={currency} tone={toneForAmount(estimatedProfit)} />
             </div>
             {selectedProduct && quantity > 0 && costPrice > 0 && (
-              <p className="mt-3 rounded-md bg-white/70 px-3 py-2 text-center text-sm font-medium text-success-800">
-                {t('newAverageBuyPrice')} {formatUnitCurrency(projectedAverageCost)} {currency}
+              <p className="mt-3 text-sm text-gray-600">
+                {t('newAverageBuyPrice')} <span className="font-semibold tabular-nums text-gray-900">{formatUnitCurrency(projectedAverageCost)} {currency}</span>
               </p>
             )}
           </Card>
 
           {formError && <InlineAlert variant="danger" className="mt-3">{formError}</InlineAlert>}
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1.8fr]">
-            <Button variant="outline" onClick={resetForm} disabled={saving || formDisabled} icon={<RefreshCcw size={16} aria-hidden="true" />}>
+          <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button type="button" variant="ghost" onClick={resetForm} disabled={saving || formDisabled}>
               {t('reset')}
             </Button>
             <Button type="submit" loading={saving} loadingLabel={tc('saving')} disabled={formDisabled} icon={<Check size={17} aria-hidden="true" />}>
               {t('submit')}
             </Button>
           </div>
-        </Card>
 
-        <Card as="aside">
-          <SectionHeading
-            icon={<Package size={18} aria-hidden="true" />}
-            title={t('productInfo')}
-            badge={selectedProductLevel === 'out'
-              ? <Badge variant="danger">{t('outOfStock')}</Badge>
-              : selectedProductLevel === 'low'
-                ? <Badge variant="warning">{t('lowStock')}</Badge>
-                : selectedProductLevel === 'ok'
-                  ? <Badge variant="success">{t('inStock')}</Badge>
-                  : <Badge variant="neutral">{t('selectProduct')}</Badge>}
-            className="mb-5"
-          />
-
-          {selectedProduct ? (
-            <>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <Avatar name={selectedProduct.name} size="lg" tone="neutral" />
-                <div className="min-w-0">
-                  <h3 className="break-words text-xl font-bold text-gray-900">{selectedProduct.name}</h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    {t('salePriceLabel')} <span className="font-bold text-success-600">{formatCurrency(salePrice)} {currency}</span>
-                  </p>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {t('costPriceLabel')} <span className="font-bold text-danger-600">{formatUnitCurrency(selectedProduct.cost_price)} {currency}</span>
-                  </p>
-                  {quantity > 0 && costPrice > 0 && (
-                    <p className="mt-1 text-sm text-gray-600">
-                      {t('newAvgCost')} <span className="font-bold text-primary-600">{formatUnitCurrency(projectedAverageCost)} {currency}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 rounded-lg border border-purple-100 bg-purple-50/30 p-4 sm:grid-cols-2">
-                <StatTile variant="flat" size="sm" label={t('currentStock')} value={formatNumber(selectedProduct.current_stock)} unit={t('pcs')} tone="primary" />
-                <StatTile variant="flat" size="sm" label={t('lowStockAlert')} value={formatNumber(resolveLowStockThreshold(selectedProduct.low_stock_threshold))} unit={t('pcs')} tone="warning" />
-                <StatTile variant="flat" size="sm" label={t('stockValue')} value={formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} unit={currency} tone="success" className="sm:col-span-2" />
-              </div>
-            </>
-          ) : (
-            <EmptyState compact bordered icon={Package} title={t('selectProductHint')} />
-          )}
-
-          <Card tone="primary" className="mt-5 border-primary-100 bg-primary-50/40">
-            <h3 className="font-bold text-gray-900">{t('howItWorks')}</h3>
-            <ul className="mt-3 space-y-2 text-sm text-gray-700">
+          <details className="group mt-4 text-sm">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-gray-500 hover:text-gray-900 [&::-webkit-details-marker]:hidden">
+              <HelpCircle size={15} aria-hidden="true" />
+              {t('howItWorks')}
+            </summary>
+            <ul className="mt-2 space-y-1 pl-5 text-gray-600">
               {[t('hintStock'), t('hintClosing'), t('hintProfit')].map((hint) => (
-                <li key={hint} className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-primary-600" aria-hidden="true" />{hint}</li>
+                <li key={hint} className="list-disc">{hint}</li>
               ))}
             </ul>
-          </Card>
+          </details>
         </Card>
+
+        {selectedProduct && (
+          <Card as="aside">
+            <SectionHeading
+              title={t('productInfo')}
+              badge={selectedProductLevel === 'out'
+                ? <Badge variant="danger">{t('outOfStock')}</Badge>
+                : selectedProductLevel === 'low'
+                  ? <Badge variant="warning">{t('lowStock')}</Badge>
+                  : selectedProductLevel === 'ok'
+                    ? <Badge variant="success">{t('inStock')}</Badge>
+                    : undefined}
+              className="mb-5"
+            />
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <Avatar name={selectedProduct.name} size="lg" tone="neutral" />
+              <div className="min-w-0">
+                <h3 className="break-words text-xl font-bold tracking-tight text-gray-950">{selectedProduct.name}</h3>
+                <p className="mt-2 text-sm text-gray-600">
+                  {t('salePriceLabel')} <span className="font-semibold tabular-nums text-gray-900">{formatCurrency(salePrice)} {currency}</span>
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {t('costPriceLabel')} <span className="font-semibold tabular-nums text-gray-900">{formatUnitCurrency(selectedProduct.cost_price)} {currency}</span>
+                </p>
+                {quantity > 0 && costPrice > 0 && (
+                  <p className="mt-1 text-sm text-gray-600">
+                    {t('newAvgCost')} <span className="font-semibold tabular-nums text-gray-900">{formatUnitCurrency(projectedAverageCost)} {currency}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <Card tone="muted" padding="sm" className="mt-5">
+              <div className="grid grid-cols-2 gap-3">
+                <StatTile variant="flat" size="sm" label={t('currentStock')} value={formatNumber(selectedProduct.current_stock)} unit={t('pcs')} tone={selectedProductLevel === 'out' ? 'danger' : selectedProductLevel === 'low' ? 'warning' : 'default'} />
+                <StatTile variant="flat" size="sm" label={t('lowStockAlert')} value={formatNumber(resolveLowStockThreshold(selectedProduct.low_stock_threshold))} unit={t('pcs')} />
+                <StatTile variant="flat" size="sm" label={t('stockValue')} value={formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} unit={currency} className="col-span-2 border-t border-gray-200 pt-3" />
+              </div>
+            </Card>
+          </Card>
+        )}
       </div>
 
-      <Card as="section">
-        <SectionHeading
-          title={t('recentPurchases')}
-          className="mb-4"
-          action={(
-            <SearchInput
-              className="w-full sm:w-72"
-              controlSize="sm"
-              value={query}
-              onChange={setQuery}
-              placeholder={t('searchPlaceholder')}
-            />
-          )}
-        />
+      <Card as="section" padding="none" className="overflow-hidden">
+        <CardHeader>
+          <SectionHeading
+            title={t('recentPurchases')}
+            action={(
+              <SearchInput
+                className="w-full sm:w-72"
+                controlSize="sm"
+                value={query}
+                onChange={setQuery}
+                placeholder={t('searchPlaceholder')}
+              />
+            )}
+          />
+        </CardHeader>
 
         {purchasesError && (
           <InlineAlert
             variant="danger"
-            className="mb-4"
+            className="mx-4 mt-4 sm:mx-5"
             action={(
               <Button variant="outline" size="sm" onClick={() => { void loadPurchases(purchasePage); }} icon={<RefreshCcw size={14} aria-hidden="true" />}>
                 {tc('retry')}
@@ -719,9 +713,11 @@ export default function StockPurchasePage() {
         )}
 
         {purchasesLoading && purchases.length === 0 ? (
-          <TableSkeleton rows={6} columns={8} className="shadow-none" />
+          <TableSkeleton rows={6} columns={8} className="rounded-none border-0 shadow-none" />
         ) : (
           <DataTable
+            bare
+            label={t('recentPurchases')}
             keyExtractor={(row) => row.id}
             data={purchases}
             minWidth={980}
@@ -730,22 +726,22 @@ export default function StockPurchasePage() {
               ? <EmptyState compact icon={AlertTriangle} title={t('purchasesLoadFailed')} />
               : <EmptyState compact icon={ShoppingCart} title={tc('noData')} />}
             columns={[
-              { key: 'index', header: '#', className: 'w-12', render: (_row, index) => <span className="font-semibold text-gray-700">{(purchasePage - 1) * PURCHASES_PAGE_SIZE + index + 1}</span> },
-              { key: 'date', header: t('date'), render: (row) => <span className="font-semibold text-gray-900">{formatDateOnly(row.date, locale)}</span> },
+              { key: 'index', header: '#', className: 'w-12', render: (_row, index) => <span className="text-gray-500 tabular-nums">{(purchasePage - 1) * PURCHASES_PAGE_SIZE + index + 1}</span> },
+              { key: 'date', header: t('date'), render: (row) => <span className="font-medium text-gray-900">{formatDateOnly(row.date, locale)}</span> },
               {
                 key: 'product',
                 header: t('product'),
                 render: (row) => (
                   <div className="flex items-center gap-3">
                     <Avatar name={row.products?.name ?? '-'} size="sm" tone="neutral" />
-                    <span className="font-bold text-gray-900">{row.products?.name ?? '—'}</span>
+                    <span className="font-semibold text-gray-900">{row.products?.name ?? '—'}</span>
                   </div>
                 ),
               },
-              { key: 'quantity', header: t('quantity'), align: 'center', render: (row) => <span className="font-semibold">{formatNumber(row.quantity)} {t('pcs')}</span> },
-              { key: 'cost', header: `${t('costPrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="font-semibold">{formatUnitCurrency(row.cost_price)}</span> },
-              { key: 'sale', header: `${t('salePrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="font-semibold">{formatCurrency(row.sale_price ?? row.products?.sale_price ?? 0)}</span> },
-              { key: 'total', header: `${t('totalCostHeader')} (${currency})`, align: 'right', render: (row) => <span className="font-bold text-gray-900">{formatCurrency(row.quantity * row.cost_price)}</span> },
+              { key: 'quantity', header: t('quantity'), align: 'right', render: (row) => <span className="tabular-nums">{formatNumber(row.quantity)} <span className="text-xs text-gray-500">{t('pcs')}</span></span> },
+              { key: 'cost', header: `${t('costPrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="tabular-nums">{formatUnitCurrency(row.cost_price)}</span> },
+              { key: 'sale', header: `${t('salePrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="tabular-nums">{formatCurrency(row.sale_price ?? row.products?.sale_price ?? 0)}</span> },
+              { key: 'total', header: `${t('totalCostHeader')} (${currency})`, align: 'right', render: (row) => <span className="font-semibold tabular-nums text-gray-900">{formatCurrency(row.quantity * row.cost_price)}</span> },
               {
                 key: 'payment',
                 header: t('payment'),
@@ -758,8 +754,8 @@ export default function StockPurchasePage() {
               },
               ...(canWrite ? [{
                 key: 'actions',
-                header: tc('actions'),
-                align: 'center' as const,
+                header: <span className="sr-only">{tc('actions')}</span>,
+                align: 'right' as const,
                 render: (row: PurchaseWithProduct) => (
                   <IconButton
                     size="sm"
@@ -776,8 +772,8 @@ export default function StockPurchasePage() {
           />
         )}
 
-        <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-medium text-gray-600" role="status">
+        <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-500" role="status">
             {purchasesLoading ? tc('loading') : t('paginationShowing', { from: purchaseRangeFrom, to: purchaseRangeTo, total: purchaseCount })}
           </p>
           <div className="flex items-center gap-2">
@@ -790,7 +786,7 @@ export default function StockPurchasePage() {
             >
               {t('previousPage')}
             </Button>
-            <span className="min-w-20 text-center text-sm font-bold text-gray-700">
+            <span className="min-w-20 text-center text-sm font-medium text-gray-700 tabular-nums">
               {t('paginationPage', { page: purchasePage, total: purchasePageCount })}
             </span>
             <Button
@@ -803,7 +799,7 @@ export default function StockPurchasePage() {
               {t('nextPage')}
             </Button>
           </div>
-        </div>
+        </CardFooter>
       </Card>
 
       {toastElement}

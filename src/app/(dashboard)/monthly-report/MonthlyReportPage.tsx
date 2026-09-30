@@ -299,9 +299,9 @@ export default function MonthlyReportPage() {
   const currency = tc('currency');
   const money = (amount: number) => `${formatCurrency(amount)} ${currency}`;
   const signed = (amount: number) => (
-    <span className={amount >= 0 ? 'font-semibold text-success-600' : 'font-semibold text-danger-500'}>{formatCurrency(amount)}</span>
+    <span className={amount >= 0 ? 'font-semibold text-success-600' : 'font-semibold text-danger-600'}>{formatCurrency(amount)}</span>
   );
-  const danger = (amount: number) => <span className="text-danger-500">{formatCurrency(amount)}</span>;
+  const danger = (amount: number) => <span className="text-danger-600">{formatCurrency(amount)}</span>;
 
   const summaryCards = [
     { label: t('totalIncome'), amount: totals.totalIncome, tone: 'success' as const },
@@ -314,7 +314,7 @@ export default function MonthlyReportPage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
+    <div>
       <PageHeader
         title={t('title')}
         action={(

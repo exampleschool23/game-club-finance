@@ -239,7 +239,8 @@
     "loadError": "Kunlik kassa yozuvini yuklab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.",
     "saveError": "Yozuvni saqlab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.",
     "duplicateEntryError": "Bu sana uchun yozuv allaqachon mavjud. Uni tahrirlash uchun sahifani yangilang.",
-    "deleteError": "Yozuvni oʻchirib boʻlmadi. Qayta urinib koʻring."
+    "deleteError": "Yozuvni oʻchirib boʻlmadi. Qayta urinib koʻring.",
+    "headerDescription": "Faqat o'yin klubi daromadi, to'lov usullari bo'yicha. Bar savdosi Ombor yopilishi orqali hisoblanadi."
   },
   "closingStock": {
     "viewerReadOnlyTitle": "Faqat koʻrish",
@@ -461,7 +462,8 @@
     "clearFilters": "Filtrlarni tozalash",
     "stockUnits": "{count} dona",
     "deleted": "Mahsulot oʻchirildi",
-    "ownerOnlyStock": "Qoldiqni faqat egasi oʻzgartira oladi."
+    "ownerOnlyStock": "Qoldiqni faqat egasi oʻzgartira oladi.",
+    "catalog": "Mahsulotlar katalogi"
   },
   "expenses": {
     "title": "Xarajatlar",
@@ -540,7 +542,11 @@
     "saveError": "Saqlab bo‘lmadi. Internet aloqasi va kirish huquqini tekshirib, qayta urinib ko‘ring.",
     "paymentsLoadError": "To‘lovlar tarixini yuklab bo‘lmadi.",
     "paymentsLoading": "To‘lovlar tarixi yuklanmoqda…",
-    "clubChanged": "Tanlangan klub o‘zgardi. Formani yopib, qayta oching."
+    "clubChanged": "Tanlangan klub o‘zgardi. Formani yopib, qayta oching.",
+    "acceptPayment": "To'lovni qabul qilish",
+    "outstandingTotal": "Qarzlar qoldig'i",
+    "debtorsCount": "Qarzdorlar",
+    "paidTotal": "To'langan · jami"
   },
   "dailyReport": {
     "title": "Kunlik hisobot",
@@ -646,7 +652,14 @@
     "disabled": "O'chirilgan",
     "paymentMethodsHint": "O'zgarishlar saqlangandan keyin qo'llanadi.",
     "saveError": "Saqlab bo‘lmadi. Internet aloqasi va egasi huquqlarini tekshirib, qayta urinib ko‘ring.",
-    "accountLoadError": "Hisob ma’lumotlarini yuklab bo‘lmadi. Qayta urinish uchun sahifani yangilang."
+    "accountLoadError": "Hisob ma’lumotlarini yuklab bo‘lmadi. Qayta urinish uchun sahifani yangilang.",
+    "tabClub": "Klub",
+    "tabClubs": "Klublar",
+    "tabProfile": "Profil",
+    "tabDeveloper": "Dasturchi uchun",
+    "unsavedChanges": "{count, plural, one {# o‘zgarish saqlanmagan} other {# o‘zgarish saqlanmagan}}",
+    "discard": "Bekor qilish",
+    "selectedClub": "Tanlangan"
   },
   "team": {
     "title": "Jamoa",
@@ -736,7 +749,17 @@
     "promoteOwnerAction": "Ega qilish",
     "demoteOwnerTitle": "Egalik huquqini olib tashlaysizmi?",
     "demoteOwnerConfirm": "{name} endi {club} klubining egasi bo‘lmaydi va «{role}» roliga o‘tadi.",
-    "demoteOwnerAction": "Rolni o‘zgartirish"
+    "demoteOwnerAction": "Rolni o‘zgartirish",
+    "subtitle": "Kim kassa, ombor va hisobotlarni ochishi mumkin",
+    "invite": "Taklif qilish",
+    "inviteTitle": "Jamoaga taklif qilish",
+    "inviteHelp": "Ushbu havolani yuboring. Google orqali kirgandan so‘ng odam shu yerda «Tasdiq kutmoqda» ro‘yxatida paydo bo‘ladi va siz unga klub va rol tanlaysiz.",
+    "loginLink": "Kirish havolasi",
+    "copyLink": "Nusxalash",
+    "linkCopied": "Havola nusxalandi",
+    "copyFailed": "Nusxalab bo‘lmadi. Havolani belgilab, qo‘lda nusxalang.",
+    "requestedAt": "so‘rov {date}",
+    "everything": "Hammasi"
   },
   "approval": {
     "title": "Owner tasdig'i kutilmoqda",
@@ -816,7 +839,9 @@
     "loadError": "Egasi foydasi qoldiqlarini yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
     "saveError": "Pul olishni qayd etib bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
     "deleteError": "Pul olish yozuvini o'chirib bo'lmadi. Qayta urinib ko'ring.",
-    "deleteConfirmDetailed": "{month} uchun {amount} ({source}) pul olish yozuvi o'chirilsinmi? Miqdor shu oyning mavjud qoldig'iga qaytadi."
+    "deleteConfirmDetailed": "{month} uchun {amount} ({source}) pul olish yozuvi o'chirilsinmi? Miqdor shu oyning mavjud qoldig'iga qaytadi.",
+    "breakdownTitle": "Manbalar bo'yicha taqsimot",
+    "recordedColumn": "Yozilgan"
   },
   "calendar": {
     "selectDate": "Sanani tanlang",
@@ -933,7 +958,7 @@
     "effectiveDate": "Amal qilish sanasi",
     "rateHelp": "O‘zgarishlar bugundan yoki kelajakdagi xodimning ish boshlash sanasidan amal qiladi. Oldingi stavkalar saqlanadi.",
     "salaryType": "Ish haqi turi",
-    "amount": "Summa (UZS)",
+    "amount": "Summa",
     "kpiPercent": "Ega foydasidan KPI (%)",
     "entryType": "Yozuv turi",
     "payment": "To‘lov",
@@ -995,7 +1020,8 @@
     "noClubDescription": "Xodimlar va maoshlarni ko‘rish uchun klubni tanlang.",
     "noRates": "Hozircha maosh stavkalari yo‘q.",
     "permissionError": "Bu klubda maoshlarni o‘zgartirishga huquqingiz yo‘q. Klub egasidan maoshlarni tahrirlash huquqini so‘rang.",
-    "checkError": "Qiymatlar qabul qilinmadi. Summa, foiz va sanani tekshirib, qayta urinib ko‘ring."
+    "checkError": "Qiymatlar qabul qilinmadi. Summa, foiz va sanani tekshirib, qayta urinib ko‘ring.",
+    "viewSwitcher": "Bo'lim"
   },
   "testChecklist": {
     "title": "Tizim tekshiruvlari",

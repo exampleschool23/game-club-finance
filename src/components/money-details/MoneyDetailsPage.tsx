@@ -3,7 +3,7 @@
 // Shared breakdown page for /bar-money-details and /game-club-money-details.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronDown, CircleMinus, CirclePlus, Equal, RefreshCcw } from 'lucide-react';
+import { CalendarDays, ChevronDown, RefreshCcw } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -16,11 +16,12 @@ import {
   DetailListSkeleton,
   EmptyState,
   InlineAlert,
+  MetricCard,
   Money,
   PageHeader,
-  StatTile,
+  SectionHeading,
 } from '@/components/PresentationFoundation';
-import { formatCurrency, formatDateShort, formatNumber } from '@/lib/formatters';
+import { formatDateShort, formatNumber } from '@/lib/formatters';
 import { cn, todayIso } from '@/lib/utils';
 
 /** Collected-money buckets; translated at render time so language changes never refetch. */
@@ -101,7 +102,6 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-  const resultLabelClassName = variant === 'bar' ? 'text-orange-700' : 'text-success-600';
 
   useEffect(() => {
     setRange(requested);
@@ -191,12 +191,13 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         back={backHref}
         backLabel={t('backToDashboard')}
         title={labels.title}
         description={labels.description}
+        className="mb-0"
         action={(
           <DateRangePicker
             from={range.from}
@@ -235,147 +236,109 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
         <Card><EmptyState icon={CalendarDays} title={labels.emptyLabel} /></Card>
       ) : (
         <>
-          <Card as="section" padding="none" className="overflow-hidden rounded-2xl text-gray-950">
-            <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center">
-              <div>
-                <p className={cn('text-sm font-bold', resultLabelClassName)}>{labels.resultLabel}</p>
-                <p className={cn('mt-2 break-words text-3xl font-bold tracking-tight tabular-nums sm:text-4xl', totals.moneyLeft < 0 ? 'text-danger-600' : 'text-gray-950')}>
-                  <Money amount={totals.moneyLeft} currencyClassName="text-lg text-gray-500" />
-                </p>
-                <p className="mt-2 text-sm leading-5 text-gray-600">{labels.resultDescription}</p>
-                <Badge variant="neutral" className="mt-3 px-3 py-1.5 text-sm" icon={<CalendarDays size={15} aria-hidden="true" />}>
-                  {formatDateShort(range.from, locale)} – {formatDateShort(range.to, locale)}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3">
-                <StatTile
-                  variant="soft"
-                  className="border border-gray-200"
-                  icon={CirclePlus}
-                  iconClassName="bg-success-50 text-success-600"
-                  label={labels.collectedLabel}
-                  value={formatCurrency(totals.collected)}
-                  unit={tc('currency')}
-                />
-                <CircleMinus size={20} className="self-center text-gray-400" aria-hidden="true" />
-                <StatTile
-                  variant="soft"
-                  className="border border-gray-200"
-                  icon={CircleMinus}
-                  iconClassName="bg-danger-50 text-danger-600"
-                  label={labels.deductionsHint ? (
-                    <>
-                      {labels.deductionsLabel}
-                      <span className="mt-0.5 block font-medium text-gray-500">{labels.deductionsHint}</span>
-                    </>
-                  ) : labels.deductionsLabel}
-                  value={formatCurrency(totals.deductions)}
-                  unit={tc('currency')}
-                />
-                <div
-                  className={cn(
-                    'col-span-3 flex items-center gap-2 rounded-xl px-4 py-3',
-                    totals.moneyLeft < 0 ? 'bg-danger-50 text-danger-600' : 'bg-success-50 text-success-600',
-                  )}
-                >
-                  <Equal size={19} className="shrink-0" aria-hidden="true" />
-                  <span className="text-sm font-bold">{t('moneyLeftForPeriod')}</span>
-                  <Money amount={totals.moneyLeft} className="ml-auto break-words text-right text-base font-bold sm:text-lg" />
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleAllDates}
-              aria-expanded={allRowsExpanded}
-              icon={<ChevronDown size={17} className={cn('transition-transform', allRowsExpanded && 'rotate-180')} aria-hidden="true" />}
-            >
-              {allRowsExpanded ? t('collapseAll') : t('expandAll')}
-            </Button>
+          {/* One headline number, then the two figures it is made of. */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <Card as="section" className="sm:col-span-2 lg:col-span-1" aria-label={labels.resultLabel}>
+              <p className="text-[13px] font-medium text-gray-500">{labels.resultLabel}</p>
+              <p className={cn('mt-2 break-words text-3xl font-bold leading-none tracking-tight tabular-nums sm:text-4xl', totals.moneyLeft < 0 ? 'text-danger-600' : 'text-success-600')}>
+                <Money amount={totals.moneyLeft} currencyClassName="text-base text-gray-500" />
+              </p>
+              <p className="mt-3 text-xs leading-5 text-gray-500">
+                {labels.resultDescription} · {formatDateShort(range.from, locale)} – {formatDateShort(range.to, locale)}
+              </p>
+            </Card>
+            <MetricCard
+              label={labels.collectedLabel}
+              tone="success"
+              value={<Money amount={totals.collected} currencyClassName="text-sm text-gray-500" />}
+            />
+            <MetricCard
+              label={labels.deductionsLabel}
+              tone="danger"
+              helper={labels.deductionsHint}
+              value={<Money amount={totals.deductions} currencyClassName="text-sm text-gray-500" />}
+            />
           </div>
 
           <section className="space-y-3">
+            <SectionHeading
+              size="sm"
+              title={t('date')}
+              className="sm:items-center"
+              action={(
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleAllDates}
+                  aria-expanded={allRowsExpanded}
+                  iconRight={<ChevronDown size={15} className={cn('transition-transform', allRowsExpanded && 'rotate-180')} aria-hidden="true" />}
+                >
+                  {allRowsExpanded ? t('collapseAll') : t('expandAll')}
+                </Button>
+              )}
+            />
+
             {rows.map((row) => (
-              <details key={row.date} open={expandedDates.has(row.date)} className="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <details key={row.date} open={expandedDates.has(row.date)} className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card">
                 <summary
                   onClick={(event) => { event.preventDefault(); toggleDate(row.date); }}
-                  className="flex cursor-pointer list-none flex-col gap-3 bg-gray-50 px-4 py-3 transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden"
+                  className="flex cursor-pointer list-none flex-col gap-2 px-4 py-3 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden"
                 >
-                  <div className="flex items-center gap-2">
-                    <CalendarDays size={18} className="text-gray-500" aria-hidden="true" />
-                    <span className="text-base font-bold text-gray-950">{formatDateShort(row.date, locale)}</span>
-                    <ChevronDown size={18} className="text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <ChevronDown size={16} className="shrink-0 text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+                    <span className="text-sm font-semibold text-gray-950">{formatDateShort(row.date, locale)}</span>
                   </div>
-                  <div className="flex items-center justify-between gap-3 sm:justify-end">
-                    <span className="text-xs font-bold text-gray-500">{t('moneyLeftForDay')}</span>
-                    <Badge variant={row.moneyLeft < 0 ? 'danger' : 'success'} className="rounded-lg px-3 py-1.5 text-sm font-bold tabular-nums">
-                      <Money amount={row.moneyLeft} />
-                    </Badge>
+                  <div className="flex items-baseline justify-between gap-3 sm:justify-end">
+                    <span className="text-xs font-medium text-gray-500">{t('moneyLeftForDay')}</span>
+                    <Money
+                      amount={row.moneyLeft}
+                      className={cn('text-base font-bold tracking-tight', row.moneyLeft < 0 ? 'text-danger-600' : 'text-success-600')}
+                      currencyClassName="text-xs text-gray-500"
+                    />
                   </div>
                 </summary>
 
-                <div className={cn('grid border-t border-gray-200', variant === 'bar' ? 'lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]' : 'lg:grid-cols-2')}>
-                  <section className="p-4 sm:p-5 lg:border-r lg:border-gray-200">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-bold text-gray-950">{labels.collectedLabel}</h3>
-                      <Money amount={row.collectedTotal} showPlus className="text-sm font-bold text-success-600" />
+                <div className={cn('grid border-t border-gray-100', variant === 'bar' ? 'lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]' : 'lg:grid-cols-2')}>
+                  <section className="p-4 sm:p-5 lg:border-r lg:border-gray-100">
+                    <div className="mb-2 flex items-baseline justify-between gap-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{labels.collectedLabel}</h3>
+                      <Money amount={row.collectedTotal} showPlus className="text-sm font-semibold text-success-600" currencyClassName="text-xs text-gray-500" />
                     </div>
-                    {row.collected.length === 1 ? (
-                      <div className="flex items-center justify-between gap-3 rounded-lg bg-success-50 p-4">
-                        <span className="text-sm font-bold text-success-600">{collectedLabel(row.collected[0].key)}</span>
-                        <Money amount={row.collected[0].amount} showPlus className="text-base font-bold text-gray-950" />
-                      </div>
-                    ) : (
-                      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {row.collected.map((item) => (
-                          <div key={item.key} className="rounded-lg bg-success-50 p-3">
-                            <dt className="text-xs font-semibold text-success-600">{collectedLabel(item.key)}</dt>
-                            <dd className="mt-1 break-words text-sm font-bold text-gray-950">
-                              <Money amount={item.amount} />
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
+                    <dl className="divide-y divide-gray-100">
+                      {row.collected.map((item) => (
+                        <div key={item.key} className="flex items-baseline justify-between gap-3 py-2">
+                          <dt className="min-w-0 break-words text-sm text-gray-700">{collectedLabel(item.key)}</dt>
+                          <dd className="shrink-0 text-sm font-semibold text-gray-950">
+                            <Money amount={item.amount} currencyClassName="text-xs text-gray-500" />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
                   </section>
 
-                  <section className="border-t border-gray-200 p-4 sm:p-5 lg:border-t-0">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-bold text-gray-950">{labels.deductionsLabel}</h3>
-                      <span className="text-sm font-bold text-danger-600">− <Money amount={row.deductionsTotal} /></span>
+                  <section className="border-t border-gray-100 p-4 sm:p-5 lg:border-t-0">
+                    <div className="mb-2 flex items-baseline justify-between gap-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{labels.deductionsLabel}</h3>
+                      <span className="text-sm font-semibold text-danger-600">− <Money amount={row.deductionsTotal} currencyClassName="text-xs text-gray-500" /></span>
                     </div>
                     {row.deductions.length ? (
-                      <div className="space-y-2">
-                        {row.deductions.map((line, index) => {
-                          const isPurchase = line.kind === 'purchase';
-                          return (
-                            <div
-                              key={`${line.kind}-${index}`}
-                              className={cn(
-                                'flex items-start justify-between gap-4 rounded-lg border px-3 py-2.5',
-                                isPurchase ? 'border-orange-100 bg-orange-50/70' : 'border-danger-50 bg-danger-50/60',
+                      <ul className="divide-y divide-gray-100">
+                        {row.deductions.map((line, index) => (
+                          <li key={`${line.kind}-${index}`} className="flex items-baseline justify-between gap-3 py-2">
+                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                              {variant === 'bar' && (
+                                <Badge variant="neutral" size="sm">
+                                  {line.kind === 'purchase' ? t('stockPurchase') : t('expense')}
+                                </Badge>
                               )}
-                            >
-                              <div className="min-w-0">
-                                {variant === 'bar' && (
-                                  <span className={cn('block text-[11px] font-bold uppercase tracking-wide', isPurchase ? 'text-orange-700' : 'text-danger-600')}>
-                                    {isPurchase ? t('stockPurchases') : t('expenses')}
-                                  </span>
-                                )}
-                                <span className="mt-0.5 block break-words text-sm font-semibold leading-5 text-gray-700">{deductionLabel(line)}</span>
-                              </div>
-                              <span className="shrink-0 text-sm font-bold text-danger-600">− <Money amount={line.amount} /></span>
+                              <span className="min-w-0 break-words text-sm leading-5 text-gray-700">{deductionLabel(line)}</span>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <span className="shrink-0 text-sm font-semibold text-danger-600">− <Money amount={line.amount} currencyClassName="text-xs text-gray-500" /></span>
+                          </li>
+                        ))}
+                      </ul>
                     ) : (
-                      <EmptyState compact bordered title={t('noDeductionsForDay')} className="py-5" />
+                      <EmptyState compact bordered title={t('noDeductionsForDay')} className="border-gray-200 py-5" />
                     )}
                   </section>
                 </div>

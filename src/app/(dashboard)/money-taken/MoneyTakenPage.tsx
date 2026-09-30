@@ -1,17 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ArrowDownToLine,
-  Banknote,
-  CircleDollarSign,
-  CreditCard,
-  Gamepad2,
-  GlassWater,
-  Landmark,
-  RefreshCcw,
-  Trash2,
-} from 'lucide-react';
+import { ArrowDownToLine, RefreshCcw, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useClub } from '@/components/layout/DashboardShell';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -19,23 +9,29 @@ import {
   Badge,
   Button,
   Card,
+  CardHeader,
   CurrencyInput,
+  DataTable,
   EmptyState,
   Field,
   FormSkeleton,
   IconButton,
   InlineAlert,
   Input,
-  MetricCard,
   MonthPicker,
   PageHeader,
   SectionHeading,
   SegmentedControl,
+  Skeleton,
   TableSkeleton,
+  metricToneClassName,
   toneForAmount,
   useConfirm,
   useToast,
+  type DataTableColumn,
+  type MetricTone,
 } from '@/components/PresentationFoundation';
+import { cn } from '@/lib/utils';
 import { fetchAllRows } from '@/lib/supabase/pagination';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -70,6 +66,22 @@ import { OWNER_WITHDRAWAL_SOURCES, type OwnerWithdrawal, type OwnerWithdrawalSou
 type MoneySource = OwnerWithdrawalSource | 'all';
 
 const PROFIT_SOURCES: readonly MoneySource[] = ['all', ...OWNER_WITHDRAWAL_SOURCES];
+const CLUB_PAYMENT_METHODS = ['cash', 'terminal', 'card', 'playstation'] as const;
+
+/** One line of the breakdown table: a profit source, or a payment method under the club. */
+interface BreakdownRow {
+  key: string;
+  label: string;
+  earned: number;
+  withdrawn: number | null;
+  available: number | null;
+  nested?: boolean;
+}
+
+interface HistoryRow {
+  month: string;
+  withdrawal: OwnerWithdrawal;
+}
 
 export default function MoneyTakenPage() {
   const t = useTranslations('moneyTaken');
@@ -271,6 +283,8 @@ export default function MoneyTakenPage() {
   const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
   const monthlyBalance = balancesByMonth[form.month];
   const monthlyOverallProfit = monthlyBalance?.totalEarned ?? 0;
+  const monthlyWithdrawn = monthlyBalance?.totalWithdrawn ?? 0;
+  const monthlyAvailable = monthlyBalance?.totalAvailable ?? 0;
   const amountValue = parseCurrencyInput(form.amount);
   const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= sourceAvailable;
 
@@ -375,63 +389,133 @@ export default function MoneyTakenPage() {
   const currency = (amount: number) => `${formatCurrency(amount)} ${tc('currency')}`;
   const sourceOptions = PROFIT_SOURCES.map((source) => ({ value: source, label: t(`sources.${source}`) }));
 
-  function renderSourceSection(
-    source: 'game_club' | 'bar',
-    balance: { earned: number; withdrawn: number; available: number } | undefined,
-    icon: typeof Gamepad2,
-  ) {
-    return (
-      <Card as="section" tone={source === 'bar' ? 'orange' : 'info'} className="mt-5" aria-labelledby={`profit-source-${source}`}>
-        <h2 id={`profit-source-${source}`} className="mb-4 font-bold text-gray-950">
-          {t(`sources.${source}`)} · {formatYearMonth(form.month, locale)}
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MetricCard loading={loading} label={t('earnedBeforeWithdrawals')} value={currency(balance?.earned ?? 0)} icon={icon} tone={toneForAmount(balance?.earned ?? 0, 'primary')} />
-          <MetricCard loading={loading} label={t('monthlyWithdrawn')} value={currency(balance?.withdrawn ?? 0)} icon={ArrowDownToLine} tone="danger" />
-          <MetricCard loading={loading} label={t('monthlyRemaining')} value={currency(balance?.available ?? 0)} icon={CircleDollarSign} tone={toneForAmount(balance?.available ?? 0)} />
-        </div>
-        {source === 'game_club' && (
-          <>
-            <p className="mb-3 mt-4 text-sm text-gray-600">{t('clubMethodsBeforeWithdrawals')}</p>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {([
-                ['cash', Banknote],
-                ['terminal', Landmark],
-                ['card', CreditCard],
-                ['playstation', Gamepad2],
-              ] as const).map(([method, Icon]) => (
-                <MetricCard
-                  key={method}
-                  loading={loading}
-                  label={method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`)}
-                  value={currency(paymentMethodBalances[method])}
-                  icon={Icon}
-                  tone={toneForAmount(paymentMethodBalances[method], 'primary')}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </Card>
-    );
-  }
+  const breakdownRows: BreakdownRow[] = [
+    {
+      key: 'game_club',
+      label: t('sources.game_club'),
+      earned: monthlyBalance?.gameClub.earned ?? 0,
+      withdrawn: monthlyBalance?.gameClub.withdrawn ?? 0,
+      available: monthlyBalance?.gameClub.available ?? 0,
+    },
+    ...CLUB_PAYMENT_METHODS.map((method) => ({
+      key: `method:${method}`,
+      label: method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`),
+      earned: paymentMethodBalances[method],
+      withdrawn: null,
+      available: null,
+      nested: true,
+    })),
+    {
+      key: 'bar',
+      label: t('sources.bar'),
+      earned: monthlyBalance?.bar.earned ?? 0,
+      withdrawn: monthlyBalance?.bar.withdrawn ?? 0,
+      available: monthlyBalance?.bar.available ?? 0,
+    },
+  ];
+
+  const signedCell = (amount: number, tone: MetricTone) => (
+    <span className={cn('font-semibold', metricToneClassName[tone])}>{formatCurrency(amount)}</span>
+  );
+
+  const breakdownColumns: DataTableColumn<BreakdownRow>[] = [
+    {
+      key: 'label',
+      header: t('source'),
+      render: (row) => (
+        <span className={cn(row.nested ? 'pl-5 text-gray-500' : 'font-semibold text-gray-900')}>{row.label}</span>
+      ),
+    },
+    {
+      key: 'earned',
+      header: t('earnedBeforeWithdrawals'),
+      align: 'right',
+      className: 'whitespace-nowrap',
+      render: (row) => (row.nested
+        ? <span className="text-gray-600">{formatCurrency(row.earned)}</span>
+        : signedCell(row.earned, toneForAmount(row.earned, 'default'))),
+    },
+    {
+      key: 'withdrawn',
+      header: t('monthlyWithdrawn'),
+      align: 'right',
+      className: 'whitespace-nowrap',
+      render: (row) => (row.withdrawn === null
+        ? <span className="text-gray-300">—</span>
+        : <span className={cn(row.withdrawn > 0 ? 'text-danger-600' : 'text-gray-600')}>{formatCurrency(row.withdrawn)}</span>),
+    },
+    {
+      key: 'available',
+      header: t('monthlyRemaining'),
+      align: 'right',
+      className: 'whitespace-nowrap',
+      render: (row) => (row.available === null
+        ? <span className="text-gray-300">—</span>
+        : signedCell(row.available, toneForAmount(row.available))),
+    },
+  ];
+
+  const historyRows: HistoryRow[] = withdrawalMonths.flatMap(([month, rows]) => rows.map((withdrawal) => ({ month, withdrawal })));
+
+  const historyColumns: DataTableColumn<HistoryRow>[] = [
+    {
+      key: 'month',
+      header: t('month'),
+      className: 'whitespace-nowrap',
+      render: (row) => <span className="font-medium text-gray-900">{formatYearMonth(row.month, locale)}</span>,
+    },
+    {
+      key: 'source',
+      header: t('source'),
+      render: (row) => <Badge variant="neutral">{t(`sources.${row.withdrawal.source}`)}</Badge>,
+    },
+    {
+      key: 'amount',
+      header: t('amount'),
+      align: 'right',
+      className: 'whitespace-nowrap',
+      render: (row) => <span className="font-semibold text-danger-600">−{formatCurrency(row.withdrawal.amount)}</span>,
+    },
+    {
+      key: 'comment',
+      header: t('comment'),
+      className: 'min-w-[160px]',
+      render: (row) => (row.withdrawal.comment
+        ? <span className="break-words text-gray-600">{row.withdrawal.comment}</span>
+        : <span className="text-gray-300">—</span>),
+    },
+    {
+      key: 'recorded',
+      header: t('recordedColumn'),
+      className: 'whitespace-nowrap',
+      render: (row) => <span className="text-gray-500">{formatDateTime(row.withdrawal.created_at, locale)}</span>,
+    },
+    ...(isOwner ? [{
+      key: 'actions',
+      header: <span className="sr-only">{tc('actions')}</span>,
+      align: 'right' as const,
+      className: 'w-14',
+      render: (row: HistoryRow) => (
+        <IconButton
+          variant="danger"
+          size="sm"
+          label={`${tc('delete')}: ${t(`sources.${row.withdrawal.source}`)} · ${currency(row.withdrawal.amount)}`}
+          icon={<Trash2 size={16} />}
+          loading={deletingId === row.withdrawal.id}
+          disabled={loading || !!error || saving || deletingId !== null}
+          onClick={() => handleDelete(row.withdrawal)}
+        />
+      ),
+    }] : []),
+  ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <PageHeader
-        title={t('title')}
-        description={t('description')}
-        action={(
-          <Field label={t('month')} className="sm:w-64">
-            <MonthPicker value={form.month} max={currentMonth} onChange={(value) => setField('month', value)} />
-          </Field>
-        )}
-      />
+    <div className="space-y-5">
+      <PageHeader title={t('title')} description={t('description')} />
 
       {error ? (
         <InlineAlert
           variant="danger"
-          className="mb-5"
           action={(
             <Button
               size="sm"
@@ -448,31 +532,72 @@ export default function MoneyTakenPage() {
         </InlineAlert>
       ) : null}
 
-      <section aria-label={t('monthlyOverallProfit')}>
-        <MetricCard
-          loading={loading}
-          label={`${t('monthlyOverallProfit')} · ${formatYearMonth(form.month, locale)}`}
-          value={currency(monthlyOverallProfit)}
-          icon={CircleDollarSign}
-          tone={toneForAmount(monthlyOverallProfit, 'primary')}
-          helper={t('monthlyOverallProfitDescription')}
-        />
-      </section>
+      {/* The one number that matters: what the owner can still take out this month. */}
+      <Card as="section" padding="lg" aria-labelledby="owner-profit-headline">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <p id="owner-profit-headline" className="text-[13px] font-medium text-gray-500">
+              {t('monthlyRemaining')} · {formatYearMonth(form.month, locale)}
+            </p>
+            {loading ? (
+              <div className="mt-3 space-y-2" role="status" aria-label={tc('loading')}>
+                <Skeleton className="h-10 w-64 max-w-full" />
+                <Skeleton className="h-3 w-40 bg-gray-100" />
+              </div>
+            ) : (
+              <p className={cn('mt-2 break-words text-3xl font-bold leading-none tracking-tight tabular-nums sm:text-4xl', metricToneClassName[toneForAmount(monthlyAvailable)])}>
+                {formatCurrency(monthlyAvailable)}
+                <span className="ml-2 text-base font-medium tracking-normal text-gray-500">{tc('currency')}</span>
+              </p>
+            )}
+            {!loading && (
+              <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <dt className="text-gray-500">{t('earnedBeforeWithdrawals')}</dt>
+                  <dd className="font-semibold tabular-nums text-gray-900">{formatCurrency(monthlyOverallProfit)}</dd>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <dt className="text-gray-500">{t('monthlyWithdrawn')}</dt>
+                  <dd className={cn('font-semibold tabular-nums', monthlyWithdrawn > 0 ? 'text-danger-600' : 'text-gray-900')}>{formatCurrency(monthlyWithdrawn)}</dd>
+                </div>
+              </dl>
+            )}
+          </div>
+          <Field label={t('month')} className="w-full sm:w-64 sm:shrink-0">
+            <MonthPicker value={form.month} max={currentMonth} onChange={(value) => setField('month', value)} />
+          </Field>
+        </div>
+      </Card>
 
-      {renderSourceSection('game_club', monthlyBalance?.gameClub, Gamepad2)}
-      {renderSourceSection('bar', monthlyBalance?.bar, GlassWater)}
+      <Card as="section" padding="none" className="overflow-hidden">
+        <CardHeader>
+          <SectionHeading title={t('breakdownTitle')} description={t('clubMethodsBeforeWithdrawals')} />
+        </CardHeader>
+        {loading ? (
+          <TableSkeleton rows={6} columns={4} className="rounded-none border-0 shadow-none" />
+        ) : (
+          <DataTable
+            bare
+            dense
+            label={t('breakdownTitle')}
+            minWidth={640}
+            columns={breakdownColumns}
+            data={breakdownRows}
+            keyExtractor={(row) => row.key}
+          />
+        )}
+      </Card>
 
       {loading && withdrawals.length === 0 ? (
-        <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
+        <div className={`grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
           {isOwner ? <FormSkeleton /> : null}
           <TableSkeleton rows={5} columns={4} />
         </div>
       ) : (
-        <div className={`mt-5 grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
+        <div className={`grid gap-5 ${isOwner ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]' : ''}`}>
           {isOwner ? (
             <Card as="form" onSubmit={handleSubmit} className="h-fit">
               <SectionHeading
-                icon={<ArrowDownToLine size={21} aria-hidden="true" />}
                 title={t('recordTitle')}
                 description={t('notAnExpense')}
                 className="mb-5"
@@ -532,48 +657,21 @@ export default function MoneyTakenPage() {
             </Card>
           ) : null}
 
-          <Card as="section">
-            <SectionHeading title={t('historyTitle')} description={t('historyDescription')} className="mb-4" />
-
-            {error && withdrawals.length === 0 ? null : withdrawals.length === 0 ? (
-              <EmptyState compact bordered title={t('noHistory')} />
-            ) : (
-              <div className="space-y-6">
-                {withdrawalMonths.map(([month, rows]) => (
-                  <section key={month} aria-labelledby={`withdrawal-month-${month}`}>
-                    <h3 id={`withdrawal-month-${month}`} className="mb-3 border-b border-gray-200 pb-2 text-sm font-bold text-gray-700">
-                      {formatYearMonth(month, locale)}
-                    </h3>
-                    <div className="space-y-2">
-                      {rows.map((row) => (
-                        <article key={row.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <Badge variant={row.source === 'bar' ? 'orange' : 'info'}>{t(`sources.${row.source}`)}</Badge>
-                              <p className="mt-2 text-lg font-bold tabular-nums text-danger-600">− {currency(row.amount)}</p>
-                              {row.comment ? <p className="mt-1 break-words text-sm text-gray-600">{row.comment}</p> : null}
-                              <p className="mt-1 text-xs font-medium text-gray-400">
-                                {t('recordedAt', { date: formatDateTime(row.created_at, locale) })}
-                              </p>
-                            </div>
-                            {isOwner ? (
-                              <IconButton
-                                variant="danger"
-                                size="sm"
-                                label={`${tc('delete')}: ${t(`sources.${row.source}`)} · ${currency(row.amount)}`}
-                                icon={<Trash2 size={16} />}
-                                loading={deletingId === row.id}
-                                disabled={loading || !!error || saving || deletingId !== null}
-                                onClick={() => handleDelete(row)}
-                              />
-                            ) : null}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
+          <Card as="section" padding="none" className="h-fit overflow-hidden">
+            <CardHeader>
+              <SectionHeading title={t('historyTitle')} description={t('historyDescription')} />
+            </CardHeader>
+            {error && withdrawals.length === 0 ? null : (
+              <DataTable
+                bare
+                dense
+                label={t('historyTitle')}
+                minWidth={isOwner ? 720 : 640}
+                columns={historyColumns}
+                data={historyRows}
+                keyExtractor={(row) => row.withdrawal.id}
+                emptyState={<EmptyState compact title={t('noHistory')} />}
+              />
             )}
           </Card>
         </div>

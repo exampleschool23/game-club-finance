@@ -2,33 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  Banknote,
-  Building2,
-  Check,
-  Clock3,
-  CreditCard,
-  MapPin,
-  Plus,
-  UserRound,
-  WalletCards,
-  X,
-} from 'lucide-react';
+import { Check, Plus } from 'lucide-react';
 import { MigrationHealthPanel } from './MigrationHealthPanel';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
+  CardFooter,
   CardHeader,
+  Checkbox,
   Field,
-  IconButton,
   InlineAlert,
   Input,
-  LanguageSwitcher,
   PageHeader,
   SectionHeading,
+  SegmentedControl,
   Select,
-  Checkbox,
   Skeleton,
   useToast,
 } from '@/components/PresentationFoundation';
@@ -41,8 +31,23 @@ import { PAYMENT_METHODS, type EntryPaymentMethod, type UserRole } from '@/types
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
+type SettingsTab = 'club' | 'clubs' | 'profile' | 'developer';
+
 function hourLabel(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00`;
+}
+
+/** One setting: label + help on the left, the control on the right. Stacks on phones. */
+function SettingRow({ id, title, help, children }: { id: string; title: string; help?: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-4 border-t border-gray-100 px-5 py-5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+      <div className="min-w-0">
+        <h3 id={id} className="text-sm font-semibold text-gray-950">{title}</h3>
+        {help && <p className="mt-1 text-sm leading-5 text-gray-500">{help}</p>}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
 }
 
 export function SettingsPageClient() {
@@ -51,6 +56,7 @@ export function SettingsPageClient() {
   const tRoles = useTranslations('team.roles');
   const { memberships, role: clubRole, selectedClub, setSelectedClubId, refreshClubs } = useClub();
   const { showToast, toastElement } = useToast();
+  const [tab, setTab] = useState<SettingsTab>('club');
   const [account, setAccount] = useState<{ email?: string | null; fullName?: string | null; role?: string | null }>({});
   const [accountLoading, setAccountLoading] = useState(true);
   const [clubForm, setClubForm] = useState({ name: '', address: '' });
@@ -66,6 +72,7 @@ export function SettingsPageClient() {
   const [accountLoadError, setAccountLoadError] = useState('');
   const isOwner = clubRole === 'owner';
   const savedPaymentMethodsKey = normalizePaymentMethods(selectedClub?.enabled_payment_methods).join(',');
+  const activeTab: SettingsTab = tab === 'developer' && !isOwner ? 'club' : tab;
 
   function roleLabel(role: string | null | undefined): string {
     return role === 'owner' || role === 'admin' || role === 'viewer' ? tRoles(role as UserRole) : (role ?? '');
@@ -170,9 +177,7 @@ export function SettingsPageClient() {
     }
   }
 
-  async function handleSaveBusinessDay(event: React.FormEvent) {
-    event.preventDefault();
-
+  async function saveBusinessDay() {
     if (!selectedClub || !isOwner) {
       setBusinessDayError(t('businessDayInvalid'));
       return;
@@ -220,8 +225,7 @@ export function SettingsPageClient() {
     setPaymentMethods(paymentMethods.filter((candidate) => candidate !== method));
   }
 
-  async function handleSavePaymentMethods(event: React.FormEvent) {
-    event.preventDefault();
+  async function savePaymentMethods() {
     if (!selectedClub || !isOwner || paymentMethods.length === 0) {
       setPaymentMethodsError(t('paymentMethodsRequired'));
       return;
@@ -258,203 +262,248 @@ export function SettingsPageClient() {
 
   const paymentMethodsChanged = paymentMethods.join(',') !== savedPaymentMethodsKey;
   const businessDayChanged = businessDayStartHour !== normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour);
+  const clubTabSaving = businessDaySaving || paymentMethodsSaving;
+  const changeCount = Number(businessDayChanged) + Number(paymentMethodsChanged);
+
+  // One save bar for the club tab: each handler keeps its own error handling.
+  async function handleSaveClub(event: React.FormEvent) {
+    event.preventDefault();
+    if (businessDayChanged) await saveBusinessDay();
+    if (paymentMethodsChanged) await savePaymentMethods();
+  }
+
+  function discardClubChanges() {
+    setBusinessDayStartHour(normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour));
+    setBusinessDayError('');
+    setPaymentMethods(normalizePaymentMethods(savedPaymentMethodsKey ? savedPaymentMethodsKey.split(',') : []));
+    setPaymentMethodsError('');
+  }
+
+  const tabs: Array<{ value: SettingsTab; label: string }> = [
+    { value: 'club', label: t('tabClub') },
+    { value: 'clubs', label: t('tabClubs') },
+    { value: 'profile', label: t('tabProfile') },
+    ...(isOwner ? [{ value: 'developer' as const, label: t('tabDeveloper') }] : []),
+  ];
 
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title={t('title')} description={t('description')} action={<LanguageSwitcher />} />
+      <PageHeader title={t('title')} description={selectedClub?.name ?? t('description')} />
 
       {accountLoadError && <InlineAlert variant="danger" className="mb-4">{accountLoadError}</InlineAlert>}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          <Card as="section" padding="none" className="overflow-hidden">
-            <CardHeader className="py-3.5">
-              <SectionHeading
-                size="sm"
-                title={t('clubs')}
-                description={t('selectClubHelp')}
-                action={isOwner ? (
-                  <IconButton
-                    variant="soft"
-                    size="sm"
-                    label={t('addClub')}
-                    aria-expanded={createClubOpen}
-                    icon={createClubOpen ? <X size={18} /> : <Plus size={18} />}
-                    onClick={() => {
-                      setCreateClubOpen((current) => !current);
-                      setClubError('');
-                    }}
-                  />
-                ) : undefined}
-              />
-            </CardHeader>
+      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <SegmentedControl
+          className={cn('lg:hidden', tabs.length > 3 ? 'grid-cols-2' : 'grid-cols-3')}
+          variant="soft"
+          size="sm"
+          columns="auto"
+          label={t('title')}
+          options={tabs}
+          value={activeTab}
+          onChange={setTab}
+        />
 
-            <ul className="space-y-1.5 p-2" aria-label={t('clubs')}>
-              {memberships.map((membership) => {
-                const selected = selectedClub?.id === membership.club.id;
-                return (
-                  <li key={membership.club.id}>
-                    <button
-                      type="button"
-                      aria-current={selected ? 'true' : undefined}
-                      onClick={() => setSelectedClubId(membership.club.id)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-                        selected ? 'bg-primary-50 text-primary-800' : 'text-gray-700 hover:bg-gray-50',
-                      )}
+        <nav aria-label={t('title')} className="hidden lg:block">
+          <ul className="space-y-0.5">
+            {tabs.map((item) => {
+              const current = item.value === activeTab;
+              return (
+                <li key={item.value}>
+                  <button
+                    type="button"
+                    aria-current={current ? 'page' : undefined}
+                    onClick={() => setTab(item.value)}
+                    className={cn(
+                      'flex min-h-10 w-full items-center rounded-lg px-3 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                      current ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-950',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <Card as="section" padding="none" className="overflow-hidden">
+          {activeTab === 'club' && (
+            <form onSubmit={handleSaveClub}>
+              <SettingRow id="setting-business-day" title={t('businessDay')} help={t('businessDayHelp')}>
+                {selectedClub ? (
+                  <Field label={t('businessDayStartTime')} htmlFor="business-day-hour" error={businessDayError || undefined} hint={!isOwner ? t('businessDayOwnerOnly') : undefined}>
+                    <Select
+                      id="business-day-hour"
+                      value={businessDayStartHour}
+                      disabled={!isOwner || clubTabSaving}
+                      onChange={(event) => {
+                        setBusinessDayStartHour(Number(event.target.value));
+                        setBusinessDayError('');
+                      }}
                     >
-                      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', selected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500')}>
-                        <Building2 size={17} aria-hidden="true" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">{membership.club.name}</span>
-                        <span className="block text-xs text-gray-500">{roleLabel(membership.role)}</span>
-                      </span>
-                      {selected && <Check size={17} className="shrink-0 text-primary-600" aria-hidden="true" />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                      {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+                    </Select>
+                  </Field>
+                ) : (
+                  <div role="status" aria-label={tc('loading')} className="space-y-2">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                )}
+              </SettingRow>
 
-            {createClubOpen && isOwner && (
-              <form onSubmit={handleCreateClub} className="space-y-3 border-t border-gray-100 bg-gray-50/70 p-4">
-                <Field label={t('clubName')} htmlFor="new-club-name" required>
-                  <Input
-                    id="new-club-name"
-                    autoFocus
-                    maxLength={120}
-                    value={clubForm.name}
-                    onChange={(event) => setClubForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-                </Field>
-                <Field label={t('clubAddress')} htmlFor="new-club-address">
-                  <Input
-                    id="new-club-address"
-                    maxLength={200}
-                    value={clubForm.address}
-                    onChange={(event) => setClubForm((current) => ({ ...current, address: event.target.value }))}
-                  />
-                </Field>
-                {clubError && <InlineAlert variant="danger">{clubError}</InlineAlert>}
-                <Button type="submit" fullWidth loading={clubSaving} loadingLabel={t('savingClub')}>{t('createClub')}</Button>
-              </form>
-            )}
-          </Card>
+              <SettingRow id="setting-payment-methods" title={t('paymentMethods')} help={t('paymentMethodsHelp')}>
+                <div className="grid gap-2" role="group" aria-labelledby="setting-payment-methods">
+                  {PAYMENT_METHODS.map((method) => {
+                    const enabled = paymentMethods.includes(method);
+                    return (
+                      <Checkbox
+                        key={method}
+                        variant="card"
+                        checked={enabled}
+                        disabled={!selectedClub || !isOwner || clubTabSaving}
+                        onChange={() => togglePaymentMethod(method)}
+                        label={tc(`paymentMethods.${method}`)}
+                        description={enabled ? t('enabled') : t('disabled')}
+                      />
+                    );
+                  })}
+                </div>
+                {paymentMethodsError && <InlineAlert variant="danger" hideIcon className="mt-3 py-2">{paymentMethodsError}</InlineAlert>}
+                {!isOwner && <p className="mt-2 text-xs text-gray-500">{t('paymentMethodsOwnerOnly')}</p>}
+              </SettingRow>
 
-          <Card as="section">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600">
-                <UserRound size={19} aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
+              {isOwner && (businessDayChanged || paymentMethodsChanged) && (
+                <CardFooter className="flex flex-col gap-3 bg-gray-50/60 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium text-gray-700">{t('unsavedChanges', { count: changeCount })}</p>
+                  <div className="flex gap-2 sm:justify-end">
+                    <Button type="button" variant="ghost" className="flex-1 sm:flex-none" disabled={clubTabSaving} onClick={discardClubChanges}>
+                      {t('discard')}
+                    </Button>
+                    <Button type="submit" className="flex-1 sm:flex-none" disabled={!selectedClub} loading={clubTabSaving} loadingLabel={t('savingBusinessDay')}>
+                      {tc('save')}
+                    </Button>
+                  </div>
+                </CardFooter>
+              )}
+            </form>
+          )}
+
+          {activeTab === 'clubs' && (
+            <>
+              <CardHeader>
+                <SectionHeading
+                  title={t('clubs')}
+                  description={t('selectClubHelp')}
+                  badge={<Badge variant="neutral">{memberships.length}</Badge>}
+                  action={isOwner ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={createClubOpen}
+                      aria-controls="create-club-form"
+                      icon={<Plus size={16} aria-hidden="true" />}
+                      onClick={() => {
+                        setCreateClubOpen((current) => !current);
+                        setClubError('');
+                      }}
+                    >
+                      {t('addClub')}
+                    </Button>
+                  ) : undefined}
+                />
+              </CardHeader>
+
+              {createClubOpen && isOwner && (
+                <form id="create-club-form" onSubmit={handleCreateClub} className="grid gap-3 border-b border-gray-100 bg-gray-50/60 px-5 py-4 sm:grid-cols-2">
+                  <Field label={t('clubName')} htmlFor="new-club-name" required>
+                    <Input
+                      id="new-club-name"
+                      autoFocus
+                      maxLength={120}
+                      value={clubForm.name}
+                      onChange={(event) => setClubForm((current) => ({ ...current, name: event.target.value }))}
+                    />
+                  </Field>
+                  <Field label={t('clubAddress')} htmlFor="new-club-address">
+                    <Input
+                      id="new-club-address"
+                      maxLength={200}
+                      value={clubForm.address}
+                      onChange={(event) => setClubForm((current) => ({ ...current, address: event.target.value }))}
+                    />
+                  </Field>
+                  {clubError && <InlineAlert variant="danger" className="sm:col-span-2">{clubError}</InlineAlert>}
+                  <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
+                    <Button type="button" variant="ghost" disabled={clubSaving} onClick={() => { setCreateClubOpen(false); setClubError(''); }}>
+                      {tc('cancel')}
+                    </Button>
+                    <Button type="submit" loading={clubSaving} loadingLabel={t('savingClub')}>{t('createClub')}</Button>
+                  </div>
+                </form>
+              )}
+
+              <ul className="divide-y divide-gray-100" aria-label={t('clubs')}>
+                {memberships.map((membership) => {
+                  const selected = selectedClub?.id === membership.club.id;
+                  return (
+                    <li key={membership.club.id}>
+                      <button
+                        type="button"
+                        aria-current={selected ? 'true' : undefined}
+                        onClick={() => setSelectedClubId(membership.club.id)}
+                        className="flex min-h-14 w-full items-center gap-3 px-5 py-3 text-left transition hover:bg-gray-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-gray-950">{membership.club.name}</span>
+                          {membership.club.address && <span className="block truncate text-xs text-gray-500">{membership.club.address}</span>}
+                        </span>
+                        <Badge size="sm" variant={membership.role === 'owner' ? 'primary' : membership.role === 'admin' ? 'neutral' : 'outline'}>
+                          {roleLabel(membership.role)}
+                        </Badge>
+                        <span className={cn('flex w-5 shrink-0 justify-center text-primary-600', !selected && 'invisible')} aria-hidden="true">
+                          <Check size={18} />
+                        </span>
+                        {selected && <span className="sr-only">{t('selectedClub')}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
+          {activeTab === 'profile' && (
+            <SettingRow id="setting-account" title={t('account')}>
+              <div className="flex items-center gap-3">
                 {accountLoading ? (
-                  <div className="space-y-2" role="status" aria-label={tc('loading')}>
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-40 bg-gray-100" />
+                  <div className="flex items-center gap-3" role="status" aria-label={tc('loading')}>
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-44" />
+                    </div>
                   </div>
                 ) : (
                   <>
-                    <p className="truncate text-sm font-semibold text-gray-900">{account.fullName || t('account')}</p>
-                    <p className="truncate text-xs text-gray-500">{account.email ?? '—'}</p>
+                    <Avatar name={account.fullName || account.email || '?'} tone="neutral" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-950">{account.fullName || t('account')}</p>
+                      <p className="truncate text-xs text-gray-500">{account.email ?? '—'}</p>
+                    </div>
+                    {account.role && <Badge variant="outline" className="ml-auto shrink-0">{roleLabel(account.role)}</Badge>}
                   </>
                 )}
               </div>
-            </div>
-            {account.role && <Badge variant="neutral" className="mt-3">{roleLabel(account.role)}</Badge>}
-          </Card>
-        </aside>
+            </SettingRow>
+          )}
 
-        <Card as="section" padding="none" className="overflow-hidden">
-          <CardHeader className="py-5 sm:px-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-wider text-primary-600">{t('clubSettings')}</p>
-                <h2 className="mt-1 truncate text-xl font-bold text-gray-950">{selectedClub?.name ?? t('clubs')}</h2>
-                {selectedClub?.address && (
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500"><MapPin size={14} aria-hidden="true" />{selectedClub.address}</p>
-                )}
-              </div>
-              <Badge variant="primary" className="w-fit">{roleLabel(clubRole)}</Badge>
-            </div>
-          </CardHeader>
-
-          <form onSubmit={handleSaveBusinessDay} className="grid gap-5 border-b border-gray-100 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_200px] sm:px-6">
-            <SectionHeading
-              icon={<Clock3 size={19} aria-hidden="true" />}
-              iconClassName="bg-amber-50 text-amber-600"
-              title={t('businessDay')}
-              description={t('businessDayHelp')}
-            />
-            <div className="space-y-2">
-              <Field label={t('businessDayStartTime')} htmlFor="business-day-hour" error={businessDayError || undefined}>
-                <Select
-                  id="business-day-hour"
-                  value={businessDayStartHour}
-                  disabled={!selectedClub || !isOwner || businessDaySaving}
-                  onChange={(event) => {
-                    setBusinessDayStartHour(Number(event.target.value));
-                    setBusinessDayError('');
-                  }}
-                >
-                  {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
-                </Select>
-              </Field>
-              {isOwner ? (
-                <Button type="submit" fullWidth disabled={!selectedClub || !businessDayChanged} loading={businessDaySaving} loadingLabel={t('savingBusinessDay')}>
-                  {t('saveBusinessDay')}
-                </Button>
-              ) : <p className="text-xs text-gray-500">{t('businessDayOwnerOnly')}</p>}
-            </div>
-          </form>
-
-          <form onSubmit={handleSavePaymentMethods} className="px-5 py-5 sm:px-6">
-            <SectionHeading
-              icon={<CreditCard size={19} aria-hidden="true" />}
-              title={t('paymentMethods')}
-              description={t('paymentMethodsHelp')}
-            />
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3" role="group" aria-label={t('paymentMethods')}>
-              {PAYMENT_METHODS.map((method) => {
-                const enabled = paymentMethods.includes(method);
-                const MethodIcon = method === 'cash' ? Banknote : method === 'terminal' ? CreditCard : WalletCards;
-                return (
-                  <Checkbox
-                    key={method}
-                    variant="card"
-                    checked={enabled}
-                    disabled={!selectedClub || !isOwner || paymentMethodsSaving}
-                    onChange={() => togglePaymentMethod(method)}
-                    label={(
-                      <span className="flex items-center gap-2">
-                        <MethodIcon size={16} aria-hidden="true" className={enabled ? 'text-primary-600' : 'text-gray-400'} />
-                        {tc(`paymentMethods.${method}`)}
-                      </span>
-                    )}
-                    description={enabled ? t('enabled') : t('disabled')}
-                  />
-                );
-              })}
-            </div>
-
-            <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 flex-1">
-                {paymentMethodsError
-                  ? <InlineAlert variant="danger" hideIcon className="py-2">{paymentMethodsError}</InlineAlert>
-                  : <p className="text-xs text-gray-400">{t('paymentMethodsHint')}</p>}
-              </div>
-              {isOwner ? (
-                <Button type="submit" className="shrink-0" disabled={!selectedClub || !paymentMethodsChanged} loading={paymentMethodsSaving} loadingLabel={t('savingPaymentMethods')}>
-                  {t('savePaymentMethods')}
-                </Button>
-              ) : <p className="text-sm text-gray-500">{t('paymentMethodsOwnerOnly')}</p>}
-            </div>
-          </form>
+          {activeTab === 'developer' && isOwner && selectedClub && (
+            <MigrationHealthPanel key={selectedClub.id} clubId={selectedClub.id} />
+          )}
         </Card>
       </div>
-
-      {isOwner && selectedClub && <MigrationHealthPanel key={selectedClub.id} clubId={selectedClub.id} />}
 
       {toastElement}
     </div>

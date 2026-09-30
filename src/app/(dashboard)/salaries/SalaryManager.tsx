@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { Banknote, Building2, Check, History, Pencil, Power, Users, Wallet, X } from 'lucide-react';
+import { Banknote, Building2, Check, ChevronRight, History, Pencil, Power, Users, Wallet, X } from 'lucide-react';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Avatar,
   Badge,
   Button,
   ButtonLink,
@@ -31,7 +32,9 @@ import {
   Textarea,
   useConfirm,
   useToast,
+  type SegmentedOption,
 } from '@/components/PresentationFoundation';
+import { cn } from '@/lib/utils';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { createClient } from '@/lib/supabase/client';
 import { loadSalaries } from '@/lib/supabase/salaries';
@@ -68,8 +71,11 @@ export default function SalariesPage({ view = 'operations', employeeId }: { view
   return <SalaryManager key={`${selectedClubId}:${view}:${employeeId ?? ''}`} clubId={selectedClubId} view={view} employeeId={employeeId} />;
 }
 
-function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: SalaryView; employeeId?: string }) {
+function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: string; view: SalaryView; employeeId?: string }) {
   const t = useTranslations('salaries');
+  // The route decides the initial view; the segmented control switches views
+  // in place so the loaded data is reused instead of refetched.
+  const [view, setView] = useState<SalaryView>(initialView);
   const tc = useTranslations('common');
   const tp = useTranslations('expenses');
   const { locale } = useAppLocale();
@@ -279,6 +285,12 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
     label: t(mode === 'new' ? 'addEmployee' : mode === 'salary' ? 'changeSalary' : mode === 'kpi' ? 'changeKpi' : 'editEmployee'),
   }));
   const entryKindOptions = (['payment', 'bonus', 'fine'] as const).map((kind) => ({ value: kind, label: t(kind) }));
+  // History is per employee, so it only opens once an employee route provided one.
+  const viewOptions: SegmentedOption<SalaryView>[] = [
+    { value: 'employees', label: t('employees') },
+    { value: 'operations', label: t('dailyOperations') },
+    { value: 'history', label: historyEmployee?.name ?? t('history'), disabled: !employeeId },
+  ];
 
   function renderEmployeeSelect(dialog: 'entry' | 'employee', selected: SalaryEmployee | null) {
     return (
@@ -402,10 +414,11 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
       ? t('recordOperations')
       : t(setupMode === 'new' ? 'addEmployee' : setupMode === 'salary' ? 'changeSalary' : setupMode === 'kpi' ? 'changeKpi' : 'editEmployee');
     return (
-      <Card as="section" id={dialog === 'entry' ? 'salary-entry-form' : 'salary-employee-form'} tone="primary" padding="lg" className="mb-6 rounded-2xl">
+      <Card as="section" id={dialog === 'entry' ? 'salary-entry-form' : 'salary-employee-form'} padding="lg">
         <SectionHeading title={title} className="mb-5" />
         {dialog === 'employee' && (
           <SegmentedControl
+            variant="soft"
             className="mb-5 grid-cols-2 sm:grid-cols-4"
             columns="auto"
             label={t('salarySetup')}
@@ -418,16 +431,16 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
         <form onSubmit={(event) => void save(event, dialog)} className="space-y-4">
           <fieldset disabled={formDisabled(dialog)} className="grid gap-4 sm:grid-cols-2">
             {dialog === 'entry' && (
-              <>
+              <div className="sm:col-span-2">
                 <SegmentedControl
-                  className="sm:col-span-2"
+                  variant="soft"
                   label={t('entryType')}
                   options={entryKindOptions}
                   value={entryForm.kind}
                   onChange={(kind) => openEntry(selected, kind)}
                 />
-                <InlineAlert variant="info" className="sm:col-span-2">{t(`${entryForm.kind}Hint`)}</InlineAlert>
-              </>
+                <p className="mt-2 text-xs leading-5 text-gray-500">{t(`${entryForm.kind}Hint`)}</p>
+              </div>
             )}
             {(dialog === 'entry' || setupMode !== 'new') && renderEmployeeSelect(dialog, selected)}
             {dialog === 'employee' ? renderEmployeeFields() : renderEntryFields(selected)}
@@ -449,56 +462,64 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
 
   const pageTitle = view === 'history' ? historyEmployee?.name ?? t('history') : t(view === 'employees' ? 'employees' : 'title');
   const employeesSorted = [...data.employees].sort((a, b) => a.name.localeCompare(b.name));
+  const dueValue = view === 'history' ? salaryBalance(historyMonths) : due;
+  const currencySuffix = <span className="ml-1.5 text-sm font-medium tracking-normal text-gray-500">{tc('currency')}</span>;
+  const metricMoney = (value: number) => <>{formatCurrency(value)}{currencySuffix}</>;
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
-        back={view === 'operations' ? undefined : view === 'history' ? '/salaries/employees' : '/salaries'}
-        backLabel={t(view === 'history' ? 'employees' : 'title')}
+        back={view === 'history' ? '/salaries/employees' : undefined}
+        backLabel={t('employees')}
         title={pageTitle}
         description={t(view === 'history' ? 'history' : 'description')}
-        action={view === 'operations' ? (
-          <ButtonLink href="/salaries/employees" icon={<Users size={18} aria-hidden="true" />}>{t('employees')}</ButtonLink>
-        ) : undefined}
+      />
+
+      <SegmentedControl
+        variant="soft"
+        label={t('viewSwitcher')}
+        options={viewOptions}
+        value={view}
+        onChange={setView}
+        className="sm:max-w-xl"
       />
 
       {loadError && (
-        <InlineAlert variant="danger" className="mb-4" action={<Button variant="outline" size="sm" onClick={() => void reload()}>{t('retry')}</Button>}>
+        <InlineAlert variant="danger" action={<Button variant="outline" size="sm" onClick={() => void reload()}>{t('retry')}</Button>}>
           {t('loadError')}
         </InlineAlert>
       )}
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <MetricCard
           label={t(view === 'history' ? 'base' : 'activeEmployees')}
-          value={view === 'history' ? currency(historyMonths.reduce((sum, month) => sum + month.base, 0)) : String(activeCount)}
+          value={view === 'history' ? metricMoney(historyMonths.reduce((sum, month) => sum + month.base, 0)) : String(activeCount)}
           trendLabel={view !== 'history' && upcomingCount ? t('upcomingCount', { count: upcomingCount }) : undefined}
           icon={Users}
           loading={loading}
         />
-        <MetricCard label={t('totalDue')} value={currency(view === 'history' ? salaryBalance(historyMonths) : due)} icon={Wallet} loading={loading} tone="primary" />
-        <MetricCard label={t('totalPaid')} value={currency(view === 'history' ? historyMonths.reduce((sum, month) => sum + month.paid, 0) : paid)} icon={Banknote} loading={loading} />
+        <MetricCard label={t('totalDue')} value={metricMoney(dueValue)} icon={Wallet} loading={loading} tone={dueValue > 0 ? 'warning' : 'default'} />
+        <MetricCard label={t('totalPaid')} value={metricMoney(view === 'history' ? historyMonths.reduce((sum, month) => sum + month.paid, 0) : paid)} icon={Banknote} loading={loading} />
       </div>
 
       {view !== 'employees' && (
-        <details className="mb-6 rounded-xl border border-primary-100 bg-primary-50 p-4 text-sm text-primary-900">
-          <summary className="cursor-pointer font-semibold">{t('howItWorks')}</summary>
-          <div className="mt-3 space-y-2 leading-6"><p>{t('baseHelp')}</p><p>{t('kpiHelp')}</p><p>{t('estimateHelp')}</p><p>{t('paymentHelp')}</p></div>
+        <details className="group text-sm text-gray-700">
+          <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-xl px-3 text-[13px] font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 [&::-webkit-details-marker]:hidden [&>svg]:transition-transform group-open:[&>svg]:rotate-90">
+            <ChevronRight size={16} aria-hidden="true" />
+            {t('howItWorks')}
+          </summary>
+          <Card className="mt-2">
+            <div className="space-y-2 leading-6 text-gray-600"><p>{t('baseHelp')}</p><p>{t('kpiHelp')}</p><p>{t('estimateHelp')}</p><p>{t('paymentHelp')}</p></div>
+          </Card>
         </details>
       )}
 
-      {!canEdit && <InlineAlert variant="info" className="mb-6">{t('viewOnlyHelp')}</InlineAlert>}
+      {!canEdit && <InlineAlert variant="info">{t('viewOnlyHelp')}</InlineAlert>}
 
       {canEdit && view === 'operations' && (
-        <div className="space-y-8">
-          <div>
-            <SectionHeading size="lg" title={t('dailyOperations')} description={t('operationsHelp')} className="mb-4" />
-            {renderForm('entry')}
-          </div>
-          <div>
-            <SectionHeading size="lg" title={t('salarySetup')} description={t('setupHelp')} className="mb-4" />
-            {renderForm('employee')}
-          </div>
+        <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+          {renderForm('entry')}
+          {renderForm('employee')}
         </div>
       )}
 
@@ -517,12 +538,12 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
             const status = upcoming ? 'upcoming' : rate?.active ? 'active' : 'inactive';
 
             return (
-              <Card key={employee.id} as="article" padding="lg" className="rounded-2xl">
+              <Card key={employee.id} as="article" padding="lg">
                 <div className="mb-5 flex items-start gap-3">
-                  <div className="rounded-xl bg-primary-50 p-3 text-primary-600"><Users size={23} aria-hidden="true" /></div>
+                  <Avatar name={employee.name} size="lg" />
                   <div className="min-w-0 flex-1">
-                    <h2 className="break-words text-lg font-bold text-gray-900">{employee.name}</h2>
-                    <div className="mt-1 flex items-center gap-1 text-sm text-gray-500">
+                    <h2 className="break-words text-base font-semibold text-gray-950">{employee.name}</h2>
+                    <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-500">
                       <span className="break-words">{roleLabel(employee.job_title)}</span>
                       {canEdit && roleEdit?.id !== employee.id && (
                         <IconButton
@@ -539,7 +560,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
                   <Badge variant={status === 'upcoming' ? 'info' : status === 'active' ? 'success' : 'neutral'}>{t(status)}</Badge>
                 </div>
                 {canEdit && roleEdit?.id === employee.id && (
-                  <form className="mb-4 rounded-xl border border-primary-100 bg-primary-50 p-3" onSubmit={(event) => { event.preventDefault(); void saveEmployeeRole(); }}>
+                  <form className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3" onSubmit={(event) => { event.preventDefault(); void saveEmployeeRole(); }}>
                     <Field label={t('role')} htmlFor={`employee-role-${employee.id}`} error={roleError || undefined}>
                       <div className="flex flex-wrap gap-2">
                         <Select id={`employee-role-${employee.id}`} className="min-w-0 flex-1" required disabled={saving} value={roleEdit.role} onChange={(event) => setRoleEdit({ ...roleEdit, role: event.target.value })}>
@@ -552,28 +573,35 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
                     </Field>
                   </form>
                 )}
-                <dl className="space-y-2 text-sm">
+                <dl className="divide-y divide-gray-100 text-sm">
                   {[
-                    [t(upcoming ? 'startsOn' : 'joined'), formatDateOnly(employee.joined_on, locale), 'text-gray-900'],
-                    [t(rate?.salary_type ?? 'daily'), currency(Number(rate?.amount ?? 0)), 'text-gray-900'],
-                    [t('kpi'), `${Number(rate?.kpi_percent ?? 0)}%`, 'text-primary-600'],
-                  ].map(([label, value, className]) => (
-                    <div key={label} className="flex items-center justify-between gap-4 rounded-xl bg-gray-50 px-4 py-3">
+                    [t(upcoming ? 'startsOn' : 'joined'), formatDateOnly(employee.joined_on, locale)],
+                    [t(rate?.salary_type ?? 'daily'), currency(Number(rate?.amount ?? 0))],
+                    [t('kpi'), `${Number(rate?.kpi_percent ?? 0)}%`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-4 py-2">
                       <dt className="text-gray-500">{label}</dt>
-                      <dd className={`text-right font-semibold ${className}`}>{value}</dd>
+                      <dd className="text-right font-semibold tabular-nums text-gray-900">{value}</dd>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between gap-4 rounded-xl bg-primary-50 px-4 py-3">
-                    <dt className="font-medium text-primary-800">{t(balance < 0 ? 'advance' : 'balance')}</dt>
-                    <dd className="text-right text-lg font-bold text-primary-600">{currency(Math.abs(balance))}</dd>
+                  <div className="flex items-center justify-between gap-4 pt-3">
+                    <dt className="text-gray-500">{t(balance < 0 ? 'advance' : 'balance')}</dt>
+                    <dd className={cn('text-right text-xl font-bold tracking-tight tabular-nums', balance > 0 ? 'text-warning-600' : 'text-gray-950')}>
+                      {formatCurrency(Math.abs(balance))}{currencySuffix}
+                    </dd>
                   </div>
                 </dl>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <ButtonLink size="sm" href={`/salaries/employees/${employee.id}`} icon={<History size={16} aria-hidden="true" />}>{t('history')}</ButtonLink>
                   {canEdit && (
-                    <Button variant="dangerOutline" size="sm" disabled={saving || !rate?.active} onClick={() => void deactivateEmployee(employee)} icon={<Power size={16} aria-hidden="true" />}>
-                      {t('deactivate')}
-                    </Button>
+                    <IconButton
+                      variant="danger"
+                      size="sm"
+                      label={`${t('deactivate')} · ${employee.name}`}
+                      disabled={saving || !rate?.active}
+                      onClick={() => void deactivateEmployee(employee)}
+                      icon={<Power size={16} aria-hidden="true" />}
+                    />
                   )}
                 </div>
               </Card>
@@ -587,7 +615,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
         <Card><EmptyState icon={Users} title={t('employeeNotFound')} /></Card>
       )}
       {view === 'history' && historyEmployee && (
-        <Card as="section" padding="lg" className="rounded-2xl">
+        <Card as="section" padding="lg">
           <div className="space-y-6">
             <div>
               <SectionHeading size="sm" title={t('monthlyBreakdown')} description={t('estimateHelp')} className="mb-3" />
@@ -612,13 +640,13 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
               <SectionHeading size="sm" title={t('transactions')} className="mb-3" />
               <div className="space-y-2">
                 {data.entries.filter((e) => e.employee_id === historyEmployee.id).sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at)).map((entry) => (
-                  <div key={entry.id} className={`flex flex-wrap items-start justify-between gap-4 rounded-xl bg-gray-50 p-3 text-sm ${entry.deleted_at ? 'opacity-60' : ''}`}>
+                  <div key={entry.id} className={`flex flex-wrap items-start justify-between gap-4 rounded-xl border border-gray-200 p-3 text-sm ${entry.deleted_at ? 'opacity-60' : ''}`}>
                     <div className="min-w-0">
-                      <p className="font-semibold">{t(entry.kind)} · {formatDateOnly(entry.date, locale)}</p>
+                      <p className="font-semibold text-gray-900">{t(entry.kind)} · {formatDateOnly(entry.date, locale)}</p>
                       {entry.payment_method && <p className="mt-1 text-xs text-gray-500">{tc(`paymentMethods.${entry.payment_method}`)} · {tp(`paymentSources.${entry.payment_source}`)}</p>}
                       {entry.comment && <p className="mt-1 break-words text-gray-500">{entry.comment}</p>}
                     </div>
-                    <strong className={entry.kind === 'bonus' ? 'text-success-600' : 'text-gray-900'}>{entry.kind === 'bonus' ? '+' : '−'}{currency(Number(entry.amount))}</strong>
+                    <strong className={cn('tabular-nums', entry.kind === 'bonus' ? 'text-success-600' : entry.kind === 'fine' ? 'text-danger-600' : 'text-gray-900')}>{entry.kind === 'bonus' ? '+' : '−'}{currency(Number(entry.amount))}</strong>
                     {entry.deleted_at ? (
                       <Badge variant="neutral" size="sm">{t('deleted')} · {formatDateTime(entry.deleted_at, locale)}</Badge>
                     ) : canEdit && (

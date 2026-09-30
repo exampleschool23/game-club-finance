@@ -10,6 +10,7 @@ import {
   Badge,
   type BadgeVariant,
   Button,
+  type ButtonVariant,
   Card,
   CardHeader,
   Checkbox,
@@ -17,6 +18,8 @@ import {
   Field,
   IconButton,
   InlineAlert,
+  Input,
+  Modal,
   PageHeader,
   SearchInput,
   SectionHeading,
@@ -32,8 +35,8 @@ import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import {
   Building2,
   ChevronDown,
+  Copy,
   Lock,
-  RefreshCw,
   Settings2,
   X,
   ShieldCheck,
@@ -72,10 +75,11 @@ function normalizeRole(role: string | null | undefined): UserRole {
   return role === 'owner' || role === 'admin' || role === 'viewer' ? role : 'viewer';
 }
 
+// One accent for the highest role; the rest stay quiet.
 const ROLE_BADGE_VARIANT: Record<UserRole, BadgeVariant> = {
-  owner: 'warning',
-  admin: 'primary',
-  viewer: 'neutral',
+  owner: 'primary',
+  admin: 'neutral',
+  viewer: 'outline',
 };
 
 export default function TeamPageClient() {
@@ -101,6 +105,22 @@ export default function TeamPageClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [featureAccessAvailable, setFeatureAccessAvailable] = useState(true);
   const [error, setError] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [loginUrl, setLoginUrl] = useState('');
+
+  useEffect(() => {
+    setLoginUrl(`${window.location.origin}/login`);
+  }, []);
+
+  async function copyLoginLink() {
+    try {
+      await navigator.clipboard.writeText(loginUrl);
+      showToast(t('linkCopied'));
+    } catch (copyError) {
+      console.error('Failed to copy login link', copyError);
+      showToast(t('copyFailed'), 'error');
+    }
+  }
 
   // Clubs the signed-in user owns. Membership changes are only offered for these;
   // other clubs are shown read-only (RLS enforces the same boundary).
@@ -554,7 +574,7 @@ export default function TeamPageClient() {
     }
   }
 
-  function renderAccessControls(profile: TeamMember, buttonLabel: string) {
+  function renderAccessControls(profile: TeamMember, buttonLabel: string, buttonVariant: ButtonVariant = 'primary') {
     const availableClubs = availableClubsForProfile(profile);
     const draft = draftForProfile(profile);
     const saving = isSavingProfile(profile.id);
@@ -562,7 +582,7 @@ export default function TeamPageClient() {
     if (availableClubs.length === 0) {
       const ownsAnyOtherClub = clubs.some((club) => ownedClubIds.has(club.id));
       return (
-        <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-500">
+        <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-500">
           <ShieldCheck size={16} className="text-success-500" aria-hidden="true" />
           {ownsAnyOtherClub ? t('allClubsAdded') : t('noOwnedClubs')}
         </div>
@@ -570,7 +590,7 @@ export default function TeamPageClient() {
     }
 
     return (
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
         <Select
           leadingIcon={<Building2 size={16} />}
           aria-label={t('gameClubs')}
@@ -593,6 +613,7 @@ export default function TeamPageClient() {
           ))}
         </Select>
         <Button
+          variant={buttonVariant}
           className="px-5"
           loading={saving}
           disabled={!draft.clubId}
@@ -603,6 +624,16 @@ export default function TeamPageClient() {
         </Button>
       </div>
     );
+  }
+
+  /** "Касса, Склад, Долги" — or "Всё" for owners. */
+  function pageAccessSummary(membership: TeamMembership) {
+    if (membership.role === 'owner') return t('everything');
+    const access = featureAccessForMembership(membership.role, membership.featureAccess);
+    return FEATURE_DEFINITIONS
+      .filter((feature) => !('ownerOnly' in feature && feature.ownerOnly) && access.includes(feature.key))
+      .map((feature) => t(`features.${feature.labelKey}`))
+      .join(', ');
   }
 
   function renderFeatureAccessPanel(profile: TeamMember, membership: TeamMembership) {
@@ -616,8 +647,6 @@ export default function TeamPageClient() {
         <SectionHeading
           as="h3"
           size="sm"
-          icon={<ShieldCheck size={16} aria-hidden="true" />}
-          iconClassName="h-8 w-8"
           title={t('pageAccess')}
           description={membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
           action={<Badge variant="outline" icon={<Building2 size={13} aria-hidden="true" />}>{membership.clubName}</Badge>}
@@ -680,10 +709,10 @@ export default function TeamPageClient() {
     <div>
       <PageHeader
         title={t('title')}
-        description={t('description')}
+        description={t('subtitle')}
         action={(
-          <Button variant="outline" disabled={loading || Boolean(savingId)} onClick={() => void loadProfiles()} icon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden="true" />}>
-            {t('refresh')}
+          <Button onClick={() => setInviteOpen(true)} icon={<UserPlus size={16} aria-hidden="true" />}>
+            {t('invite')}
           </Button>
         )}
       />
@@ -703,45 +732,40 @@ export default function TeamPageClient() {
       ) : (
         <div className="space-y-6">
           {pendingProfiles.length > 0 && (
-            <Card as="section" padding="none" tone="warning" className="overflow-hidden rounded-2xl">
-              <SectionHeading
-                size="sm"
-                className="px-4 py-3 sm:px-5"
-                icon={<UserPlus size={17} aria-hidden="true" />}
-                iconClassName="h-8 w-8 bg-white text-warning-600"
-                title={t('pendingApproval')}
-                badge={<Badge variant="warning" className="bg-white">{pendingProfiles.length}</Badge>}
-              />
-              <div className="divide-y divide-warning-50">
-                {pendingProfiles.map((profile) => (
-                  <div
-                    key={profile.id}
-                    className="grid gap-4 bg-white p-4 sm:px-5 lg:grid-cols-[minmax(240px,1fr)_minmax(440px,1.5fr)] lg:items-center"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Avatar name={profile.full_name} tone="neutral" />
-                      <div className="min-w-0">
-                        <p className="truncate font-bold text-gray-950">{profile.full_name}</p>
-                        {profile.email && <p className="truncate text-xs text-gray-500">{profile.email}</p>}
-                        <p className="mt-0.5 text-xs text-gray-400">{formatDateTime(profile.created_at, locale)}</p>
-                      </div>
+            <section aria-label={t('pendingApproval')} className="space-y-3">
+              {pendingProfiles.map((profile) => (
+                <Card
+                  key={profile.id}
+                  tone="warning"
+                  padding="sm"
+                  className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-5"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar name={profile.full_name} tone="neutral" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-950">{profile.full_name}</p>
+                      <p className="truncate text-xs text-gray-500">
+                        {profile.email && <span>{profile.email} · </span>}
+                        {t('requestedAt', { date: formatDateTime(profile.created_at, locale) })}
+                      </p>
                     </div>
-                    {renderAccessControls(profile, t('approve'))}
                   </div>
-                ))}
-              </div>
-            </Card>
+                  <div className="min-w-0 lg:w-[460px] lg:shrink-0">
+                    {renderAccessControls(profile, t('approve'), 'success')}
+                  </div>
+                </Card>
+              ))}
+            </section>
           )}
 
           {activeProfiles.length === 0 ? (
             <Card><EmptyState icon={Users} title={tc('noData')} /></Card>
           ) : (
-            <Card as="section" padding="none" className="overflow-hidden rounded-2xl">
-              <CardHeader className="sm:p-5">
+            <Card as="section" padding="none" className="overflow-hidden">
+              <CardHeader>
                 <SectionHeading
                   title={t('members')}
-                  description={t('manageHelp')}
-                  badge={<Badge variant="primary">{activeProfiles.length}</Badge>}
+                  badge={<Badge variant="neutral">{activeProfiles.length}</Badge>}
                   action={(
                     <SearchInput
                       className="w-full sm:w-72"
@@ -762,162 +786,175 @@ export default function TeamPageClient() {
                   action={<Button variant="ghost" size="sm" onClick={() => setSearchQuery('')}>{t('clearSearch')}</Button>}
                 />
               ) : (
-                <>
-                  <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_148px] gap-5 border-b border-gray-100 bg-gray-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 lg:grid">
-                    <span>{t('member')}</span>
-                    <span>{t('clubAccess')}</span>
-                    <span className="text-right">{t('actions')}</span>
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {filteredActiveProfiles.map((profile) => {
-                      const membership = selectedMembershipForProfile(profile);
-                      if (!membership) return null;
-                      const expanded = expandedMemberId === profile.id;
-                      const addAccessExpanded = expandedAddAccessId === profile.id;
-                      const hasAvailableClubs = availableClubsForProfile(profile).length > 0;
-                      const accessCount = FEATURE_DEFINITIONS.filter((feature) => (
-                        !('ownerOnly' in feature && feature.ownerOnly)
-                        && featureAccessForMembership(membership.role, membership.featureAccess).includes(feature.key)
-                      )).length;
-                      const saving = isSavingProfile(profile.id);
-                      const protectedOwner = membership.role === 'owner'
-                        && (profile.id === currentUserId || ownerCountForClub(membership.clubId) <= 1);
-                      const canManage = ownedClubIds.has(membership.clubId);
+                <div className="divide-y divide-gray-100">
+                  {filteredActiveProfiles.map((profile) => {
+                    const membership = selectedMembershipForProfile(profile);
+                    if (!membership) return null;
+                    const expanded = expandedMemberId === profile.id;
+                    const addAccessExpanded = expandedAddAccessId === profile.id;
+                    const hasAvailableClubs = availableClubsForProfile(profile).length > 0;
+                    const saving = isSavingProfile(profile.id);
+                    const protectedOwner = membership.role === 'owner'
+                      && (profile.id === currentUserId || ownerCountForClub(membership.clubId) <= 1);
+                    const canManage = ownedClubIds.has(membership.clubId);
 
-                      return (
-                        <article key={profile.id} className={expanded ? 'bg-primary-50/20' : 'bg-white'}>
-                          <div className="grid items-center gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_148px] lg:gap-5">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <Avatar name={profile.full_name} tone={membership.role === 'viewer' ? 'neutral' : 'primary'} />
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="break-words text-sm font-bold text-gray-950">{profile.full_name}</h3>
-                                  {profile.id === currentUserId && <Badge variant="primary" size="sm">{t('you')}</Badge>}
-                                </div>
-                                {profile.email && <p className="mt-1 truncate text-xs text-gray-500" title={profile.email}>{profile.email}</p>}
-                              </div>
-                            </div>
-
-                            <div className="min-w-0 sm:order-3 sm:col-span-2 lg:order-none lg:col-span-1">
+                    return (
+                      <article key={profile.id}>
+                        <div className={cn(
+                          'grid items-center gap-3 px-5 py-4 transition-colors sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_auto] lg:gap-5',
+                          !expanded && 'hover:bg-gray-50/60',
+                        )}>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar name={profile.full_name} tone={membership.role === 'viewer' ? 'neutral' : 'primary'} />
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <Building2 size={15} className="shrink-0 text-gray-400" aria-hidden="true" />
-                                <span className="break-words text-sm font-medium text-gray-800">{membership.clubName}</span>
-                                <Badge size="sm" variant={ROLE_BADGE_VARIANT[membership.role]}>
-                                  {t(`roles.${membership.role}`)}
-                                </Badge>
+                                <h3 className="break-words text-sm font-semibold text-gray-950">{profile.full_name}</h3>
+                                {profile.id === currentUserId && <Badge variant="outline" size="sm">{t('you')}</Badge>}
                               </div>
-                              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[23px] text-xs text-gray-500">
-                                {featureAccessAvailable && <span>{membership.role === 'owner' ? t('allPages') : t('enabledPages', { count: accessCount })}</span>}
-                                {profile.memberships.length > 1 && <span className="font-medium text-primary-600">{t('additionalClubs', { count: profile.memberships.length - 1 })}</span>}
-                              </p>
+                              {profile.email && <p className="mt-0.5 truncate text-xs text-gray-500" title={profile.email}>{profile.email}</p>}
                             </div>
-
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={cn('sm:order-2 lg:order-none', expanded && 'border-primary-200 bg-primary-50 text-primary-700')}
-                              onClick={() => {
-                                setExpandedMemberId(expanded ? null : profile.id);
-                                setExpandedAddAccessId(null);
-                              }}
-                              aria-label={t('manageMember', { name: profile.full_name })}
-                              aria-expanded={expanded}
-                              aria-controls={`member-access-${profile.id}`}
-                              icon={<Settings2 size={15} aria-hidden="true" />}
-                              iconRight={<ChevronDown size={14} className={cn('shrink-0 transition-transform', expanded && 'rotate-180')} aria-hidden="true" />}
-                            >
-                              {t('manageAccess')}
-                            </Button>
                           </div>
 
-                          {expanded && (
-                            <div id={`member-access-${profile.id}`} className="border-t border-primary-100 bg-gray-50/80 px-4 py-5 sm:px-5">
-                              <SectionHeading
-                                as="h3"
-                                size="sm"
-                                className="mb-5"
-                                title={t('accessSettings')}
-                                description={canManage ? t('autoSave') : t('notClubOwner')}
-                                action={<IconButton variant="ghost" size="sm" label={t('hideAccess')} icon={<X size={17} />} onClick={() => setExpandedMemberId(null)} />}
-                              />
-                              <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-                                <Field label={t('gameClubs')} htmlFor={`member-club-${profile.id}`}>
-                                  <Select
-                                    id={`member-club-${profile.id}`}
-                                    className="font-medium"
-                                    value={membership.clubId}
-                                    disabled={saving}
-                                    onChange={(event) => {
-                                      setMembershipSelection((current) => ({ ...current, [profile.id]: event.target.value }));
-                                      setExpandedAddAccessId(null);
-                                    }}
-                                  >
-                                    {profile.memberships.map((item) => <option key={item.clubId} value={item.clubId}>{item.clubName}</option>)}
-                                  </Select>
-                                </Field>
-                                <Field
-                                  label={t('memberRole')}
-                                  htmlFor={`member-role-${profile.id}`}
-                                  hint={!canManage ? t('notClubOwner') : protectedOwner ? (profile.id === currentUserId ? t('selfDemoteBlocked') : t('lastOwnerBlocked')) : t('autoSave')}
-                                >
-                                  <Select
-                                    id={`member-role-${profile.id}`}
-                                    className="font-medium"
-                                    value={membership.role}
-                                    disabled={saving || protectedOwner || !canManage}
-                                    onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
-                                  >
-                                    {ROLES.map((role) => <option key={role} value={role}>{t(`roles.${role}`)}</option>)}
-                                  </Select>
-                                </Field>
-                                {hasAvailableClubs && (
-                                  <Button
-                                    variant="outline"
-                                    disabled={saving}
-                                    onClick={() => setExpandedAddAccessId(addAccessExpanded ? null : profile.id)}
-                                    aria-expanded={addAccessExpanded}
-                                    aria-controls={`add-access-${profile.id}`}
-                                    icon={<UserPlus size={16} aria-hidden="true" />}
-                                  >
-                                    {t('addAccess')}
-                                  </Button>
-                                )}
-                              </div>
-                              {addAccessExpanded && (
-                                <div id={`add-access-${profile.id}`} className="mb-5 rounded-xl border border-primary-200 bg-white p-4">
-                                  <p className="mb-3 text-sm font-semibold text-gray-800">{t('addAccessHelp')}</p>
-                                  {renderAccessControls(profile, t('addAccess'))}
-                                </div>
-                              )}
-                              {featureAccessAvailable && renderFeatureAccessPanel(profile, membership)}
-                              <div className="mt-5 flex flex-col gap-3 border-t border-gray-200/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs leading-5 text-gray-500">
-                                  {!canManage ? t('notClubOwner') : profile.id === currentUserId ? t('selfRemoveBlocked') : protectedOwner ? t('lastOwnerBlocked') : t('removeAccessHelp', { club: membership.clubName })}
-                                </p>
-                                <Button
-                                  variant="dangerOutline"
-                                  size="sm"
-                                  className="shrink-0"
-                                  disabled={saving || profile.id === currentUserId || protectedOwner || !canManage}
-                                  onClick={() => removeClubAccess(profile, membership)}
-                                  aria-label={t('removeClubAccess', { club: membership.clubName })}
-                                  icon={<Trash2 size={15} aria-hidden="true" />}
-                                >
-                                  {t('removeAccess')}
-                                </Button>
-                              </div>
+                          <div className="min-w-0 sm:order-3 sm:col-span-2 lg:order-none lg:col-span-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge size="sm" variant={ROLE_BADGE_VARIANT[membership.role]}>
+                                {t(`roles.${membership.role}`)}
+                              </Badge>
+                              {profile.memberships.map((item) => (
+                                <Badge key={item.clubId} size="sm" variant="outline" icon={<Building2 size={12} aria-hidden="true" />}>
+                                  {item.clubName}
+                                </Badge>
+                              ))}
                             </div>
-                          )}
-                        </article>
-                      );
-                    })}
-                  </div>
-                </>
+                            {featureAccessAvailable && (
+                              <p className="mt-1.5 line-clamp-2 text-xs text-gray-500" title={pageAccessSummary(membership)}>
+                                {pageAccessSummary(membership)}
+                              </p>
+                            )}
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="sm:order-2 lg:order-none"
+                            onClick={() => {
+                              setExpandedMemberId(expanded ? null : profile.id);
+                              setExpandedAddAccessId(null);
+                            }}
+                            aria-label={t('manageMember', { name: profile.full_name })}
+                            aria-expanded={expanded}
+                            aria-controls={`member-access-${profile.id}`}
+                            icon={<Settings2 size={15} aria-hidden="true" />}
+                            iconRight={<ChevronDown size={14} className={cn('shrink-0 transition-transform', expanded && 'rotate-180')} aria-hidden="true" />}
+                          >
+                            {t('manageAccess')}
+                          </Button>
+                        </div>
+
+                        {expanded && (
+                          <div id={`member-access-${profile.id}`} className="border-t border-gray-100 bg-gray-50/60 px-5 py-5">
+                            <SectionHeading
+                              as="h3"
+                              size="sm"
+                              className="mb-5"
+                              title={t('accessSettings')}
+                              description={canManage ? t('autoSave') : t('notClubOwner')}
+                              action={<IconButton variant="ghost" size="sm" label={t('hideAccess')} icon={<X size={17} />} onClick={() => setExpandedMemberId(null)} />}
+                            />
+                            <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+                              <Field label={t('gameClubs')} htmlFor={`member-club-${profile.id}`}>
+                                <Select
+                                  id={`member-club-${profile.id}`}
+                                  className="font-medium"
+                                  value={membership.clubId}
+                                  disabled={saving}
+                                  onChange={(event) => {
+                                    setMembershipSelection((current) => ({ ...current, [profile.id]: event.target.value }));
+                                    setExpandedAddAccessId(null);
+                                  }}
+                                >
+                                  {profile.memberships.map((item) => <option key={item.clubId} value={item.clubId}>{item.clubName}</option>)}
+                                </Select>
+                              </Field>
+                              <Field
+                                label={t('memberRole')}
+                                htmlFor={`member-role-${profile.id}`}
+                                hint={!canManage ? t('notClubOwner') : protectedOwner ? (profile.id === currentUserId ? t('selfDemoteBlocked') : t('lastOwnerBlocked')) : undefined}
+                              >
+                                <Select
+                                  id={`member-role-${profile.id}`}
+                                  className="font-medium"
+                                  value={membership.role}
+                                  disabled={saving || protectedOwner || !canManage}
+                                  onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
+                                >
+                                  {ROLES.map((role) => <option key={role} value={role}>{t(`roles.${role}`)}</option>)}
+                                </Select>
+                              </Field>
+                              {hasAvailableClubs && (
+                                <Button
+                                  variant="outline"
+                                  disabled={saving}
+                                  onClick={() => setExpandedAddAccessId(addAccessExpanded ? null : profile.id)}
+                                  aria-expanded={addAccessExpanded}
+                                  aria-controls={`add-access-${profile.id}`}
+                                  icon={<UserPlus size={16} aria-hidden="true" />}
+                                >
+                                  {t('addAccess')}
+                                </Button>
+                              )}
+                            </div>
+                            {addAccessExpanded && (
+                              <div id={`add-access-${profile.id}`} className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
+                                <p className="mb-3 text-sm font-medium text-gray-800">{t('addAccessHelp')}</p>
+                                {renderAccessControls(profile, t('addAccess'))}
+                              </div>
+                            )}
+                            {featureAccessAvailable && renderFeatureAccessPanel(profile, membership)}
+                            <div className="mt-5 flex flex-col gap-3 border-t border-gray-200/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-xs leading-5 text-gray-500">
+                                {!canManage ? t('notClubOwner') : profile.id === currentUserId ? t('selfRemoveBlocked') : protectedOwner ? t('lastOwnerBlocked') : t('removeAccessHelp', { club: membership.clubName })}
+                              </p>
+                              <Button
+                                variant="dangerOutline"
+                                size="sm"
+                                className="shrink-0"
+                                disabled={saving || profile.id === currentUserId || protectedOwner || !canManage}
+                                onClick={() => removeClubAccess(profile, membership)}
+                                aria-label={t('removeClubAccess', { club: membership.clubName })}
+                                icon={<Trash2 size={15} aria-hidden="true" />}
+                              >
+                                {t('removeAccess')}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
               )}
             </Card>
           )}
         </div>
       )}
+
+      <Modal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        title={t('inviteTitle')}
+        footer={<Button variant="ghost" onClick={() => setInviteOpen(false)}>{tc('close')}</Button>}
+      >
+        <p className="text-sm leading-6 text-gray-600">{t('inviteHelp')}</p>
+        <Field label={t('loginLink')} htmlFor="team-login-link" className="mt-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input id="team-login-link" readOnly value={loginUrl} onFocus={(event) => event.currentTarget.select()} className="font-mono text-[13px]" />
+            <Button variant="outline" className="shrink-0" onClick={() => void copyLoginLink()} icon={<Copy size={16} aria-hidden="true" />}>
+              {t('copyLink')}
+            </Button>
+          </div>
+        </Field>
+      </Modal>
 
       {toastElement}
       {confirmDialog}

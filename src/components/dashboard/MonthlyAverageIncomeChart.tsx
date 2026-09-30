@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/formatters';
-import { ChartCard, formatAxis } from './ChartCard';
+import { ChartCard, chartColors, formatAxis } from './ChartCard';
 
 export interface MonthlyAverageIncomePoint {
   month: string;
@@ -45,39 +45,47 @@ export function MonthlyAverageIncomeChart({ data, locale }: MonthlyAverageIncome
       title={t('monthlyAverageIncomeTitle')}
       description={t('monthlyAverageIncomeDescription')}
       action={(
-        <div className="flex flex-wrap gap-4 text-xs font-semibold text-gray-500">
+        <div className="flex flex-wrap gap-4 text-xs font-medium text-gray-500">
           <span className="inline-flex items-center gap-2">
-            <span className="h-3 w-3 rounded-sm bg-teal-600" aria-hidden="true" />
+            <span className="h-2.5 w-2.5 rounded-sm bg-primary-600" aria-hidden="true" />
             {t('finalizedMonth')}
           </span>
           <span className="inline-flex items-center gap-2">
-            <span className="h-3 w-3 rounded-sm bg-orange-500" aria-hidden="true" />
+            <span className="h-2.5 w-2.5 rounded-sm bg-warning-500" aria-hidden="true" />
             {t('currentMonth')}
           </span>
         </div>
       )}
     >
-
-      <div className="mt-5 h-80 sm:h-96">
+      <div className="mt-4 h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart accessibilityLayer data={chartData} margin={{ top: 12, right: 8, bottom: 8, left: 4 }}>
-            <CartesianGrid stroke="#e5e7eb" vertical={false} />
+          <BarChart accessibilityLayer data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barCategoryGap="30%">
+            <CartesianGrid stroke={chartColors.grid} vertical={false} />
             <XAxis
               dataKey="label"
               interval={0}
-              tick={{ fontSize: 11, fill: '#64748b' }}
+              tick={{ fontSize: 11, fill: chartColors.axis }}
+              tickLine={false}
+              axisLine={{ stroke: chartColors.grid }}
               angle={-20}
               textAnchor="end"
-              height={58}
+              height={52}
             />
-            <YAxis tickFormatter={(value: number) => formatAxis(value, locale)} tick={{ fontSize: 12, fill: '#64748b' }} width={48} />
+            <YAxis
+              tickFormatter={(value: number) => formatAxis(value, locale)}
+              tick={{ fontSize: 11, fill: chartColors.axis }}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+            />
             <Tooltip
+              cursor={{ fill: chartColors.cursor }}
               formatter={(value) => [`${formatCurrency(Number(value))} ${currency}`, t('averageDailyIncome')]}
-              labelStyle={{ fontWeight: 700 }}
+              labelStyle={{ fontWeight: 600 }}
             />
-            <Bar dataKey="value" name={t('averageDailyIncome')} radius={[7, 7, 0, 0]} maxBarSize={88}>
+            <Bar dataKey="value" name={t('averageDailyIncome')} radius={[4, 4, 0, 0]} maxBarSize={64}>
               {chartData.map((point) => (
-                <Cell key={point.month} fill={point.is_current ? '#f97316' : '#0f766e'} />
+                <Cell key={point.month} fill={point.is_current ? chartColors.warning : chartColors.primary} />
               ))}
             </Bar>
           </BarChart>
@@ -86,4 +94,3 @@ export function MonthlyAverageIncomeChart({ data, locale }: MonthlyAverageIncome
     </ChartCard>
   );
 }
-

@@ -2,18 +2,14 @@
 
 // Route: /
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   ArrowRight,
-  BadgeDollarSign,
-  Boxes,
-  CalendarDays,
-  ChartNoAxesCombined,
-  RefreshCcw,
-  Gamepad2,
+  ArrowDownRight,
+  ArrowUpRight,
   MonitorSmartphone,
-  Users,
-  Wallet,
+  RefreshCcw,
+  ShoppingBag,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
@@ -28,14 +24,17 @@ import {
   AmountCard,
   Button,
   ButtonLink,
-  Card,
   ChartSkeleton,
   DateRangePicker,
   InlineAlert,
+  MetricCard,
   PageHeader,
   SectionHeading,
+  toneForAmount,
+  type MetricTone,
 } from '@/components/PresentationFoundation';
-import { ChartCard } from '@/components/dashboard/ChartCard';
+import { ChartCard, chartColors } from '@/components/dashboard/ChartCard';
+import { formatCurrency } from '@/lib/formatters';
 import {
   buildPeriodTrend,
   buildMonthlyAverageGameClubIncome,
@@ -160,51 +159,62 @@ function inRangeQuery<T extends { gte: (column: string, value: string) => T; lte
   return query.gte('date', range.from).lte('date', range.to);
 }
 
-type MetricSectionTone = 'gameClub' | 'bar';
-
-// Static class names per tone so Tailwind can see every class at build time.
-const metricSectionCardTone: Record<MetricSectionTone, 'info' | 'orange'> = {
-  gameClub: 'info',
-  bar: 'orange',
-};
-
 interface MetricSectionProps {
   id: string;
   title: string;
-  description: string;
-  tone: MetricSectionTone;
   children: ReactNode;
-  gridClassName: string;
-  actionLabel?: string;
-  actionHref?: string;
+  actionLabel: string;
+  actionHref: string;
 }
 
-function MetricSection({
-  id,
-  title,
-  description,
-  tone,
-  children,
-  gridClassName,
-  actionLabel,
-  actionHref,
-}: MetricSectionProps) {
+/** Plain section: small heading + "Details" link, then a grid of secondary metrics. */
+function MetricSection({ id, title, children, actionLabel, actionHref }: MetricSectionProps) {
   const headingId = `${id}-heading`;
   return (
-    <Card as="section" tone={metricSectionCardTone[tone]} className="space-y-4" aria-labelledby={headingId}>
+    <section className="space-y-3" aria-labelledby={headingId}>
       <SectionHeading
-        size="lg"
+        size="sm"
         title={<span id={headingId}>{title}</span>}
-        description={description}
-        action={actionLabel && actionHref ? (
-          <ButtonLink href={actionHref} variant="outline" iconRight={<ArrowRight size={18} aria-hidden="true" />}>
+        className="sm:items-center"
+        action={(
+          <ButtonLink href={actionHref} variant="ghost" size="sm" iconRight={<ArrowRight size={15} aria-hidden="true" />}>
             {actionLabel}
           </ButtonLink>
-        ) : undefined}
+        )}
       />
-      <div className={gridClassName}>{children}</div>
-    </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{children}</div>
+    </section>
   );
+}
+
+/** Money for a MetricCard: number plus a small muted currency suffix on the same line. */
+function MetricAmount({ amount, currency }: { amount: number; currency: string }) {
+  return (
+    <>
+      {formatCurrency(amount)}
+      <span className="ml-1.5 text-sm font-medium tracking-normal text-gray-500">{currency}</span>
+    </>
+  );
+}
+
+type Comparison = { value: number | null; label: string };
+
+/** Trend arrow + "12% vs last month" line for a MetricCard, or nothing when there is no comparison. */
+function comparisonTrend(comparison: Comparison | undefined): Pick<ComponentProps<typeof MetricCard>, 'trend' | 'trendLabel'> {
+  if (!comparison || comparison.value === null) return {};
+  return {
+    trend: comparison.value > 0 ? 'up' : comparison.value < 0 ? 'down' : 'neutral',
+    trendLabel: (
+      <>
+        {Math.abs(comparison.value)}% <span className="font-normal text-gray-500">{comparison.label}</span>
+      </>
+    ),
+  };
+}
+
+/** A zero with nothing to compare against is not worth colour or a caption. */
+function isIdleMetric(amount: number, comparison?: Comparison): boolean {
+  return amount === 0 && (!comparison || comparison.value === null);
 }
 
 export interface InitialDashboardSnapshot {
@@ -675,39 +685,71 @@ export default function DashboardPage({
   const averageGameClubIncome = calculateAverageDailyIncome(totals.gameClubIncome, averageGameClubDayCount);
   const averageBarIncome = calculateAverageDailyIncome(totals.barSales, averageBarDayCount);
 
+
   const incomeExpenseData = [
-    { name: t('gameClubIncome'), value: totals.computerIncome, fill: '#2563eb' },
-    { name: t('playstationIncome'), value: totals.playstationIncome, fill: '#f59e0b' },
-    { name: t('barSales'), value: totals.barSales, fill: '#f97316' },
-    { name: t('barCostOfGoodsSold'), value: totals.barCost, fill: '#dc2626' },
-    { name: t('totalExpenses'), value: totals.totalExpenses, fill: '#ef4444' },
-    { name: t('netProfit'), value: totals.accountingNetProfit, fill: '#22c55e' },
+    { name: t('gameClubIncome'), value: totals.computerIncome, fill: chartColors.primary },
+    { name: t('playstationIncome'), value: totals.playstationIncome, fill: chartColors.purple },
+    { name: t('barSales'), value: totals.barSales, fill: chartColors.orange },
+    { name: t('barCostOfGoodsSold'), value: totals.barCost, fill: chartColors.warning },
+    { name: t('totalExpenses'), value: totals.totalExpenses, fill: chartColors.danger },
+    { name: t('netProfit'), value: totals.accountingNetProfit, fill: chartColors.success },
   ];
 
   const paymentData = [
-    { name: t('cash'), value: totals.cashIncome, color: '#22c55e' },
-    { name: t('terminal'), value: totals.terminalIncome, color: '#2563eb' },
-    { name: t('card'), value: totals.cardIncome, color: '#7c3aed' },
-    { name: t('debtIncome'), value: totals.debtIncome, color: '#ef4444' },
+    { name: t('cash'), value: totals.cashIncome, color: chartColors.success },
+    { name: t('terminal'), value: totals.terminalIncome, color: chartColors.primary },
+    { name: t('card'), value: totals.cardIncome, color: chartColors.purple },
+    { name: t('debtIncome'), value: totals.debtIncome, color: chartColors.warning },
   ];
 
   const moneyLeftData = [
-    { name: t('cash'), value: data.moneyLeftByPaymentMethod.cash, color: '#22c55e' },
-    { name: t('terminal'), value: data.moneyLeftByPaymentMethod.terminal, color: '#2563eb' },
-    { name: t('card'), value: data.moneyLeftByPaymentMethod.card, color: '#7c3aed' },
-    { name: t('playstation'), value: data.moneyLeftByPaymentMethod.playstation, color: '#f59e0b' },
+    { name: t('cash'), value: data.moneyLeftByPaymentMethod.cash, color: chartColors.success },
+    { name: t('terminal'), value: data.moneyLeftByPaymentMethod.terminal, color: chartColors.primary },
+    { name: t('card'), value: data.moneyLeftByPaymentMethod.card, color: chartColors.purple },
+    { name: t('playstation'), value: data.moneyLeftByPaymentMethod.playstation, color: chartColors.orange },
   ];
 
   const categoryData = [
-    { name: t('gameClub'), value: totals.computerIncome, color: '#2563eb' },
-    { name: t('playstation'), value: totals.playstationIncome, color: '#f59e0b' },
-    { name: t('barSales'), value: totals.barSales, color: '#f97316' },
+    { name: t('gameClub'), value: totals.computerIncome, color: chartColors.primary },
+    { name: t('playstation'), value: totals.playstationIncome, color: chartColors.purple },
+    { name: t('barSales'), value: totals.barSales, color: chartColors.orange },
   ];
   const incomeCategoryTotal = categoryData.reduce((sum, row) => sum + row.value, 0);
   const detailsQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
+  // Secondary metrics: a MetricCard each; a zero with no comparison is muted.
+  const secondaryMetric = (
+    amount: number,
+    comparison: Comparison | undefined,
+    tone: MetricTone = 'default',
+  ) => {
+    const idle = isIdleMetric(amount, comparison);
+    return {
+      value: <MetricAmount amount={amount} currency={currency} />,
+      tone: idle ? ('muted' as const) : tone,
+      ...(idle ? {} : comparisonTrend(comparison)),
+    };
+  };
+
+  const playstationComparison = comparisonFor(totals.playstationIncome, previousTotals.playstationIncome);
+  const moneyLeftComparison = comparisonFor(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft);
+  const barMoneyLeftComparison = comparisonFor(totals.barIncome, previousTotals.barIncome);
+  const barProfitComparison = comparisonFor(totals.barProfit, previousTotals.barProfit);
+  const inventoryComparison = data.hasInventoryComparisonData
+    ? comparisonFor(
+        totals.inventoryValue,
+        data.inventoryComparisonValue,
+        period === 'lastMonth' ? t('vsPreviousPeriod') : t('vsLastMonth'),
+      )
+    : undefined;
+  const inventoryHelper = data.hasInventoryComparisonData
+    ? `${period === 'lastMonth' ? t('previousMonthInventoryValue') : t('lastMonthInventoryValue')}: ${formatCurrency(data.inventoryComparisonValue)} ${currency}`
+    : period === 'lastMonth'
+      ? undefined
+      : t('lowStockAlertsCount', { count: data.lowStockCount });
+
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title={t('title')}
         description={t('subtitle')}
@@ -738,172 +780,147 @@ export default function DashboardPage({
         </InlineAlert>
       )}
 
-      <MetricSection
-        id="dashboard-game-club"
-        tone="gameClub"
-        title={t('gameClubPlaystationSection')}
-        description={t('gameClubPlaystationSectionDesc')}
-        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
-        actionLabel={t('details')}
-        actionHref={`/game-club-money-details?${detailsQuery}`}
-      >
+      {/* Headline numbers: the four figures an owner checks first. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AmountCard
           loading={loading}
           currency={currency}
           label={t('gameClubIncome')}
           amount={totals.computerIncome}
           icon={MonitorSmartphone}
-          iconBgClassName="bg-blue-100"
-          iconClassName="text-blue-600"
-          helper={t('gameClubIncomeMetricDesc')}
+          tone="success"
           comparison={comparisonFor(totals.computerIncome, previousTotals.computerIncome)}
         />
         <AmountCard
           loading={loading}
           currency={currency}
+          label={t('barSales')}
+          amount={totals.barSales}
+          icon={ShoppingBag}
+          tone="success"
+          comparison={comparisonFor(totals.barSales, previousTotals.barSales)}
+        />
+        <AmountCard
+          loading={loading}
+          currency={currency}
+          label={t('totalExpenses')}
+          amount={totals.totalExpenses}
+          icon={ArrowDownRight}
+          tone="danger"
+          comparison={comparisonFor(totals.totalExpenses, previousTotals.totalExpenses)}
+        />
+        <AmountCard
+          loading={loading}
+          currency={currency}
+          label={t('netProfit')}
+          amount={totals.accountingNetProfit}
+          icon={totals.accountingNetProfit < 0 ? ArrowDownRight : ArrowUpRight}
+          tone={toneForAmount(totals.accountingNetProfit)}
+          comparison={comparisonFor(totals.accountingNetProfit, previousTotals.accountingNetProfit)}
+        />
+      </div>
+
+      <MetricSection
+        id="dashboard-game-club"
+        title={t('gameClubPlaystationSection')}
+        actionLabel={t('details')}
+        actionHref={`/game-club-money-details?${detailsQuery}`}
+      >
+        <MetricCard
+          loading={loading}
           label={t('playstationIncome')}
-          amount={totals.playstationIncome}
-          icon={Gamepad2}
-          iconBgClassName="bg-amber-100"
-          iconClassName="text-amber-600"
-          helper={t('playstationIncomeMetricDesc')}
-          comparison={comparisonFor(totals.playstationIncome, previousTotals.playstationIncome)}
+          {...secondaryMetric(totals.playstationIncome, playstationComparison)}
         />
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
           label={t('activeDebts')}
-          amount={totals.activeDebts}
-          icon={Users}
-          iconBgClassName="bg-rose-100"
-          iconClassName="text-rose-600"
           helper={t('activeDebtsDesc', { count: totals.activeDebtCount })}
+          {...secondaryMetric(totals.activeDebts, undefined, 'danger')}
         />
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
-          label={t('averageDailyIncome')}
-          amount={averageGameClubIncome}
-          icon={CalendarDays}
-          iconBgClassName="bg-cyan-100"
-          iconClassName="text-cyan-600"
-          helper={t('averageDailyClubIncomeDesc')}
+          label={<span title={t('averageDailyClubIncomeDesc')}>{t('averageDailyIncome')}</span>}
+          {...secondaryMetric(averageGameClubIncome, undefined)}
         />
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
-          label={t('totalMoneyLeft')}
-          amount={totals.gameClubMoneyLeft}
-          icon={Wallet}
-          iconBgClassName="bg-emerald-100"
-          iconClassName="text-emerald-600"
-          helper={t('totalMoneyLeftDesc')}
-          comparison={comparisonFor(totals.gameClubMoneyLeft, previousTotals.gameClubMoneyLeft)}
+          label={<span title={t('totalMoneyLeftDesc')}>{t('totalMoneyLeft')}</span>}
+          {...secondaryMetric(totals.gameClubMoneyLeft, moneyLeftComparison, toneForAmount(totals.gameClubMoneyLeft))}
         />
       </MetricSection>
 
       <MetricSection
         id="dashboard-bar"
-        tone="bar"
         title={t('barStatisticsSection')}
-        description={t('barStatisticsSectionDesc')}
-        gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
         actionLabel={t('details')}
         actionHref={`/bar-money-details?${detailsQuery}`}
       >
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
-          label={t('barMoneyLeft')}
-          amount={totals.barIncome}
-          icon={ChartNoAxesCombined}
-          iconBgClassName="bg-green-100"
-          iconClassName="text-green-600"
-          helper={t('barMoneyLeftDesc')}
-          comparison={comparisonFor(totals.barIncome, previousTotals.barIncome)}
+          label={<span title={t('barMoneyLeftDesc')}>{t('barMoneyLeft')}</span>}
+          {...secondaryMetric(totals.barIncome, barMoneyLeftComparison, toneForAmount(totals.barIncome))}
         />
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
-          label={t('averageDailyIncome')}
-          amount={averageBarIncome}
-          icon={CalendarDays}
-          iconBgClassName="bg-sky-100"
-          iconClassName="text-sky-600"
-          helper={t('averageDailyBarIncomeDesc')}
+          label={<span title={t('averageDailyBarIncomeDesc')}>{t('averageDailyIncome')}</span>}
+          {...secondaryMetric(averageBarIncome, undefined)}
         />
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
-          label={t('barNetProfit')}
-          amount={totals.barProfit}
-          icon={BadgeDollarSign}
-          iconBgClassName="bg-emerald-100"
-          iconClassName="text-emerald-600"
-          helper={t('barNetProfitDesc')}
-          comparison={comparisonFor(totals.barProfit, previousTotals.barProfit)}
+          label={<span title={t('barNetProfitDesc')}>{t('barNetProfit')}</span>}
+          {...secondaryMetric(totals.barProfit, barProfitComparison, toneForAmount(totals.barProfit))}
         />
-        <AmountCard
+        <MetricCard
           loading={loading}
-          currency={currency}
-          label={t('inventoryValue')}
-          amount={totals.inventoryValue}
-          icon={Boxes}
-          iconBgClassName="bg-blue-100"
-          iconClassName="text-blue-600"
-          helper={period === 'lastMonth'
-            ? t('inventoryValuePeriodDesc')
-            : `${t('inventoryValueDesc')} - ${t('lowStockAlertsCount', { count: data.lowStockCount })}`}
-          subMetric={{
-            label: period === 'lastMonth' ? t('previousMonthInventoryValue') : t('lastMonthInventoryValue'),
-            amount: data.hasInventoryComparisonData ? data.inventoryComparisonValue : null,
-            unavailableLabel: t('noComparisonData'),
-          }}
-          comparison={
-            data.hasInventoryComparisonData
-              ? comparisonFor(
-                  totals.inventoryValue,
-                  data.inventoryComparisonValue,
-                  period === 'lastMonth' ? t('vsPreviousPeriod') : t('vsLastMonth'),
-                )
-              : undefined
-          }
+          label={<span title={period === 'lastMonth' ? t('inventoryValuePeriodDesc') : t('inventoryValueDesc')}>{t('inventoryValue')}</span>}
+          helper={inventoryHelper}
+          {...secondaryMetric(totals.inventoryValue, inventoryComparison)}
         />
       </MetricSection>
 
       {!renderCharts ? (
         <div
           ref={chartsAnchorRef}
-          className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3"
+          className="space-y-4"
           role="status"
           aria-label={t('loading')}
         >
-          {Array.from({ length: 6 }).map((_, index) => <ChartLoading key={index} />)}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            <ChartLoading />
+            <ChartLoading />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <ChartLoading />
+            <ChartLoading />
+          </div>
         </div>
       ) : (
         // Once rendered, charts stay mounted across range/club changes and are
         // dimmed while the next data loads instead of swapping to skeletons.
         <div
-          className={cn('space-y-4 transition-opacity sm:space-y-5', loading && 'pointer-events-none opacity-60')}
+          className={cn('space-y-4 transition-opacity', loading && 'pointer-events-none opacity-60')}
           aria-busy={loading || undefined}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            <DashboardBarChart title={`${t('incomeVsExpenses')} (${periodLabel})`} data={incomeExpenseData} />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            <IncomeTrendChart data={trend} />
             <PaymentMethodChart
               title={`${t('incomeByPaymentMethod')} (${periodLabel})`}
               data={paymentData}
               total={paymentData.reduce((sum, row) => sum + row.value, 0)}
             />
-            <IncomeTrendChart data={trend} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <ExpensesByCategoryChart data={data.expenseCategories} total={totals.totalExpenses} />
             <MoneyLeftBreakdownChart
               title={`${t('totalMoneyLeftByCategory')} (${periodLabel})`}
               data={moneyLeftData}
               total={totals.gameClubMoneyLeft}
             />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <DashboardBarChart title={`${t('incomeVsExpenses')} (${periodLabel})`} data={incomeExpenseData} />
             <IncomeCategoryChart data={categoryData} total={incomeCategoryTotal} />
           </div>
 

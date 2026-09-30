@@ -14,13 +14,10 @@ export function MoneyLeftBreakdownChart({ title, data, total }: MoneyLeftBreakdo
   const hasData = data.some((item) => item.value !== 0) || total !== 0;
 
   return (
-    <ChartCard title={title}>
-      <div className="mt-4 grid min-h-72 grid-cols-1 gap-4 sm:grid-cols-[1fr_0.85fr]">
+    <ChartCard title={title} description={t('totalMoneyLeftDesc')}>
+      <div className="mt-4 flex flex-1 flex-col gap-5">
+        <ChartTotal value={total} label={t('remainingAfterExpenses')} tone={total >= 0 ? 'success' : 'danger'} />
         {hasData ? <HorizontalBars data={data} /> : <ChartEmpty title={t('noMoneyLeftForPeriod')} />}
-        <div className="space-y-3">
-          <ChartTotal value={total} label={t('remainingAfterExpenses')} tone={total >= 0 ? 'success' : 'danger'} />
-          <div className="rounded-lg bg-gray-50 p-3 text-xs font-medium leading-5 text-gray-600">{t('totalMoneyLeftDesc')}</div>
-        </div>
       </div>
     </ChartCard>
   );
