@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface SegmentedOption<T extends string> {
@@ -42,12 +42,34 @@ export function SegmentedControl<T extends string>({
   className,
 }: SegmentedControlProps<T>) {
   const isChips = variant === 'chips';
+  const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const enabledIndexes = options.flatMap((option, index) => (disabled || option.disabled ? [] : [index]));
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  // Roving tab stop: the selected option (or the first enabled one) is the only Tab target.
+  const tabStopIndex = enabledIndexes.includes(selectedIndex) ? selectedIndex : enabledIndexes[0];
+
+  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(event.key) || enabledIndexes.length === 0) return;
+    event.preventDefault();
+    const position = enabledIndexes.indexOf(index);
+    let next: number;
+    if (event.key === 'Home') next = enabledIndexes[0];
+    else if (event.key === 'End') next = enabledIndexes[enabledIndexes.length - 1];
+    else {
+      const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
+      next = enabledIndexes[(position + step + enabledIndexes.length) % enabledIndexes.length];
+    }
+    buttonsRef.current[next]?.focus();
+    onChange(options[next].value);
+  }
   const height = size === 'sm' ? 'min-h-9 text-xs' : 'min-h-11 text-sm';
 
   return (
     <div
       role="radiogroup"
       aria-label={label}
+      aria-disabled={disabled || undefined}
       className={cn(
         isChips
           ? 'flex flex-wrap gap-2'
@@ -56,14 +78,19 @@ export function SegmentedControl<T extends string>({
       )}
       style={!isChips && columns !== 'auto' ? { gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` } : undefined}
     >
-      {options.map((option) => {
+      {options.map((option, index) => {
         const selected = option.value === value;
         return (
           <button
             key={option.value}
+            ref={(element) => {
+              buttonsRef.current[index] = element;
+            }}
             type="button"
             role="radio"
             aria-checked={selected}
+            tabIndex={index === tabStopIndex ? 0 : -1}
+            onKeyDown={(event) => handleKeyDown(event, index)}
             disabled={disabled || option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(

@@ -216,7 +216,12 @@ export function extractCurrencyDigits(value: string | number | null | undefined)
     return String(Math.max(0, Math.round(value)));
   }
 
-  return String(value).replace(/\D/g, '');
+  // A pasted "1 500,50" or "1500.50" is 1 500 UZS, not 150 050: drop a
+  // trailing one- or two-digit decimal part before keeping the digits. Three
+  // digits after a separator ("1,500") is a thousands group and is kept.
+  const digits = String(value).replace(/[.,]\d{1,2}\s*$/, '').replace(/\D/g, '');
+  // Keep within Number.MAX_SAFE_INTEGER so parsing never loses precision.
+  return digits.replace(/^0+(?=\d)/, '').slice(0, 15);
 }
 
 export function parseCurrencyInput(value: string | number | null | undefined): number {

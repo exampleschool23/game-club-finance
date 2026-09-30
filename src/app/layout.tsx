@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { getLocale, getMessages } from 'next-intl/server';
@@ -12,6 +12,14 @@ const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
 export const metadata: Metadata = {
   title: 'Game Club Finance',
   description: 'Finance & Accounting for Game Club',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  // Lets env(safe-area-inset-*) pad the top bar, sheets and toasts on notched phones.
+  viewportFit: 'cover',
+  themeColor: '#1e2d40',
 };
 
 export default async function RootLayout({

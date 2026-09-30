@@ -2,6 +2,9 @@
 
 import {
   forwardRef,
+  useCallback,
+  useLayoutEffect,
+  useRef,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
@@ -101,20 +104,62 @@ export interface CurrencyInputProps extends Omit<InputProps, 'value' | 'onChange
   onValueChange: (formatted: string) => void;
 }
 
-/** Whole-UZS input that keeps thousands separators while typing. */
+/** Index in `formatted` just after the `digitCount`-th digit. */
+function caretAfterDigits(formatted: string, digitCount: number) {
+  if (digitCount <= 0) return 0;
+  let seen = 0;
+  for (let index = 0; index < formatted.length; index += 1) {
+    if (/\d/.test(formatted[index])) {
+      seen += 1;
+      if (seen === digitCount) return index + 1;
+    }
+  }
+  return formatted.length;
+}
+
+/**
+ * Whole-UZS input that keeps thousands separators while typing. The caret
+ * stays next to the digit being edited even when separators shift.
+ */
 export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(function CurrencyInput(
   { value, onValueChange, className, placeholder = '0', ...rest },
-  ref,
+  forwardedRef,
 ) {
+  const innerRef = useRef<HTMLInputElement | null>(null);
+  const pendingCaretDigits = useRef<number | null>(null);
+
+  const setRefs = useCallback((element: HTMLInputElement | null) => {
+    innerRef.current = element;
+    if (typeof forwardedRef === 'function') forwardedRef(element);
+    else if (forwardedRef) forwardedRef.current = element;
+  }, [forwardedRef]);
+
+  useLayoutEffect(() => {
+    const input = innerRef.current;
+    const digits = pendingCaretDigits.current;
+    if (!input || digits === null || document.activeElement !== input) return;
+    pendingCaretDigits.current = null;
+    const position = caretAfterDigits(value, digits);
+    input.setSelectionRange(position, position);
+  }, [value]);
+
   return (
     <Input
-      ref={ref}
+      ref={setRefs}
       type="text"
       inputMode="numeric"
       autoComplete="off"
       placeholder={placeholder}
       value={value}
-      onChange={(event) => onValueChange(formatCurrencyInput(event.target.value))}
+      onChange={(event) => {
+        const raw = event.target.value;
+        const caret = event.target.selectionStart ?? raw.length;
+        const formatted = formatCurrencyInput(raw);
+        // Digits before the caret, capped by what survived formatting (decimals, length cap).
+        const digitsBefore = raw.slice(0, caret).replace(/\D/g, '').length;
+        pendingCaretDigits.current = Math.min(digitsBefore, formatted.replace(/\D/g, '').length);
+        onValueChange(formatted);
+      }}
       className={cn('tabular-nums', className)}
       {...rest}
     />
@@ -182,11 +227,21 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
 export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label: ReactNode;
   description?: ReactNode;
+  /** `card`: bordered, full-width tile for multi-select option lists (payment methods, page access). */
+  variant?: 'plain' | 'card';
 }
 
-export function Checkbox({ label, description, className, id, ...rest }: CheckboxProps) {
+export function Checkbox({ label, description, variant = 'plain', className, id, ...rest }: CheckboxProps) {
+  const card = variant === 'card';
   return (
-    <label className={cn('flex cursor-pointer items-start gap-2.5 text-sm text-gray-700 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-70', className)}>
+    <label
+      className={cn(
+        'flex cursor-pointer items-start gap-2.5 text-sm text-gray-700 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-70',
+        card &&
+          'min-h-11 rounded-xl border border-gray-200 bg-white px-3.5 py-3 transition hover:border-primary-300 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500',
+        className,
+      )}
+    >
       <input id={id} type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary-600" {...rest} />
       <span className="min-w-0">
         <span className="block font-medium text-gray-800">{label}</span>

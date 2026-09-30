@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { cn } from '@/lib/utils';
-import { createClient } from '@/lib/supabase/client';
+import { useSignOut } from './useSignOut';
 import {
   LayoutDashboard,
   Wallet,
@@ -25,8 +25,9 @@ import {
   HandCoins,
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
-import { canAccessFeature, type FeatureKey } from '@/lib/permissions';
-import { LanguageSwitcher } from '@/components/PresentationFoundation';
+import { canAccessFeature, featureForPath, type FeatureKey } from '@/lib/permissions';
+import { Avatar, IconButton, LanguageSwitcher } from '@/components/PresentationFoundation';
+import { isTopModal, trapFocus, useModalLayer } from '@/components/PresentationFoundation/Modal';
 
 interface SidebarClubOption {
   club: Club;
@@ -88,7 +89,7 @@ function NavLink({
       onTouchStart={() => setPrefetchOnIntent(true)}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400',
+        'flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400',
         active
           ? 'bg-primary-600 text-white shadow-sm'
           : 'text-slate-300 hover:bg-white/10 hover:text-white',
@@ -113,19 +114,14 @@ export function Sidebar({
   onNavigate,
 }: SidebarProps) {
   const t = useTranslations('nav');
+  const tTeam = useTranslations('team');
   const currentPathname = usePathname();
   const pathname = activePathname ?? currentPathname;
-  const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
+  const { signOut, signingOut } = useSignOut();
   const selectedClub = memberships.find((membership) => membership.club.id === selectedClubId)?.club ?? null;
-
-  async function handleLogout() {
-    if (signingOut) return;
-    setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push('/login');
-  }
+  // Highlight the section, not just the exact path: /salaries/employees/…,
+  // /daily-report and the money-details pages all belong to a nav item.
+  const activeFeature = featureForPath(pathname);
 
   const links = [
     { href: '/', icon: LayoutDashboard, label: t('dashboard'), feature: 'dashboard' as FeatureKey },
@@ -145,12 +141,10 @@ export function Sidebar({
       : link.feature === 'salaries' || canAccessFeature(role, featureAccess, link.feature)
   ));
 
-  const initials = fullName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  function isActive(link: (typeof links)[number]) {
+    if (link.href === '/reports') return activeFeature === 'reports' || activeFeature === 'expenses';
+    return activeFeature === link.feature;
+  }
 
   const content = (
     <div className="flex h-full flex-col bg-sidebar">
@@ -161,20 +155,19 @@ export function Sidebar({
           </div>
           <div className="min-w-0 leading-tight">
             <p className="truncate text-[15px] font-extrabold text-white">
-              {selectedClub?.name ?? 'Game Club'}
+              {selectedClub?.name ?? t('appName')}
             </p>
-            <p className="truncate text-[13px] font-bold text-primary-100">Finance</p>
+            <p className="truncate text-[13px] font-bold text-primary-100">{t('appSubtitle')}</p>
           </div>
         </div>
         {onClose && (
-          <button
-            type="button"
+          <IconButton
+            variant="ghost"
+            label={t('closeNavigation')}
+            icon={<X size={20} />}
             onClick={onClose}
-            aria-label={t('closeNavigation')}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white xl:hidden"
-          >
-            <X size={20} />
-          </button>
+            className="text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+          />
         )}
       </div>
 
@@ -183,7 +176,7 @@ export function Sidebar({
           <label className="relative flex h-11 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-semibold text-white focus-within:ring-2 focus-within:ring-primary-400">
             <Building2 size={17} className="shrink-0 text-primary-100" aria-hidden="true" />
             <select
-              className="min-w-0 flex-1 appearance-none bg-transparent pr-7 text-sm font-semibold text-white outline-none"
+              className="h-full min-w-0 flex-1 cursor-pointer appearance-none bg-transparent pr-7 text-sm font-semibold text-white outline-none"
               value={selectedClubId}
               onChange={(event) => onSelectClub?.(event.target.value)}
               aria-label={t('club')}
@@ -199,14 +192,14 @@ export function Sidebar({
         </div>
       )}
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label={t('dashboard')}>
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label={t('mainNavigation')}>
         {links.map((link) => (
           <NavLink
             key={link.href}
             href={link.href}
             icon={link.icon}
             label={link.label}
-            active={pathname === link.href}
+            active={isActive(link)}
             onNavigate={onNavigate}
           />
         ))}
@@ -218,23 +211,19 @@ export function Sidebar({
         </div>
 
         <div className="flex items-center gap-3 rounded-xl px-3 py-2">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">
-            {initials}
-          </div>
+          <Avatar name={fullName} size="sm" className="bg-primary-600 text-white" />
           <div className="min-w-0 flex-1 text-left">
             <p className="truncate text-sm font-medium text-white">{fullName}</p>
-            <p className="text-xs capitalize text-slate-400">{role}</p>
+            <p className="text-xs text-slate-400">{tTeam(`roles.${role}`)}</p>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={signingOut}
-            aria-label={t('signOut')}
-            title={t('signOut')}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 disabled:opacity-50"
-          >
-            <LogOut size={16} />
-          </button>
+          <IconButton
+            variant="ghost"
+            label={t('signOut')}
+            icon={<LogOut size={17} />}
+            onClick={signOut}
+            loading={signingOut}
+            className="text-slate-400 hover:bg-white/10 hover:text-white"
+          />
         </div>
       </div>
     </div>
@@ -242,14 +231,68 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 xl:flex">{content}</aside>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 lg:flex">{content}</aside>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 xl:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-          <aside className="absolute bottom-0 left-0 top-0 z-50 w-[min(18rem,86vw)]">{content}</aside>
-        </div>
+        <MobileDrawer label={t('mainNavigation')} onClose={onClose}>
+          {content}
+        </MobileDrawer>
       )}
     </>
+  );
+}
+
+/**
+ * Off-canvas navigation for phones and tablets: a real modal dialog (focus
+ * moves in and is trapped, Escape closes, page behind doesn't scroll, focus
+ * returns to the menu button).
+ */
+function MobileDrawer({ label, onClose, children }: { label: string; onClose?: () => void; children: React.ReactNode }) {
+  const panelRef = useRef<HTMLElement>(null);
+  const layerId = useModalLayer(true);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    (panel?.querySelector<HTMLElement>('[aria-current="page"]') ?? panel?.querySelector<HTMLElement>('a[href], button'))?.focus({ preventScroll: true });
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isTopModal(layerId)) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current?.();
+        return;
+      }
+      trapFocus(event, panelRef.current);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.({ preventScroll: true });
+    };
+  }, [layerId]);
+
+  return (
+    <div className="fixed inset-0 z-40 lg:hidden">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
+      <aside
+        ref={panelRef}
+        id="mobile-nav"
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        className="absolute bottom-0 left-0 top-0 z-50 w-[min(18rem,86vw)] outline-none"
+      >
+        {children}
+      </aside>
+    </div>
   );
 }

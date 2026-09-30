@@ -174,4 +174,17 @@ describe('currency input helpers', () => {
     expect(formatCurrencyInput(2108.420119808507)).toBe('2 108');
     expect(formatCurrencyInput('')).toBe('');
   });
+
+  it('drops a pasted decimal part instead of multiplying the amount', () => {
+    expect(parseCurrencyInput('1500.50')).toBe(1500);
+    expect(parseCurrencyInput('1 500,5')).toBe(1500);
+    expect(parseCurrencyInput('1,500')).toBe(1500);
+    expect(parseCurrencyInput('1 500 000')).toBe(1500000);
+  });
+
+  it('caps input length and strips leading zeros', () => {
+    expect(extractCurrencyDigits('9'.repeat(30))).toHaveLength(15);
+    expect(formatCurrencyInput('007')).toBe('7');
+    expect(formatCurrencyInput('0')).toBe('0');
+  });
 });

@@ -7,8 +7,8 @@ export type InlineAlertVariant = 'info' | 'success' | 'warning' | 'danger';
 const variantStyles: Record<InlineAlertVariant, { box: string; icon: string; Icon: typeof Info }> = {
   info: { box: 'border-primary-200 bg-primary-50 text-primary-900', icon: 'text-primary-600', Icon: Info },
   success: { box: 'border-success-100 bg-success-50 text-success-600', icon: 'text-success-600', Icon: CheckCircle2 },
-  warning: { box: 'border-amber-200 bg-amber-50 text-amber-800', icon: 'text-amber-600', Icon: TriangleAlert },
-  danger: { box: 'border-red-200 bg-red-50 text-red-700', icon: 'text-red-600', Icon: AlertCircle },
+  warning: { box: 'border-warning-500/30 bg-warning-50 text-amber-800', icon: 'text-warning-600', Icon: TriangleAlert },
+  danger: { box: 'border-danger-500/30 bg-danger-50 text-danger-600', icon: 'text-danger-600', Icon: AlertCircle },
 };
 
 export interface InlineAlertProps {

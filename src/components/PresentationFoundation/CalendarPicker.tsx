@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   addDays,
   addMonths,
@@ -17,6 +17,48 @@ import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { formatDatePickerValue, formatYearMonth } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
+import { isTopModal, trapFocus, useModalLayer } from './Modal';
+
+/**
+ * Dialog plumbing shared by the date and month pickers: joins the modal stack
+ * (so Escape inside a picker opened from a form modal only closes the picker),
+ * traps Tab, locks body scroll, focuses the selected cell and restores focus.
+ */
+function usePickerDialog(open: boolean, onClose: () => void, panelRef: RefObject<HTMLElement | null>) {
+  const layerId = useModalLayer(open);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const target =
+      panel?.querySelector<HTMLElement>('[data-picker-selected="true"]:not([disabled])') ??
+      panel?.querySelector<HTMLElement>('button:not([disabled])');
+    (target ?? panel)?.focus({ preventScroll: true });
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isTopModal(layerId)) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      trapFocus(event, panelRef.current);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.({ preventScroll: true });
+    };
+  }, [layerId, open, panelRef]);
+}
 
 function parseIsoDate(value: string): Date {
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -142,6 +184,7 @@ function CalendarMonth({
               )}
               aria-label={formatDatePickerValue(iso, locale)}
               aria-pressed={endpoint || inRange}
+              data-picker-selected={endpoint || undefined}
             >
               {day.getDate()}
             </button>
@@ -166,17 +209,14 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
     setViewMonth(startOfMonth(parseIsoDate(from || to)));
   }, [from, mode, open, to]);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, open]);
+  const panelRef = useRef<HTMLElement>(null);
+  usePickerDialog(open, onClose, panelRef);
 
   const presets = useMemo(() => {
-    const todayDate = new Date();
+    // Callers cap pickers at the club's business date; "today" presets must not
+    // run past it (early morning before the business-day rollover).
+    const deviceToday = dateToIso(new Date());
+    const todayDate = parseIsoDate(max && max < deviceToday ? max : deviceToday);
     const today = dateToIso(todayDate);
     const yesterday = dateToIso(subDays(todayDate, 1));
     const thisWeekFrom = dateToIso(startOfWeek(todayDate, { weekStartsOn: 1 }));
@@ -205,8 +245,15 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
         to: dateToIso(endOfWeek(nextWeekDate, { weekStartsOn: 1 })),
       },
       { key: 'nextMonth', from: dateToIso(followingMonth), to: dateToIso(endOfMonth(followingMonth)) },
-    ];
-  }, []);
+    ]
+      // Drop presets entirely outside [min, max] and clamp the rest into it.
+      .filter((preset) => (!max || preset.from <= max) && (!min || preset.to >= min))
+      .map((preset) => ({
+        ...preset,
+        from: min && preset.from < min ? min : preset.from,
+        to: max && preset.to > max ? max : preset.to,
+      }));
+  }, [max, min]);
 
   if (!open) return null;
 
@@ -239,10 +286,12 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={onClose}>
       <section
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={mode === 'range' ? t('selectRange') : t('selectDate')}
-        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:rounded-2xl"
+        className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl outline-none sm:rounded-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="shrink-0 border-b border-gray-100 px-4 py-4 sm:px-5">
@@ -477,6 +526,9 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
   const { locale } = useAppLocale();
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(() => Number(value.slice(0, 4)) || new Date().getFullYear());
+  const panelRef = useRef<HTMLElement>(null);
+  const closeMonthPicker = useMemo(() => () => setOpen(false), []);
+  usePickerDialog(open, closeMonthPicker, panelRef);
 
   useEffect(() => {
     if (!open) return;
@@ -499,10 +551,12 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
       {open && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={() => setOpen(false)}>
           <section
+            ref={panelRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={t('selectMonth')}
-            className="w-full max-w-xl rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:rounded-2xl"
+            className="w-full max-w-xl rounded-t-2xl border border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none sm:rounded-2xl"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
@@ -514,9 +568,9 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
             </header>
             <div className="p-4 sm:p-5">
               <div className="flex items-center justify-between">
-                <button type="button" onClick={() => setYear((current) => current - 1)} className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label={t('previousYear')}><ChevronLeft size={19} /></button>
+                <button type="button" onClick={() => setYear((current) => current - 1)} disabled={Boolean(min && `${year - 1}-12` < min)} className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30" aria-label={t('previousYear')}><ChevronLeft size={19} /></button>
                 <p className="font-extrabold text-gray-950">{year}</p>
-                <button type="button" onClick={() => setYear((current) => current + 1)} className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label={t('nextYear')}><ChevronRight size={19} /></button>
+                <button type="button" onClick={() => setYear((current) => current + 1)} disabled={Boolean(max && `${year + 1}-01` > max)} className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30" aria-label={t('nextYear')}><ChevronRight size={19} /></button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`).map((month) => {
@@ -526,6 +580,8 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
                       key={month}
                       type="button"
                       disabled={unavailable}
+                      aria-pressed={value === month}
+                      data-picker-selected={value === month || undefined}
                       onClick={() => {
                         onChange(month);
                         setOpen(false);

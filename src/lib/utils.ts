@@ -36,6 +36,34 @@ export function todayIso(date = new Date(), businessDayStartHour = DEFAULT_BUSIN
   return isoDate(businessDayDate(date, businessDayStartHour));
 }
 
+/** The clubs operate in Uzbekistan; see docs/agents/architecture.md (Localization). */
+export const APP_TIME_ZONE = 'Asia/Tashkent';
+
+/**
+ * Business date for server code. Servers run in UTC, so `todayIso` (which uses
+ * the process's local clock) would disagree with a browser in Tashkent for
+ * several hours every day. This reads the wall clock in APP_TIME_ZONE instead,
+ * then applies the same business-day rollback.
+ */
+export function serverTodayIso(
+  date = new Date(),
+  businessDayStartHour = DEFAULT_BUSINESS_DAY_START_HOUR,
+  timeZone = APP_TIME_ZONE,
+): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+  }).formatToParts(date);
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+  // Build a timezone-free local date from the zone's wall-clock fields.
+  const wallClock = new Date(part('year'), part('month') - 1, part('day'), part('hour'));
+  return todayIso(wallClock, businessDayStartHour);
+}
+
 export function calendarTodayIso(date = new Date()): string {
   return isoDate(date);
 }

@@ -27,7 +27,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   outline: 'border border-gray-200 bg-white text-gray-800 shadow-sm hover:border-gray-300 hover:bg-gray-50',
   ghost: 'text-gray-700 hover:bg-gray-100',
   danger: 'bg-danger-500 text-white shadow-sm hover:bg-danger-600 focus-visible:ring-danger-500',
-  dangerOutline: 'border border-red-200 bg-white text-red-600 hover:bg-red-50 focus-visible:ring-danger-500',
+  dangerOutline: 'border border-danger-500/30 bg-white text-danger-600 hover:bg-danger-50 focus-visible:ring-danger-500',
   success: 'bg-success-600 text-white shadow-sm hover:bg-success-500',
 };
 

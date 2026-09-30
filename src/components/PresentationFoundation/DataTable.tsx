@@ -25,6 +25,8 @@ export interface DataTableProps<T> {
   rowClassName?: (row: T, index: number) => string | undefined;
   onRowClick?: (row: T) => void;
   className?: string;
+  /** Accessible name for the scroll region (lets keyboard users scroll wide tables). */
+  label?: string;
   /** Removes the outer border/shadow when the table sits inside a Card. */
   bare?: boolean;
   dense?: boolean;
@@ -46,15 +48,19 @@ export function DataTable<T>({
   className,
   bare = false,
   dense = false,
+  label,
 }: DataTableProps<T>) {
   const cellPadding = dense ? 'px-3 py-2.5' : 'px-4 py-3';
 
   return (
     <div
+      role={label ? 'region' : undefined}
+      aria-label={label}
+      tabIndex={label ? 0 : undefined}
       className={cn(
-        'max-w-full',
+        'max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
         !bare && 'rounded-xl border border-gray-200 bg-white shadow-sm',
-        stickyHeader ? 'max-h-[calc(100vh-12rem)] overflow-auto' : 'overflow-x-auto',
+        stickyHeader ? 'max-h-[calc(100dvh-12rem)] overflow-auto' : 'overflow-x-auto',
         className,
       )}
     >
@@ -88,7 +94,15 @@ export function DataTable<T>({
               <tr
                 key={keyExtractor(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={cn('transition-colors hover:bg-gray-50', onRowClick && 'cursor-pointer', rowClassName?.(row, index))}
+                onKeyDown={onRowClick ? (event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onRowClick(row);
+                  }
+                } : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                className={cn('transition-colors hover:bg-gray-50', onRowClick && 'cursor-pointer focus-visible:bg-primary-50 focus-visible:outline-none', rowClassName?.(row, index))}
               >
                 {columns.map((column) => (
                   <td

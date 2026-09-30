@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,59 @@ export interface ModalProps {
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Accessible name when there is no visible `title` (e.g. confirm dialogs render their own heading). */
+  ariaLabelledBy?: string;
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Open dialogs, innermost last. Only the top dialog reacts to Escape and owns
+ * the focus trap, so a confirm dialog or date picker opened over a form modal
+ * closes on its own without discarding the form underneath.
+ */
+const modalStack: symbol[] = [];
+
+export function isTopModal(id: symbol) {
+  return modalStack[modalStack.length - 1] === id;
+}
+
+/** Registers a dialog layer for the lifetime of `open`; returns its stack id. */
+export function useModalLayer(open: boolean) {
+  const [id] = useState(() => Symbol('modal'));
+  useEffect(() => {
+    if (!open) return;
+    modalStack.push(id);
+    return () => {
+      const index = modalStack.lastIndexOf(id);
+      if (index >= 0) modalStack.splice(index, 1);
+    };
+  }, [id, open]);
+  return id;
+}
+
+/** Keeps Tab / Shift+Tab inside `container` while it is the top dialog. */
+export function trapFocus(event: KeyboardEvent, container: HTMLElement | null) {
+  if (event.key !== 'Tab' || !container) return;
+  const items = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (element) => element.offsetParent !== null || element === document.activeElement,
+  );
+  if (items.length === 0) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && (active === first || !container.contains(active))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (active === last || !container.contains(active))) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 /**
@@ -44,11 +97,17 @@ export function Modal({
   children,
   className,
   bodyClassName,
+  ariaLabelledBy,
 }: ModalProps) {
   const tc = useTranslations('common');
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const layerId = useModalLayer(open);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -68,16 +127,19 @@ export function Modal({
   }, [open]);
 
   useEffect(() => {
-    if (!open || locked) return;
+    if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
+      if (!isTopModal(layerId)) return;
       if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
+        event.preventDefault();
+        if (!locked) onCloseRef.current();
+        return;
       }
+      trapFocus(event, panelRef.current);
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [locked, onClose, open]);
+  }, [layerId, locked, open]);
 
   if (!open) return null;
 
@@ -92,7 +154,7 @@ export function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? titleId : undefined}
+        aria-labelledby={title ? titleId : ariaLabelledBy}
         aria-describedby={description ? descriptionId : undefined}
         aria-busy={locked || undefined}
         tabIndex={-1}

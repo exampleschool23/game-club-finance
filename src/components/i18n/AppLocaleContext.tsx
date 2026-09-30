@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from 'react';
 
-export const APP_LOCALES = ['ru', 'uz', 'en'] as const;
+const APP_LOCALES = ['ru', 'uz', 'en'] as const;
 
 export type AppLocale = (typeof APP_LOCALES)[number];
 

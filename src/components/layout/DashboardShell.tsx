@@ -2,12 +2,13 @@
 
 // Dashboard layout shell and shared club/date context.
 
-import { useCallback, useEffect, useMemo, useState, createContext, useContext } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, createContext, useContext } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Clock3, Gamepad2, LogOut, Menu, ShieldCheck } from 'lucide-react';
+import { useSignOut } from './useSignOut';
 import { Sidebar } from './Sidebar';
-import { Button, Card, EmptyState, PageSkeleton } from '@/components/PresentationFoundation';
+import { Button, Card, EmptyState, IconButton, InlineAlert, PageSkeleton } from '@/components/PresentationFoundation';
 import { createClient } from '@/lib/supabase/client';
 import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import { normalizePaymentMethods } from '@/lib/paymentMethods';
@@ -18,7 +19,7 @@ import {
   featureAccessForMembership,
   type FeatureKey,
 } from '@/lib/permissions';
-import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
+import { normalizeBusinessDayStartHour } from '@/lib/utils';
 
 interface DashboardShellProps {
   initialEmail?: string;
@@ -27,12 +28,6 @@ interface DashboardShellProps {
   initialMembershipRows?: ClubMembership[];
   initialSelectedClubId?: string;
   children: React.ReactNode;
-}
-
-// Context so child pages can access the selected date
-interface DateContextValue {
-  selectedDate: string;
-  setSelectedDate: (date: string) => void;
 }
 
 interface ClubOption {
@@ -51,15 +46,16 @@ interface ClubContextValue {
   enabledPaymentMethods: EntryPaymentMethod[];
   loading: boolean;
   setSelectedClubId: (clubId: string) => void;
+  /**
+   * Re-reads memberships and clubs. Refreshes in place (the current page stays
+   * mounted, keeping its toasts and form state); only the very first load
+   * shows the shell skeleton. Throws when the membership read fails, leaving
+   * the previous memberships untouched.
+   */
   refreshClubs: () => Promise<void>;
 }
 
-export const DateContext = createContext<DateContextValue>({
-  selectedDate: todayIso(),
-  setSelectedDate: () => {},
-});
-
-export const ClubContext = createContext<ClubContextValue>({
+const ClubContext = createContext<ClubContextValue>({
   selectedClubId: '',
   selectedClub: null,
   memberships: [],
@@ -71,10 +67,6 @@ export const ClubContext = createContext<ClubContextValue>({
   setSelectedClubId: () => {},
   refreshClubs: async () => {},
 });
-
-export function useDashboardDate() {
-  return useContext(DateContext);
-}
 
 export function useClub() {
   return useContext(ClubContext);
@@ -103,21 +95,13 @@ function persistSelectedClubId(clubId: string) {
 }
 
 function PendingApproval({ fullName }: { fullName: string }) {
-  const router = useRouter();
   const t = useTranslations('approval');
-  const [signingOut, setSigningOut] = useState(false);
-
-  async function handleLogout() {
-    setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push('/login');
-  }
+  const { signOut, signingOut } = useSignOut();
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-xl items-center justify-center">
-      <Card tone="warning" padding="lg" className="w-full border-amber-100 bg-white text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-xl items-center justify-center">
+      <Card tone="warning" padding="lg" className="w-full bg-white text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-warning-50 text-warning-600">
           <Clock3 size={28} aria-hidden="true" />
         </div>
         <h1 className="mt-5 text-2xl font-bold text-gray-950">{t('title')}</h1>
@@ -128,7 +112,7 @@ function PendingApproval({ fullName }: { fullName: string }) {
           <ShieldCheck size={17} aria-hidden="true" />
           {t('ownerOnly')}
         </div>
-        <Button variant="outline" className="mt-6" onClick={handleLogout} loading={signingOut} icon={<LogOut size={16} />}>
+        <Button variant="outline" className="mt-6" onClick={signOut} loading={signingOut} icon={<LogOut size={16} />}>
           {t('signOut')}
         </Button>
       </Card>
@@ -163,7 +147,6 @@ export function DashboardShell({
   const tn = useTranslations('nav');
   const initialMemberships = useMemo(() => membershipOptions(initialMembershipRows), [initialMembershipRows]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(todayIso);
   const [profileRole, setProfileRole] = useState<UserRole>(initialProfileRole);
   const [fullName, setFullName] = useState(initialFullName || initialEmail);
   const [memberships, setMemberships] = useState<ClubOption[]>(initialMemberships);
@@ -173,7 +156,10 @@ export function DashboardShell({
       : initialMemberships[0]?.club.id ?? '',
   );
   const [clubLoading, setClubLoading] = useState(false);
+  const [shellError, setShellError] = useState('');
   const [navigatingTo, setNavigatingTo] = useState('');
+  const mainRef = useRef<HTMLElement>(null);
+  const membershipsLoadedRef = useRef(initialMemberships.length > 0);
 
   const selectedMembership = useMemo(
     () => memberships.find((membership) => membership.club.id === selectedClubId) ?? null,
@@ -196,9 +182,7 @@ export function DashboardShell({
     persistSelectedClubId(clubId);
   }, []);
 
-  const refreshClubs = useCallback(async () => {
-    const supabase = createClient();
-    setClubLoading(true);
+  const loadClubs = useCallback(async (supabase: ReturnType<typeof createClient>, firstLoad: boolean) => {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session?.user) {
@@ -219,8 +203,20 @@ export function DashboardShell({
         .order('created_at', { ascending: true }),
     ]);
 
-    setFullName(profileRes.data?.full_name ?? session.user.email ?? initialEmail);
-    setProfileRole(isUserRole(profileRes.data?.role) ? profileRes.data.role : 'viewer');
+    if (
+      membershipRes.error &&
+      !isMissingDatabaseColumn(membershipRes.error, 'enabled_payment_methods') &&
+      !isMissingDatabaseColumn(membershipRes.error, 'feature_access')
+    ) {
+      // A network or permission failure must not look like "no memberships"
+      // (which would show the pending-approval screen to an existing member).
+      throw membershipRes.error;
+    }
+
+    if (!profileRes.error) {
+      setFullName(profileRes.data?.full_name ?? session.user.email ?? initialEmail);
+      setProfileRole(isUserRole(profileRes.data?.role) ? profileRes.data.role : 'viewer');
+    }
 
     let membershipRows = (membershipRes.data as ClubMembership[] | null) ?? [];
     if (isMissingDatabaseColumn(membershipRes.error, 'enabled_payment_methods')) {
@@ -259,6 +255,8 @@ export function DashboardShell({
 
     const nextMemberships = membershipOptions(membershipRows);
 
+    membershipsLoadedRef.current = nextMemberships.length > 0 || !firstLoad;
+    setShellError('');
     setMemberships(nextMemberships);
     setSelectedClubIdState((currentClubId) => {
       const storedClubId = window.localStorage.getItem(SELECTED_CLUB_STORAGE_KEY) ?? '';
@@ -272,52 +270,63 @@ export function DashboardShell({
 
       return nextClubId;
     });
-    setClubLoading(false);
   }, [initialEmail, router]);
 
-  useEffect(() => {
-    const nextClubId = selectedClubId || initialMemberships[0]?.club.id || '';
-
-    if (nextClubId) {
-      setSelectedClubIdState(nextClubId);
-      persistSelectedClubId(nextClubId);
+  const refreshClubs = useCallback(async () => {
+    const supabase = createClient();
+    // Only the first load swaps the page for a skeleton. Later refreshes (after
+    // renaming a club, changing access, …) keep the page mounted.
+    const showSkeleton = !membershipsLoadedRef.current;
+    if (showSkeleton) setClubLoading(true);
+    try {
+      await loadClubs(supabase, showSkeleton);
+    } finally {
+      if (showSkeleton) setClubLoading(false);
     }
-  }, [initialMemberships, selectedClubId]);
+  }, [loadClubs]);
 
   useEffect(() => {
+    // Keep the cookie in sync with the server-chosen initial club.
+    if (selectedClubId) persistSelectedClubId(selectedClubId);
+    // Only on mount; later changes go through setSelectedClubId.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // The server bootstrap already returned memberships; nothing to re-read.
     if (initialMembershipRows.length > 0) return;
 
     let cancelled = false;
-
-    async function loadProfile() {
-      await refreshClubs();
-      if (cancelled) return;
-    }
-
-    loadProfile().catch(() => {
-      if (!cancelled) {
-        setFullName(initialEmail);
-        setProfileRole('viewer');
-        setMemberships([]);
-        setSelectedClubIdState('');
-        setClubLoading(false);
-      }
+    refreshClubs().catch(() => {
+      if (!cancelled) setShellError(tn('shellLoadError'));
     });
 
     return () => {
       cancelled = true;
     };
-  }, [initialEmail, initialMembershipRows.length, refreshClubs]);
+  }, [initialMembershipRows.length, refreshClubs, tn]);
 
   useEffect(() => {
-    if (selectedClubId) {
-      setSelectedDate(todayIso(new Date(), businessDayStartHour));
-    }
-  }, [businessDayStartHour, selectedClubId]);
-
-  useEffect(() => {
+    // Route changed: clear the pending indicator, close the drawer (also on
+    // Back/Forward and redirects), and move focus to the new page content.
     setNavigatingTo('');
+    setSidebarOpen(false);
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      mainRef.current?.focus({ preventScroll: true });
+    }
   }, [pathname]);
+
+  useEffect(() => {
+    if (!navigatingTo) return;
+    // Aborted or redirected navigations never change `pathname`; don't let the
+    // progress bar and highlighted item stick forever.
+    const timer = window.setTimeout(() => setNavigatingTo(''), 10000);
+    return () => window.clearTimeout(timer);
+  }, [navigatingTo]);
+
+  function handleSelectClub(clubId: string) {
+    setSelectedClubId(clubId);
+    setSidebarOpen(false);
+  }
 
   function handleNavigate(href: string) {
     if (href !== pathname) setNavigatingTo(href);
@@ -351,9 +360,14 @@ export function DashboardShell({
   );
 
   return (
-    <DateContext.Provider value={{ selectedDate, setSelectedDate }}>
       <ClubContext.Provider value={clubContextValue}>
-      <div className="min-h-screen overflow-x-hidden" style={{ backgroundColor: '#f1f5f9' }}>
+      <div className="min-h-dvh overflow-x-hidden bg-slate-100">
+        <a
+          href="#main-content"
+          className="sr-only z-[100] rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+        >
+          {tn('skipToContent')}
+        </a>
         {navigationPending && (
           <div
             className="pointer-events-none fixed inset-x-0 top-0 z-[60] h-1 overflow-hidden bg-primary-100"
@@ -370,41 +384,50 @@ export function DashboardShell({
           selectedClubId={selectedClubId}
           activePathname={navigatingTo || pathname}
           featureAccess={featureAccess}
-          onSelectClub={setSelectedClubId}
+          onSelectClub={handleSelectClub}
           mobileOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           onNavigate={handleNavigate}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col xl:pl-64">
-          <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/95 px-4 shadow-sm backdrop-blur xl:hidden">
-            <button
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+          <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/95 px-4 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur lg:hidden">
+            <IconButton
+              label={tn('openNavigation')}
+              icon={<Menu size={20} />}
               onClick={() => setSidebarOpen(true)}
-              type="button"
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              aria-label={tn('openNavigation')}
-            >
-              <Menu size={20} />
-            </button>
+              aria-expanded={sidebarOpen}
+              aria-controls="mobile-nav"
+              aria-haspopup="dialog"
+              className="shadow-sm"
+            />
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-600 text-white">
                 <Gamepad2 size={20} aria-hidden="true" />
               </div>
               <div className="min-w-0 leading-tight">
-                <p className="truncate text-sm font-extrabold text-gray-950">{selectedClub?.name ?? 'Game Club'}</p>
-                <p className="truncate text-xs font-bold text-primary-700">Finance</p>
+                <p className="truncate text-sm font-extrabold text-gray-950">{selectedClub?.name ?? tn('appName')}</p>
+                <p className="truncate text-xs font-bold text-primary-700">{tn('appSubtitle')}</p>
               </div>
             </div>
           </div>
 
-          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-            <div className="mx-auto w-full max-w-[1680px] px-3 pb-5 pt-16 sm:px-5 md:px-6 xl:px-8 xl:py-6 2xl:px-10">
-              {clubLoading || (!pathAllowed && Boolean(fallbackPath)) ? (
+          <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto outline-none">
+            <div className="mx-auto w-full max-w-[1680px] px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 sm:px-5 md:px-6 lg:py-6 xl:px-8 2xl:px-10">
+              {shellError ? (
+                <InlineAlert
+                  variant="danger"
+                  className="mx-auto max-w-xl"
+                  action={<Button size="sm" variant="outline" onClick={() => window.location.reload()}>{tc('retry')}</Button>}
+                >
+                  {shellError}
+                </InlineAlert>
+              ) : clubLoading || (!pathAllowed && Boolean(fallbackPath)) ? (
                 <PageSkeleton />
               ) : memberships.length === 0 ? (
                 <PendingApproval fullName={fullName} />
               ) : !pathAllowed ? (
-                <Card className="mx-auto max-w-xl border-amber-200">
+                <Card className="mx-auto max-w-xl">
                   <EmptyState icon={ShieldCheck} title={tc('accessDeniedTitle')} description={tc('accessDeniedDescription')} compact />
                 </Card>
               ) : (
@@ -415,6 +438,5 @@ export function DashboardShell({
         </div>
       </div>
       </ClubContext.Provider>
-    </DateContext.Provider>
   );
 }

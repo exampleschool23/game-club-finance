@@ -10,6 +10,8 @@ export interface StepperProps {
   onChange: (value: string) => void;
   onStep: (delta: 1 | -1) => void;
   label: string;
+  /** Lets a surrounding `<Field htmlFor>` label the input. */
+  id?: string;
   decreaseLabel: string;
   increaseLabel: string;
   min?: number;
@@ -30,6 +32,7 @@ export function Stepper({
   onChange,
   onStep,
   label,
+  id,
   decreaseLabel,
   increaseLabel,
   min = 0,
@@ -39,7 +42,7 @@ export function Stepper({
   size = 'md',
   className,
 }: StepperProps) {
-  const numeric = Number(value || 0);
+  const numeric = Number(value || 0) || 0;
   return (
     <div className={cn('inline-flex items-center gap-1.5', className)}>
       <IconButton
@@ -50,18 +53,20 @@ export function Stepper({
         onClick={() => onStep(-1)}
       />
       <input
+        id={id}
         type="text"
         inputMode="numeric"
+        pattern="[0-9]*"
         aria-label={label}
         aria-invalid={invalid || undefined}
         value={value}
         disabled={disabled}
         onKeyDown={preventNonIntegerKeys}
         onWheel={(event) => event.currentTarget.blur()}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(event.target.value.replace(/\D/g, ''))}
         className={cn(
           'rounded-lg border bg-white text-center font-bold tabular-nums text-gray-900 outline-none transition focus:ring-2 disabled:bg-gray-50 disabled:text-gray-400',
-          size === 'sm' ? 'h-8 w-14 text-sm' : 'h-10 w-20 text-sm',
+          size === 'sm' ? 'h-8 w-14 text-base sm:text-sm' : 'h-10 w-20 text-base sm:text-sm',
           invalid
             ? 'border-danger-400 text-danger-600 focus:ring-danger-200'
             : 'border-gray-200 focus:border-primary-500 focus:ring-primary-100',

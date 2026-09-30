@@ -17,7 +17,7 @@ export const FEATURE_DEFINITIONS = [
 
 export type FeatureKey = (typeof FEATURE_DEFINITIONS)[number]['key'];
 
-export const FEATURE_KEYS = FEATURE_DEFINITIONS.map((feature) => feature.key) as FeatureKey[];
+const FEATURE_KEYS = FEATURE_DEFINITIONS.map((feature) => feature.key) as FeatureKey[];
 
 const ROLE_DEFAULTS: Record<UserRole, FeatureKey[]> = {
   owner: FEATURE_KEYS,

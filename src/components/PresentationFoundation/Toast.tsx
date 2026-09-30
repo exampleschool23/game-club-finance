@@ -14,26 +14,37 @@ interface ToastProps {
   durationMs?: number;
 }
 
-/** Transient bottom-right notification; auto-dismisses. */
-export function Toast({ message, type, onClose, durationMs = 3500 }: ToastProps) {
+/**
+ * Transient notification: top of the screen on phones (so it never covers a
+ * bottom-sheet's Save button), bottom-right on larger screens. Errors stay
+ * longer, and the timer pauses while hovered or focused.
+ */
+export function Toast({ message, type, onClose, durationMs }: ToastProps) {
   const tc = useTranslations('common');
+  const [paused, setPaused] = useState(false);
+  const duration = durationMs ?? (type === 'error' ? 8000 : 3500);
 
   useEffect(() => {
-    const timer = setTimeout(onClose, durationMs);
+    if (paused) return;
+    const timer = setTimeout(onClose, duration);
     return () => clearTimeout(timer);
-  }, [durationMs, onClose]);
+  }, [duration, onClose, paused]);
 
   return (
     <div
       role={type === 'error' ? 'alert' : 'status'}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
       className={cn(
-        'fixed bottom-4 left-4 right-4 z-[80] flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg sm:left-auto sm:max-w-sm',
+        'fixed left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] z-[90] flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg sm:bottom-[max(1rem,env(safe-area-inset-bottom))] sm:left-auto sm:top-auto sm:max-w-sm',
         type === 'success' ? 'bg-success-600' : 'bg-danger-600',
       )}
     >
       {type === 'success' ? <CheckCircle size={18} aria-hidden="true" /> : <XCircle size={18} aria-hidden="true" />}
       <span className="flex-1">{message}</span>
-      <button type="button" onClick={onClose} aria-label={tc('close')} className="rounded-md p-1 opacity-80 hover:opacity-100">
+      <button type="button" onClick={onClose} aria-label={tc('close')} className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
         <X size={16} />
       </button>
     </div>

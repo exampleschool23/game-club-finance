@@ -2,7 +2,6 @@ import { calculateGameClubIncome } from './dailyCash';
 import { calculateBarMoney } from './barMoney';
 import type { StockPurchaseCostRow } from './barMoney';
 
-export { STOCK_PURCHASE_DEDUCTION_START_DATE, sumStockPurchaseCost } from './barMoney';
 export type { StockPurchaseCostRow } from './barMoney';
 
 export type DashboardPeriod =
@@ -164,7 +163,7 @@ function parseLocalIsoDate(date: string): Date {
   return new Date(`${date}T00:00:00`);
 }
 
-export function addDays(date: Date, days: number): Date {
+function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;

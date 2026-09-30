@@ -13,6 +13,7 @@
  * Data display:      MetricCard, AmountCard, StatTile, DataTable
  * Misc:              LanguageSwitcher
  */
+export { Avatar, initialsOf } from './Avatar';
 export { Badge, type BadgeVariant } from './Badge';
 export { Button, ButtonLink, buttonClassName, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button';
 export { DatePicker, DateRangePicker, MonthPicker } from './CalendarPicker';

@@ -7,6 +7,7 @@ import {
   currentYearMonth,
   monthRange,
   normalizeBusinessDayStartHour,
+  serverTodayIso,
   todayIso,
 } from './utils';
 
@@ -49,5 +50,20 @@ describe('business day date helpers', () => {
     expect(normalizeBusinessDayStartHour('23')).toBe(23);
     expect(normalizeBusinessDayStartHour(24)).toBe(0);
     expect(normalizeBusinessDayStartHour('bad')).toBe(0);
+  });
+});
+
+describe('serverTodayIso', () => {
+  it('uses the Tashkent wall clock regardless of the server time zone', () => {
+    // 2026-07-03 20:30 UTC is 2026-07-04 01:30 in Tashkent (UTC+5).
+    const instant = new Date(Date.UTC(2026, 6, 3, 20, 30));
+    expect(serverTodayIso(instant)).toBe('2026-07-04');
+  });
+
+  it('applies the business-day start hour in Tashkent time', () => {
+    // 00:30 UTC = 05:30 Tashkent: before a 6:00 start, still the previous business day.
+    expect(serverTodayIso(new Date(Date.UTC(2026, 6, 4, 0, 30)), 6)).toBe('2026-07-03');
+    // 01:00 UTC = 06:00 Tashkent: the new business day has started.
+    expect(serverTodayIso(new Date(Date.UTC(2026, 6, 4, 1, 0)), 6)).toBe('2026-07-04');
   });
 });
