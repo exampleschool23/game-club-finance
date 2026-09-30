@@ -97,16 +97,16 @@ export function SegmentedControl<T extends string>({
               'inline-flex items-center justify-center gap-1.5 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50',
               isChips
                 ? cn('whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px]', selected
-                  ? 'border-gray-950 bg-gray-950 text-white'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900')
+                  ? 'border-gray-950 bg-gray-950 text-gray-50'
+                  : 'border-gray-200 bg-surface text-gray-600 hover:border-gray-300 hover:text-gray-900')
                 : variant === 'soft'
                   // Raised white pill: the selected tab is the only one with a surface.
                   ? cn('rounded-[10px] px-3', height, selected
-                    ? 'bg-white font-semibold text-gray-950 shadow-sm'
+                    ? 'bg-surface font-semibold text-gray-950 shadow-sm'
                     : 'text-gray-500 hover:text-gray-900')
                   : cn('rounded-xl border px-2', height, selected
                     ? 'border-primary-600 bg-primary-600 font-semibold text-white shadow-sm'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'),
+                    : 'border-gray-200 bg-surface text-gray-700 hover:border-gray-300 hover:bg-gray-50'),
             )}
           >
             {option.icon}

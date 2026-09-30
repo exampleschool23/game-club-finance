@@ -14,8 +14,8 @@ const paddingClasses: Record<CardPadding, string> = {
 // Tinted tones stay quiet: a pale fill and a matching hairline, never a
 // coloured block. Colour carries meaning; it should not be a section label.
 const toneClasses: Record<CardTone, string> = {
-  default: 'border-gray-200 bg-white shadow-card',
-  primary: 'border-primary-200 bg-white shadow-card',
+  default: 'border-gray-200 bg-surface shadow-card',
+  primary: 'border-primary-200 bg-surface shadow-card',
   info: 'border-primary-100 bg-primary-50/50',
   success: 'border-success-100 bg-success-50/50',
   warning: 'border-warning-100 bg-warning-50/50',

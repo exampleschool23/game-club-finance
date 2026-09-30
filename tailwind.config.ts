@@ -4,82 +4,42 @@ import type { Config } from "tailwindcss";
  * Design tokens. One cobalt accent for actions and the current page; slate
  * neutrals with a slight blue tint; green/red/amber reserved for meaning
  * (money in, money out, needs attention).
+ *
+ * Every colour resolves through a CSS variable declared in globals.css, where
+ * the dark set is swapped in under `prefers-color-scheme: dark`. `<alpha-value>`
+ * keeps opacity modifiers like `bg-gray-950/40` working.
  */
+function scale(name: string, shades: number[]) {
+  return Object.fromEntries(shades.map((shade) => [shade, `rgb(var(--c-${name}-${shade}) / <alpha-value>)`]));
+}
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  darkMode: "media",
   theme: {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
       },
       colors: {
+        // Card / panel background: white in light mode, a raised dark slate in dark mode.
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
         // Slate-tinted neutrals replace Tailwind's pure greys everywhere.
-        gray: {
-          50: "#f7f8fa",
-          100: "#eff1f5",
-          200: "#e3e7ee",
-          300: "#cbd2dd",
-          400: "#98a2b3",
-          500: "#667085",
-          600: "#4b5565",
-          700: "#364152",
-          800: "#1f2937",
-          900: "#131a26",
-          950: "#0b1018",
-        },
-        primary: {
-          50: "#eef3ff",
-          100: "#dce6ff",
-          200: "#b9cdff",
-          300: "#8eaeff",
-          400: "#5f86ff",
-          500: "#3b63f6",
-          600: "#2f52e0",
-          700: "#2542b8",
-          800: "#1f378f",
-          900: "#1b2f6e",
-        },
-        success: {
-          50: "#e8f7f0",
-          100: "#cdeee0",
-          500: "#12a36f",
-          600: "#0e8a5d",
-          700: "#0b7049",
-        },
-        danger: {
-          50: "#fdeeed",
-          100: "#fbd9d6",
-          400: "#ec6b66",
-          500: "#e0453f",
-          600: "#c73731",
-          700: "#a52d28",
-        },
-        warning: {
-          50: "#fdf5e6",
-          100: "#fae8c4",
-          500: "#e39a1e",
-          600: "#c07f12",
-          700: "#9a6410",
-        },
-        sidebar: "#ffffff",
-        orange: {
-          50: "#fff4ec",
-          100: "#ffe4d0",
-          500: "#f07a2b",
-          600: "#d9641a",
-          700: "#b24f13",
-        },
-        purple: {
-          50: "#f3f1ff",
-          100: "#e6e1ff",
-          500: "#7c5cf2",
-          600: "#6a48e0",
-          700: "#5738bb",
-        },
+        gray: scale("gray", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]),
+        primary: scale("primary", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
+        success: scale("success", [50, 100, 500, 600, 700]),
+        danger: scale("danger", [50, 100, 400, 500, 600, 700]),
+        warning: scale("warning", [50, 100, 500, 600, 700]),
+        orange: scale("orange", [50, 100, 500, 600, 700]),
+        purple: scale("purple", [50, 100, 500, 600, 700]),
+        sidebar: "rgb(var(--c-surface) / <alpha-value>)",
+      },
+      ringOffsetColor: {
+        DEFAULT: "rgb(var(--c-gray-50))",
       },
       borderRadius: {
         xl: "0.875rem",

@@ -291,7 +291,7 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
         role="dialog"
         aria-modal="true"
         aria-label={mode === 'range' ? t('selectRange') : t('selectDate')}
-        className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl outline-none sm:rounded-2xl"
+        className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-surface shadow-2xl outline-none sm:rounded-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="shrink-0 border-b border-gray-100 px-4 py-4 sm:px-5">
@@ -381,7 +381,7 @@ function CalendarDialog({ open, mode, from, to = '', min, max, onClose, onApply 
           )}
         </div>
 
-        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-gray-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-gray-100 bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <p className="text-xs font-semibold text-gray-500">
             {formatDatePickerValue(draftFrom, locale)}
             {mode === 'range' && draftTo && ` → ${formatDatePickerValue(draftTo, locale)}`}
@@ -431,7 +431,7 @@ export function DatePicker({
         onClick={() => setOpen(true)}
         aria-label={ariaLabel ?? t('selectDate')}
         className={cn(
-          'flex h-11 w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-left text-sm shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400',
+          'flex h-11 w-full items-center gap-3 rounded-lg border border-gray-200 bg-surface px-3 text-left text-sm shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400',
           buttonClassName,
         )}
       >
@@ -485,7 +485,7 @@ export function DateRangePicker({
         type="button"
         disabled={disabled}
         onClick={() => setOpen(true)}
-        className="grid min-h-14 w-full grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50"
+        className="grid min-h-14 w-full grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-xl border border-gray-200 bg-surface px-3 py-2 text-left shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50"
       >
         <span className="min-w-0">
           <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400">{fromLabel ?? t('from')}</span>
@@ -541,7 +541,7 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
         type="button"
         disabled={disabled}
         onClick={() => setOpen(true)}
-        className="flex h-11 w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-left text-sm shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50"
+        className="flex h-11 w-full items-center gap-3 rounded-lg border border-gray-200 bg-surface px-3 text-left text-sm shadow-sm transition hover:border-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-50"
       >
         <CalendarDays size={17} className="shrink-0 text-primary-600" />
         <span className="min-w-0 flex-1 truncate font-bold capitalize text-gray-950">{formatYearMonth(value, locale)}</span>
@@ -556,7 +556,7 @@ export function MonthPicker({ value, onChange, min, max, disabled = false, class
             role="dialog"
             aria-modal="true"
             aria-label={t('selectMonth')}
-            className="w-full max-w-xl rounded-t-2xl border border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none sm:rounded-2xl"
+            className="w-full max-w-xl rounded-t-2xl border border-gray-200 bg-surface pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none sm:rounded-2xl"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">

@@ -16,7 +16,7 @@ export function MetricGridSkeleton({ count = 4, className }: { count?: number; c
   return (
     <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4', className)} {...statusProps}>
       {Array.from({ length: count }).map((_, index) => (
-        <div key={index} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
+        <div key={index} className="rounded-2xl border border-gray-200 bg-surface p-5 shadow-card">
           <div className="flex items-start gap-3">
             <Skeleton className="h-4 w-4 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1 space-y-2">
@@ -37,7 +37,7 @@ export function TableSkeleton({ rows = 6, columns = 4, className }: { rows?: num
   const statusProps = useLoadingStatus();
   const template = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` };
   return (
-    <div className={cn('overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card', className)} {...statusProps}>
+    <div className={cn('overflow-hidden rounded-2xl border border-gray-200 bg-surface shadow-card', className)} {...statusProps}>
       <div className="grid gap-4 border-b border-gray-100 bg-gray-50 px-4 py-4" style={template}>
         {Array.from({ length: columns }).map((_, index) => <Skeleton key={index} className="h-3 w-2/3" />)}
       </div>
@@ -57,7 +57,7 @@ export function TableSkeleton({ rows = 6, columns = 4, className }: { rows?: num
 export function FormSkeleton({ className }: { className?: string }) {
   const statusProps = useLoadingStatus();
   return (
-    <div className={cn('rounded-2xl border border-gray-200 bg-white p-5 shadow-card', className)} {...statusProps}>
+    <div className={cn('rounded-2xl border border-gray-200 bg-surface p-5 shadow-card', className)} {...statusProps}>
       <div className="space-y-5">
         <div className="flex items-center gap-3">
           <Skeleton className="h-10 w-10 rounded-xl" />
@@ -85,7 +85,7 @@ export function DetailListSkeleton({ rows = 5, className }: { rows?: number; cla
   const statusProps = useLoadingStatus();
   return (
     <div className={cn('space-y-3', className)} {...statusProps}>
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-card">
+      <div className="rounded-2xl border border-gray-200 bg-surface p-6 shadow-card">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-3">
             <Skeleton className="h-4 w-32" />
@@ -99,7 +99,7 @@ export function DetailListSkeleton({ rows = 5, className }: { rows?: number; cla
         </div>
       </div>
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
+        <div key={index} className="rounded-2xl border border-gray-200 bg-surface p-4 shadow-card">
           <div className="flex items-center justify-between gap-4">
             <Skeleton className="h-5 w-36" />
             <Skeleton className="h-8 w-28 rounded-lg" />
@@ -125,7 +125,7 @@ export function PageSkeleton() {
         <Skeleton className="h-4 w-80 max-w-full bg-gray-100" />
       </div>
       <MetricGridSkeleton count={4} className="lg:grid-cols-3 2xl:grid-cols-4" />
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card sm:p-5">
+      <div className="rounded-2xl border border-gray-200 bg-surface p-4 shadow-card sm:p-5">
         <div className="space-y-3">
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-4 w-full bg-gray-100" />

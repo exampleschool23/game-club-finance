@@ -6,7 +6,7 @@ export default async function NotFound() {
   const tc = await getTranslations('common');
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-slate-100 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <EmptyState
           icon={Compass}

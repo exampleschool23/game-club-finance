@@ -367,7 +367,7 @@ export default function MonthlyReportPage() {
             keyExtractor={(row) => row.date}
             data={rows}
             columns={[
-              { key: 'date', header: t('date'), className: 'sticky left-0 z-[25] bg-gray-50', cellClassName: 'z-10 bg-white', render: (row) => <span className="font-medium text-gray-700">{formatDate(row.date, locale)}</span> },
+              { key: 'date', header: t('date'), className: 'sticky left-0 z-[25] bg-gray-50', cellClassName: 'z-10 bg-surface', render: (row) => <span className="font-medium text-gray-700">{formatDate(row.date, locale)}</span> },
               { key: 'manualIncome', header: t('gameClubIncome'), align: 'right', render: (row) => formatCurrency(row.manualIncome) },
               { key: 'barSales', header: t('barSales'), align: 'right', render: (row) => formatCurrency(row.barSales) },
               { key: 'debtIncome', header: t('debtIncome'), align: 'right', render: (row) => <span className="text-warning-600">{formatCurrency(row.debtIncome)}</span> },

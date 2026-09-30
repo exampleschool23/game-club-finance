@@ -614,10 +614,11 @@
       "missing": "Function missing",
       "different": "Different / needs review",
       "matching": "Matches app version",
-      "allMigrations": "Migration records ({count})",
-      "recorded": "Recorded",
       "unconfirmed": "Not recorded / not verified",
-      "nextSteps": "For missing functions, review the corresponding SQL migration. For unconfirmed records or differing definitions, inspect the database before rerunning migrations. This check never applies changes."
+      "nextSteps": "For missing functions, review the corresponding SQL migration. For unconfirmed records or differing definitions, inspect the database before rerunning migrations. This check never applies changes.",
+      "pendingMigrations": "Migrations without a record ({count})",
+      "migrationRecords": "Migration records",
+      "allRecorded": "All {count} migrations are recorded in the history."
     },
     "title": "Settings",
     "description": "Manage your clubs and how daily operations work.",
@@ -759,7 +760,12 @@
     "linkCopied": "Link copied",
     "copyFailed": "Could not copy the link. Select it and copy manually.",
     "requestedAt": "requested {date}",
-    "everything": "Everything"
+    "everything": "Everything",
+    "reject": "Reject",
+    "rejectTitle": "Reject request?",
+    "rejectDescription": "{name} will be removed and will not get access. They can sign in again later to send a new request.",
+    "rejected": "Request rejected",
+    "rejectError": "Could not reject the request. Try again."
   },
   "approval": {
     "title": "Waiting for owner approval",

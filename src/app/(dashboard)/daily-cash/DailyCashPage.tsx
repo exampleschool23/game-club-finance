@@ -472,7 +472,7 @@ export default function DailyCashPage() {
               {isOwner ? t('ownerAccessEdit') : (
                 <>
                   {t('editUntil', { time: formatDateTime(deadline, locale) })}
-                  <span className="ml-1 rounded-full bg-white/70 px-2 py-0.5 tabular-nums">{formatRemaining(remainingMs)}</span>
+                  <span className="ml-1 rounded-full bg-surface/70 px-2 py-0.5 tabular-nums">{formatRemaining(remainingMs)}</span>
                 </>
               )}
             </Badge>

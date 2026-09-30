@@ -364,7 +364,7 @@ export function DashboardShell({
       <div className="min-h-dvh overflow-x-hidden bg-gray-50">
         <a
           href="#main-content"
-          className="sr-only z-[100] rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+          className="sr-only z-[100] rounded-lg bg-surface px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
         >
           {tn('skipToContent')}
         </a>
@@ -391,7 +391,7 @@ export function DashboardShell({
         />
 
         <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
-          <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur lg:hidden">
+          <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-surface/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur lg:hidden">
             <IconButton
               variant="ghost"
               label={tn('openNavigation')}
@@ -402,7 +402,7 @@ export function DashboardShell({
               aria-haspopup="dialog"
             />
             <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-950 text-white">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-950 text-gray-50">
                 <Gamepad2 size={16} aria-hidden="true" />
               </div>
               <p className="truncate text-sm font-semibold text-gray-950">{selectedClub?.name ?? tn('appName')}</p>

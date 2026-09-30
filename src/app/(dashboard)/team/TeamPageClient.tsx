@@ -466,6 +466,33 @@ export default function TeamPageClient() {
     }
   }
 
+  async function rejectPendingProfile(profile: TeamMember) {
+    const confirmed = await confirm({
+      title: t('rejectTitle'),
+      description: t('rejectDescription', { name: profile.full_name || profile.email || '' }),
+      confirmLabel: t('reject'),
+    });
+    if (!confirmed) return;
+
+    setSavingId(`${profile.id}:reject`);
+    try {
+      // Deletes the sign-up server-side; only allowed while the person has no club access.
+      const response = await fetch('/api/team/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.id }),
+      });
+      if (!response.ok) throw new Error(`Reject failed: ${response.status}`);
+      showToast(t('rejected'));
+      await loadProfiles({ silent: true });
+    } catch (rejectError) {
+      console.error('Failed to reject request', rejectError);
+      showError(t('rejectError'));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function removeClubAccess(profile: TeamMember, membership: TeamMembership) {
     if (!ownedClubIds.has(membership.clubId)) {
       showError(t('notClubOwner'));
@@ -582,7 +609,7 @@ export default function TeamPageClient() {
     if (availableClubs.length === 0) {
       const ownsAnyOtherClub = clubs.some((club) => ownedClubIds.has(club.id));
       return (
-        <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-500">
+        <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-surface px-4 py-3 text-sm font-medium text-gray-500">
           <ShieldCheck size={16} className="text-success-500" aria-hidden="true" />
           {ownsAnyOtherClub ? t('allClubsAdded') : t('noOwnedClubs')}
         </div>
@@ -750,8 +777,21 @@ export default function TeamPageClient() {
                       </p>
                     </div>
                   </div>
-                  <div className="min-w-0 lg:w-[460px] lg:shrink-0">
-                    {renderAccessControls(profile, t('approve'), 'success')}
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center lg:shrink-0">
+                    <div className="min-w-0 lg:w-[460px]">
+                      {renderAccessControls(profile, t('approve'), 'success')}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-gray-500 hover:text-danger-600"
+                      icon={<X size={15} aria-hidden="true" />}
+                      loading={savingId === `${profile.id}:reject`}
+                      disabled={Boolean(savingId) && savingId !== `${profile.id}:reject`}
+                      onClick={() => void rejectPendingProfile(profile)}
+                    >
+                      {t('reject')}
+                    </Button>
                   </div>
                 </Card>
               ))}
@@ -905,7 +945,7 @@ export default function TeamPageClient() {
                               )}
                             </div>
                             {addAccessExpanded && (
-                              <div id={`add-access-${profile.id}`} className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
+                              <div id={`add-access-${profile.id}`} className="mb-5 rounded-xl border border-gray-200 bg-surface p-4">
                                 <p className="mb-3 text-sm font-medium text-gray-800">{t('addAccessHelp')}</p>
                                 {renderAccessControls(profile, t('addAccess'))}
                               </div>

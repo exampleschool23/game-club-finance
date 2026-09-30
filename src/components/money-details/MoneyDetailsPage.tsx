@@ -279,7 +279,7 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
             />
 
             {rows.map((row) => (
-              <details key={row.date} open={expandedDates.has(row.date)} className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card">
+              <details key={row.date} open={expandedDates.has(row.date)} className="group overflow-hidden rounded-2xl border border-gray-200 bg-surface shadow-card">
                 <summary
                   onClick={(event) => { event.preventDefault(); toggleDate(row.date); }}
                   className="flex cursor-pointer list-none flex-col gap-2 px-4 py-3 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden"

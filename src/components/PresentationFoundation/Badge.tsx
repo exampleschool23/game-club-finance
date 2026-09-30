@@ -21,7 +21,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   purple: 'bg-purple-50 text-purple-700',
   orange: 'bg-orange-50 text-orange-700',
   neutral: 'bg-gray-100 text-gray-600',
-  outline: 'border border-gray-200 bg-white text-gray-600',
+  outline: 'border border-gray-200 bg-surface text-gray-600',
 };
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {

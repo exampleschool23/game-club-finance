@@ -614,10 +614,11 @@
       "missing": "Funksiya mavjud emas",
       "different": "Farq bor / tekshirish kerak",
       "matching": "Ilova versiyasiga mos",
-      "allMigrations": "Migratsiya yozuvlari ({count})",
-      "recorded": "Qayd etilgan",
       "unconfirmed": "Qayd etilmagan / tekshirilmagan",
-      "nextSteps": "Funksiya yoʻq boʻlsa, tegishli SQL migratsiyasini tekshiring. Tasdiqlanmagan yozuvlar yoki farqli taʼriflar boʻlsa, migratsiyalarni qayta bajarishdan oldin bazani tekshiring. Bu tekshiruv hech narsani oʻzgartirmaydi."
+      "nextSteps": "Funksiya yoʻq boʻlsa, tegishli SQL migratsiyasini tekshiring. Tasdiqlanmagan yozuvlar yoki farqli taʼriflar boʻlsa, migratsiyalarni qayta bajarishdan oldin bazani tekshiring. Bu tekshiruv hech narsani oʻzgartirmaydi.",
+      "pendingMigrations": "Yozuvsiz migratsiyalar ({count})",
+      "migrationRecords": "Migratsiya yozuvlari",
+      "allRecorded": "Barcha migratsiyalar ({count}) tarixda qayd etilgan."
     },
     "title": "Sozlamalar",
     "description": "Klublar va kundalik ish tartibini boshqaring.",
@@ -759,7 +760,12 @@
     "linkCopied": "Havola nusxalandi",
     "copyFailed": "Nusxalab bo‘lmadi. Havolani belgilab, qo‘lda nusxalang.",
     "requestedAt": "so‘rov {date}",
-    "everything": "Hammasi"
+    "everything": "Hammasi",
+    "reject": "Rad etish",
+    "rejectTitle": "So‘rov rad etilsinmi?",
+    "rejectDescription": "{name} o‘chiriladi va ruxsat olmaydi. Keyinroq u qayta kirib, yangi so‘rov yuborishi mumkin.",
+    "rejected": "So‘rov rad etildi",
+    "rejectError": "So‘rovni rad etib bo‘lmadi. Qayta urinib ko‘ring."
   },
   "approval": {
     "title": "Owner tasdig'i kutilmoqda",

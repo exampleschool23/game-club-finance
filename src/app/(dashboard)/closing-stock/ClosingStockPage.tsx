@@ -167,10 +167,10 @@ function isMissingDeletedColumn(error: { message?: string } | null | undefined) 
 const stickyHeaderCellClass = 'sticky top-0 z-20 border-b border-gray-100 bg-gray-50 px-4 py-3 align-bottom';
 // The row number stays visible next to the product while the wide table scrolls horizontally.
 const stickyIndexHeaderCellClass = 'sticky left-0 top-0 z-30 w-12 border-b border-gray-100 bg-gray-50 px-3 py-3 align-bottom';
-const stickyIndexCellClass = 'sticky left-0 z-10 w-12 bg-white px-3 py-4 group-hover:bg-gray-50';
+const stickyIndexCellClass = 'sticky left-0 z-10 w-12 bg-surface px-3 py-4 group-hover:bg-gray-50';
 // The product column stays visible while the wide table scrolls horizontally.
 const stickyProductHeaderCellClass = 'sticky left-12 top-0 z-30 border-b border-gray-100 bg-gray-50 px-4 py-3 align-bottom shadow-[1px_0_0_0_#e3e7ee]';
-const stickyProductCellClass = 'sticky left-12 z-10 bg-white px-4 py-4 shadow-[1px_0_0_0_#e3e7ee] group-hover:bg-gray-50';
+const stickyProductCellClass = 'sticky left-12 z-10 bg-surface px-4 py-4 shadow-[1px_0_0_0_#e3e7ee] group-hover:bg-gray-50';
 const CLOCK_REFRESH_MS = 60_000;
 const addedTodayHeaderCellClass = stickyHeaderCellClass;
 
@@ -1175,7 +1175,7 @@ export default function ClosingStockPage() {
                         </tr>
                       );
                     })}
-                    <tr className="group border-t border-gray-200 bg-white font-semibold tabular-nums text-gray-900">
+                    <tr className="group border-t border-gray-200 bg-surface font-semibold tabular-nums text-gray-900">
                       <td className={stickyIndexCellClass} />
                       <td className={stickyProductCellClass}>{t('totalRow', { count: filteredRows.length })}</td>
                       <td className="px-4 py-4" />
@@ -1194,13 +1194,13 @@ export default function ClosingStockPage() {
                   </tbody>
                 </table>
                 </div>
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white" aria-hidden="true" />
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface" aria-hidden="true" />
               </div>
             )}
           </Card>
 
           {canSave && rows.length > 0 && (
-            <div className="sticky bottom-0 z-30 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur sm:hidden">
+            <div className="sticky bottom-0 z-30 -mx-4 border-t border-gray-200 bg-surface/95 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur sm:hidden">
               <Button
                 fullWidth
                 onClick={handleSubmitStockCounts}

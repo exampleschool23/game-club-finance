@@ -90,9 +90,11 @@ function NavLink({
   return (
     <Link
       href={href}
-      // The dashboard embeds live totals in its server response. Prefetching
-      // that response could retain totals from before a subsequent edit.
-      prefetch={href !== '/' && prefetchOnIntent}
+      // Default prefetch loads each route's loading boundary ahead of time, so
+      // a tap in the drawer swaps to the page skeleton instantly. The dashboard
+      // embeds live totals in its server response, so it is only prefetched on
+      // intent to avoid retaining totals from before a subsequent edit.
+      prefetch={href === '/' ? prefetchOnIntent : undefined}
       onClick={handleClick}
       onMouseEnter={() => setPrefetchOnIntent(true)}
       onFocus={() => setPrefetchOnIntent(true)}
@@ -187,10 +189,10 @@ export function Sidebar({
   }
 
   const content = (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center gap-2 px-3 pb-2 pt-3">
         {memberships.length > 0 ? (
-          <label className="relative flex min-h-12 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-2.5 transition hover:border-gray-300 focus-within:ring-2 focus-within:ring-primary-500">
+          <label className="relative flex min-h-12 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-gray-200 bg-surface px-2.5 transition hover:border-gray-300 focus-within:ring-2 focus-within:ring-primary-500">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-[11px] font-bold text-white" aria-hidden="true">
               {selectedClub ? initialsOf(selectedClub.name) : <Gamepad2 size={16} />}
             </span>
@@ -214,7 +216,7 @@ export function Sidebar({
           </label>
         ) : (
           <div className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 px-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-white" aria-hidden="true">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-gray-50" aria-hidden="true">
               <Gamepad2 size={16} />
             </span>
             <span className="truncate text-sm font-semibold text-gray-950">{t('appName')}</span>
@@ -327,7 +329,7 @@ function MobileDrawer({ label, onClose, children }: { label: string; onClose?: (
 
   return (
     <div className="fixed inset-0 z-40 lg:hidden">
-      <div className="absolute inset-0 bg-gray-950/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
       <aside
         ref={panelRef}
         id="mobile-nav"

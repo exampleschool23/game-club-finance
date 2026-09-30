@@ -149,7 +149,7 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-gray-950/40 backdrop-blur-[2px]" onMouseDown={requestClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onMouseDown={requestClose} aria-hidden="true" />
       <div
         ref={panelRef}
         role="dialog"
@@ -159,7 +159,7 @@ export function Modal({
         aria-busy={locked || undefined}
         tabIndex={-1}
         className={cn(
-          'relative z-10 flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-pop outline-none sm:rounded-2xl',
+          'relative z-10 flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-surface shadow-pop outline-none sm:rounded-2xl',
           sizeClasses[size],
           className,
         )}

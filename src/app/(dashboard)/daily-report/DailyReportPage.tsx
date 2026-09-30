@@ -326,7 +326,7 @@ export default function DailyReportPage() {
                 keyExtractor={(row) => row.id}
                 data={stockCounts}
                 columns={[
-                  { key: 'product', header: t('product'), className: 'sticky left-0 z-10 bg-gray-50', cellClassName: 'bg-white', render: (row) => <span className="font-medium text-gray-900">{row.products?.name ?? row.product_id}</span> },
+                  { key: 'product', header: t('product'), className: 'sticky left-0 z-10 bg-gray-50', cellClassName: 'bg-surface', render: (row) => <span className="font-medium text-gray-900">{row.products?.name ?? row.product_id}</span> },
                   { key: 'sold', header: t('sold'), align: 'right', render: (row) => formatNumber(row.sold_quantity) },
                   { key: 'income', header: t('barSales'), align: 'right', render: (row) => <span className="text-success-600">{formatCurrency(row.bar_income)}</span> },
                   { key: 'cost', header: t('costOfGoodsSold'), align: 'right', render: (row) => <span className="text-danger-600">{formatCurrency(row.bar_cost)}</span> },

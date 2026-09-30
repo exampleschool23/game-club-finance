@@ -54,7 +54,7 @@ export function MetricCard({
 }: MetricCardProps) {
   const tc = useTranslations('common');
   return (
-    <div className={cn('min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-card sm:p-5', className)}>
+    <div className={cn('min-w-0 rounded-2xl border border-gray-200 bg-surface p-4 shadow-card sm:p-5', className)}>
       <div className="flex items-center gap-2">
         {Icon && <Icon size={15} className={cn('shrink-0 text-gray-400', iconClassName)} aria-hidden="true" />}
         <p className="min-w-0 break-words text-[13px] font-medium text-gray-500">{label}</p>
@@ -119,7 +119,7 @@ export function AmountCard({
   const isPositive = typeof comparison?.value === 'number' && comparison.value >= 0;
 
   return (
-    <div className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-card sm:p-5">
+    <div className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-surface p-4 text-left shadow-card sm:p-5">
       <div className="flex items-center gap-2">
         <Icon size={15} className={cn('shrink-0 text-gray-400', iconClassName)} aria-hidden="true" />
         <p className="min-w-0 break-words text-[13px] font-medium text-gray-500">{label}</p>
@@ -197,7 +197,7 @@ export function StatTile({
     <div
       className={cn(
         'min-w-0 rounded-xl',
-        variant === 'card' && 'border border-gray-200 bg-white px-4 py-3',
+        variant === 'card' && 'border border-gray-200 bg-surface px-4 py-3',
         variant === 'soft' && 'bg-gray-50 px-4 py-3',
         align === 'center' && 'text-center',
         className,

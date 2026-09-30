@@ -19,8 +19,8 @@ export const chartColors = {
   orange: '#f07a2b',
   gray: '#98a2b3',
   axis: '#667085',
-  grid: '#e3e7ee',
-  cursor: '#f7f8fa',
+  grid: 'rgba(102, 112, 133, 0.25)',
+  cursor: 'rgba(102, 112, 133, 0.12)',
 } as const;
 
 /** Card wrapper shared by every dashboard chart; the section is named by its heading. */

@@ -19,9 +19,9 @@ export default function DashboardLayout({
 /** Same frame as DashboardShell (sidebar, top bar, paddings) so nothing jumps when it arrives. */
 function ShellSkeleton() {
   return (
-    <div className="min-h-dvh bg-slate-100" aria-busy="true">
+    <div className="min-h-dvh bg-gray-50" aria-busy="true">
       <div className="fixed inset-y-0 left-0 hidden w-64 bg-sidebar lg:block" />
-      <div className="fixed inset-x-0 top-0 h-14 border-b border-gray-200 bg-white lg:hidden" />
+      <div className="fixed inset-x-0 top-0 h-14 border-b border-gray-200 bg-surface lg:hidden" />
       <main className="lg:pl-64">
         <div className="mx-auto w-full max-w-[1680px] px-3 pb-5 pt-16 sm:px-5 md:px-6 lg:py-6 xl:px-8 2xl:px-10">
           <PageSkeleton />

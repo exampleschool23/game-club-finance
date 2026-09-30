@@ -59,7 +59,7 @@ export function DataTable<T>({
       tabIndex={label ? 0 : undefined}
       className={cn(
         'max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-        !bare && 'rounded-2xl border border-gray-200 bg-white shadow-card',
+        !bare && 'rounded-2xl border border-gray-200 bg-surface shadow-card',
         stickyHeader ? 'max-h-[calc(100dvh-12rem)] overflow-auto' : 'overflow-x-auto',
         'scrollbar-thin',
         className,
@@ -67,7 +67,7 @@ export function DataTable<T>({
     >
       <table className="w-full text-sm" style={{ minWidth: typeof minWidth === 'number' ? `${minWidth}px` : minWidth }}>
         <thead>
-          <tr className="border-b border-gray-200 bg-white">
+          <tr className="border-b border-gray-200 bg-surface">
             {columns.map((column) => (
               <th
                 key={column.key}
@@ -76,7 +76,7 @@ export function DataTable<T>({
                   cellPadding,
                   'text-xs font-medium text-gray-500',
                   alignClass[column.align ?? 'left'],
-                  stickyHeader && 'sticky top-0 z-20 border-b border-gray-200 bg-white',
+                  stickyHeader && 'sticky top-0 z-20 border-b border-gray-200 bg-surface',
                   column.className,
                 )}
               >
@@ -85,7 +85,7 @@ export function DataTable<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100 bg-white">
+        <tbody className="divide-y divide-gray-100 bg-surface">
           {data.length === 0 && emptyState ? (
             <tr>
               <td colSpan={columns.length} className="p-0">{emptyState}</td>

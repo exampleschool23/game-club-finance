@@ -20,7 +20,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Lets env(safe-area-inset-*) pad the top bar, sheets and toasts on notched phones.
   viewportFit: 'cover',
-  themeColor: '#ffffff',
+  themeColor: [{ media: '(prefers-color-scheme: light)', color: '#ffffff' }, { media: '(prefers-color-scheme: dark)', color: '#0f131b' }],
 };
 
 export default async function RootLayout({
