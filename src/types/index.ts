@@ -12,6 +12,9 @@ export type ExpenseCategory =
 export type ExpensePaymentSource = 'game_club' | 'bar';
 export const OWNER_WITHDRAWAL_SOURCES = ['game_club', 'bar'] as const;
 export type OwnerWithdrawalSource = (typeof OWNER_WITHDRAWAL_SOURCES)[number];
+/** Game Club money buckets an owner withdrawal can be taken from (migration 066). */
+export const OWNER_WITHDRAWAL_PAYMENT_METHODS = ['cash', 'terminal', 'card', 'playstation'] as const;
+export type OwnerWithdrawalPaymentMethod = (typeof OWNER_WITHDRAWAL_PAYMENT_METHODS)[number];
 export type MovementType = 'deposit' | 'withdraw' | 'correction';
 export type DebtStatus = 'unpaid' | 'partial' | 'paid';
 
@@ -217,6 +220,8 @@ export interface OwnerWithdrawal {
   /** First day of the calendar month represented by this withdrawal. */
   period_month: string;
   source: OwnerWithdrawalSource;
+  /** Game Club only; null for Bar and for withdrawals recorded without a method. */
+  payment_method?: OwnerWithdrawalPaymentMethod | null;
   amount: number;
   comment: string | null;
   created_by: string;

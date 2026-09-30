@@ -809,7 +809,7 @@
   },
   "moneyTaken": {
     "earnedBeforeWithdrawals": "Earned before withdrawals",
-    "clubMethodsBeforeWithdrawals": "Cash, Terminal, Card and PlayStation below are after operating expenses, before owner withdrawals.",
+    "clubMethodsBeforeWithdrawals": "Game Club profit is split by payment method: earned after operating expenses, withdrawn by the owner, and what is left in each.",
     "playstation": "PlayStation",
     "monthlyWithdrawn": "Withdrawn this month",
     "monthlyRemaining": "Remaining after owner withdrawals",
@@ -847,7 +847,14 @@
     "deleteError": "Could not delete the withdrawal. Try again.",
     "deleteConfirmDetailed": "Delete the {source} withdrawal of {amount} for {month}? The amount will return to that month's available balance.",
     "breakdownTitle": "Breakdown by source",
-    "recordedColumn": "Recorded"
+    "recordedColumn": "Recorded",
+    "paymentMethod": "Take from",
+    "availableForMethod": "Available in {method}",
+    "noMethodAvailable": "No payment method has Game Club profit left for this month.",
+    "unassignedMethod": "No payment method",
+    "unassignedMethodHint": "Recorded before methods were tracked. Delete and withdraw again to assign one.",
+    "methodMigrationRequired": "Withdrawing by payment method requires database migration 066. Apply it before recording a withdrawal.",
+    "allAllocationUnassigned": "All uses Game Club profit first, then Bar profit, without a payment method. Choose Game Club to take money from a specific method."
   },
   "calendar": {
     "selectDate": "Select date",

@@ -72,6 +72,13 @@ then Bar, without overdrawing either bucket. The legacy
 `take_all_owner_money_for_month` remains available for older clients. Never
 replace these RPCs with direct browser inserts.
 
+Game Club withdrawals can be taken from one payment method
+(`withdraw_owner_game_club_money_by_method`, migration 066). A method's
+withdrawable amount is `min(method left for the month - method withdrawals,
+Game Club available for the month)`; see `gameClubWithdrawalsByMethod` and
+`availableForPaymentMethod` in `ownerProfitSnapshot.ts`. Withdrawals without a
+method (older rows and `all`) are shown as unassigned, never guessed.
+
 ## Debts
 
 - New debts begin unpaid with `paid_amount = 0` and the full amount remaining.

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildOwnerProfitSnapshot } from './ownerProfitSnapshot';
+import type { OwnerWithdrawal } from '../../types';
+import {
+  availableForPaymentMethod,
+  buildOwnerProfitSnapshot,
+  gameClubWithdrawalsByMethod,
+} from './ownerProfitSnapshot';
 
 describe('owner profit snapshot', () => {
   it('builds isolated monthly balances and positive aggregate availability', () => {
@@ -79,4 +84,48 @@ it('preserves monthly deficits and aggregate overdrawn flags', () => {
   expect(byMonth['2026-07'].gameClub.available).toBe(-100);
   expect(total.totalAvailable).toBe(300);
   expect(total.hasOverWithdrawal).toBe(true);
+});
+
+describe('Game Club withdrawals by payment method', () => {
+  const row = (overrides: Partial<OwnerWithdrawal>): OwnerWithdrawal => ({
+    id: String(Math.random()),
+    club_id: 'club',
+    period_month: '2026-08-01',
+    source: 'game_club',
+    payment_method: null,
+    amount: 0,
+    comment: null,
+    created_by: 'owner',
+    created_at: '2026-08-10T00:00:00Z',
+    updated_at: '2026-08-10T00:00:00Z',
+    ...overrides,
+  });
+
+  it('assigns method withdrawals and keeps unassigned rows separate', () => {
+    const result = gameClubWithdrawalsByMethod(
+      { cash: 100, terminal: 17_830_000, card: 5_747_000, playstation: 0 },
+      [
+        row({ payment_method: 'terminal', amount: 17_000_000 }),
+        row({ payment_method: 'card', amount: 5_747_000 }),
+        row({ amount: 400 }),
+        row({ source: 'bar', amount: 999 }),
+        row({ period_month: '2026-07-01', payment_method: 'cash', amount: 50 }),
+      ],
+      '2026-08',
+    );
+
+    expect(result.methods).toEqual([
+      { method: 'cash', earned: 100, withdrawn: 0, available: 100 },
+      { method: 'terminal', earned: 17_830_000, withdrawn: 17_000_000, available: 830_000 },
+      { method: 'card', earned: 5_747_000, withdrawn: 5_747_000, available: 0 },
+      { method: 'playstation', earned: 0, withdrawn: 0, available: 0 },
+    ]);
+    expect(result.unassignedWithdrawn).toBe(400);
+  });
+
+  it('caps a method withdrawal by the Game Club month balance', () => {
+    expect(availableForPaymentMethod(830_000, 0)).toBe(0);
+    expect(availableForPaymentMethod(830_000, 1_000_000)).toBe(830_000);
+    expect(availableForPaymentMethod(-5, 1_000)).toBe(0);
+  });
 });

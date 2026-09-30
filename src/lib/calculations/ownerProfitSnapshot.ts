@@ -1,4 +1,8 @@
-import type { OwnerWithdrawal } from '@/types';
+import {
+  OWNER_WITHDRAWAL_PAYMENT_METHODS,
+  type OwnerWithdrawal,
+  type OwnerWithdrawalPaymentMethod,
+} from '../../types';
 import {
   sumAvailableMoneyResults,
   type AvailableMoneyByMonth,
@@ -82,4 +86,53 @@ export function buildOwnerProfitSnapshot(payload: OwnerProfitSnapshotPayload): {
       )),
     },
   };
+}
+
+export interface PaymentMethodWithdrawalBalance {
+  method: OwnerWithdrawalPaymentMethod;
+  /** Game Club money left in this method after operating expenses, before withdrawals. */
+  earned: number;
+  withdrawn: number;
+  available: number;
+}
+
+export interface GameClubWithdrawalsByMethod {
+  methods: PaymentMethodWithdrawalBalance[];
+  /** Game Club withdrawals recorded without a payment method (older rows, or All). */
+  unassignedWithdrawn: number;
+}
+
+/**
+ * Splits one month's Game Club withdrawals by payment method. Unassigned
+ * withdrawals are reported separately and never guessed into a method.
+ */
+export function gameClubWithdrawalsByMethod(
+  balances: MoneyLeftByPaymentMethod,
+  withdrawals: readonly OwnerWithdrawal[],
+  month: string,
+): GameClubWithdrawalsByMethod {
+  const withdrawn = Object.fromEntries(
+    OWNER_WITHDRAWAL_PAYMENT_METHODS.map((method) => [method, 0]),
+  ) as Record<OwnerWithdrawalPaymentMethod, number>;
+  let unassignedWithdrawn = 0;
+
+  for (const row of withdrawals) {
+    if (row.source !== 'game_club' || row.period_month.slice(0, 7) !== month) continue;
+    const amount = Number(row.amount ?? 0);
+    if (row.payment_method && row.payment_method in withdrawn) withdrawn[row.payment_method] += amount;
+    else unassignedWithdrawn += amount;
+  }
+
+  return {
+    methods: OWNER_WITHDRAWAL_PAYMENT_METHODS.map((method) => {
+      const earned = Number(balances[method] ?? 0);
+      return { method, earned, withdrawn: withdrawn[method], available: earned - withdrawn[method] };
+    }),
+    unassignedWithdrawn,
+  };
+}
+
+/** What can still be taken from one method: never more than the Game Club month balance. */
+export function availableForPaymentMethod(methodAvailable: number, gameClubAvailable: number): number {
+  return Math.max(0, Math.min(methodAvailable, gameClubAvailable));
 }

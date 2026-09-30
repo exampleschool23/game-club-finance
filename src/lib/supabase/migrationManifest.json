@@ -63,5 +63,6 @@
   "062_salary_record_deletion.sql",
   "063_deactivate_salary_employee.sql",
   "064_salary_employee_role.sql",
-  "065_payroll_read_and_rate_integrity.sql"
+  "065_payroll_read_and_rate_integrity.sql",
+  "066_owner_withdrawal_payment_methods.sql"
 ]

@@ -29,7 +29,6 @@ import {
   useConfirm,
   useToast,
   type DataTableColumn,
-  type MetricTone,
 } from '@/components/PresentationFoundation';
 import { cn } from '@/lib/utils';
 import { fetchAllRows } from '@/lib/supabase/pagination';
@@ -39,12 +38,14 @@ import {
   type AvailableMoneyByMonth,
 } from '@/lib/calculations/availableMoney';
 import {
+  availableForPaymentMethod,
   buildOwnerProfitSnapshot,
+  gameClubWithdrawalsByMethod,
   type OwnerProfitSnapshotPayload,
 } from '@/lib/calculations/ownerProfitSnapshot';
 import type { StockPurchaseCostRow } from '@/lib/calculations/barMoney';
 import { clampWithdrawalInput } from '@/lib/withdrawalInput';
-import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
+import { isMissingDatabaseColumn, isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import {
   calculateGameClubMoneyLeftByPaymentMethod,
   DailyCashRow,
@@ -61,21 +62,33 @@ import {
   formatYearMonth,
 } from '@/lib/formatters';
 import { currentYearMonth, todayIso } from '@/lib/utils';
-import { OWNER_WITHDRAWAL_SOURCES, type OwnerWithdrawal, type OwnerWithdrawalSource } from '@/types';
+import {
+  OWNER_WITHDRAWAL_PAYMENT_METHODS,
+  OWNER_WITHDRAWAL_SOURCES,
+  type OwnerWithdrawal,
+  type OwnerWithdrawalPaymentMethod,
+  type OwnerWithdrawalSource,
+} from '@/types';
 
 type MoneySource = OwnerWithdrawalSource | 'all';
 
 const PROFIT_SOURCES: readonly MoneySource[] = ['all', ...OWNER_WITHDRAWAL_SOURCES];
-const CLUB_PAYMENT_METHODS = ['cash', 'terminal', 'card', 'playstation'] as const;
 
 /** One line of the breakdown table: a profit source, or a payment method under the club. */
 interface BreakdownRow {
   key: string;
   label: string;
-  earned: number;
-  withdrawn: number | null;
+  /** null when the row has no earnings of its own (withdrawals without a method). */
+  earned: number | null;
+  withdrawn: number;
   available: number | null;
   nested?: boolean;
+  hint?: string;
+}
+
+interface WithdrawalMethodRow {
+  id: string;
+  payment_method: OwnerWithdrawalPaymentMethod;
 }
 
 interface HistoryRow {
@@ -87,7 +100,7 @@ export default function MoneyTakenPage() {
   const t = useTranslations('moneyTaken');
   const tc = useTranslations('common');
   const { locale } = useAppLocale();
-  const { selectedClubId, role, businessDayStartHour } = useClub();
+  const { selectedClubId, role, businessDayStartHour, enabledPaymentMethods } = useClub();
   const { showToast, toastElement } = useToast();
   const { confirm, confirmDialog } = useConfirm();
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
@@ -95,6 +108,8 @@ export default function MoneyTakenPage() {
   const [balancesByMonth, setBalancesByMonth] = useState<AvailableMoneyByMonth>({});
   const [paymentMethodBalancesByMonth, setPaymentMethodBalancesByMonth] = useState<Record<string, MoneyLeftByPaymentMethod>>({});
   const [withdrawals, setWithdrawals] = useState<OwnerWithdrawal[]>([]);
+  /** Migration 066 is applied: Game Club withdrawals record a payment method. */
+  const [methodsSupported, setMethodsSupported] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -103,6 +118,7 @@ export default function MoneyTakenPage() {
   const [form, setForm] = useState({
     month: currentMonth,
     source: 'game_club' as MoneySource,
+    paymentMethod: '' as OwnerWithdrawalPaymentMethod | '',
     comment: '',
     amount: '',
   });
@@ -121,7 +137,7 @@ export default function MoneyTakenPage() {
   }, [withdrawals]);
 
   useEffect(() => {
-    setForm({ month: currentMonth, source: 'game_club', amount: '', comment: '' });
+    setForm({ month: currentMonth, source: 'game_club', paymentMethod: '', amount: '', comment: '' });
   }, [currentMonth, selectedClubId]);
 
   const loadData = useCallback(async ({ silent = false } = {}) => {
@@ -138,17 +154,40 @@ export default function MoneyTakenPage() {
       if (!silent) setLoading(true);
       setError(false);
       const supabase = createClient();
-      const snapshotResult = await supabase.rpc('get_owner_profit_snapshot', {
-        p_club_id: selectedClubId,
-        p_through_date: businessToday,
-      });
+      const [snapshotResult, methodRes] = await Promise.all([
+        supabase.rpc('get_owner_profit_snapshot', {
+          p_club_id: selectedClubId,
+          p_through_date: businessToday,
+        }),
+        fetchAllRows<WithdrawalMethodRow>(() => supabase
+          .from('owner_withdrawals')
+          .select('id,payment_method')
+          .eq('club_id', selectedClubId)
+          .not('payment_method', 'is', null)
+          .order('id')),
+      ]);
 
       if (id !== requestId.current) return;
+
+      // Before migration 066 there is no payment_method column: keep every
+      // withdrawal unassigned and record new ones by source only.
+      const methodsMissing = isMissingDatabaseColumn(methodRes.error as { code?: string; message?: string } | null, 'payment_method');
+      if (methodRes.error && !methodsMissing) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      const methodById = new Map((methodRes.data ?? []).map((row) => [row.id, row.payment_method]));
+      const withMethods = (rows: OwnerWithdrawal[]) => rows.map((row) => ({
+        ...row,
+        payment_method: methodById.get(row.id) ?? null,
+      }));
+      setMethodsSupported(!methodsMissing);
 
       if (!snapshotResult.error && snapshotResult.data?.paymentMethodBalancesByMonth) {
         const snapshot = buildOwnerProfitSnapshot(snapshotResult.data as OwnerProfitSnapshotPayload);
         setBalancesByMonth(snapshot.byMonth);
-        setWithdrawals(snapshot.withdrawals);
+        setWithdrawals(withMethods(snapshot.withdrawals));
         setPaymentMethodBalancesByMonth(snapshot.paymentMethodBalancesByMonth);
         setLoading(false);
         return;
@@ -230,7 +269,7 @@ export default function MoneyTakenPage() {
         ...nextLedgerRows,
         throughDate: businessToday,
       }));
-      setWithdrawals(withdrawalRows);
+      setWithdrawals(withMethods(withdrawalRows));
       const months = new Set([
         ...nextLedgerRows.cashRows,
         ...nextLedgerRows.expenseRows,
@@ -273,20 +312,53 @@ export default function MoneyTakenPage() {
 
     return Math.max(0, sourceBalance);
   }, [balancesByMonth, form.month, form.source]);
-  useEffect(() => {
-    setForm((current) => {
-      const amount = clampWithdrawalInput(current.amount, sourceAvailable);
-      return amount === current.amount ? current : { ...current, amount };
-    });
-  }, [sourceAvailable]);
 
   const paymentMethodBalances = paymentMethodBalancesByMonth[form.month] ?? emptyMoneyLeftByPaymentMethod;
   const monthlyBalance = balancesByMonth[form.month];
+  const methodBreakdown = useMemo(
+    () => gameClubWithdrawalsByMethod(paymentMethodBalances, withdrawals, form.month),
+    [paymentMethodBalances, withdrawals, form.month],
+  );
+  const usesPaymentMethod = methodsSupported && form.source === 'game_club';
+  /** Per method: its own balance, capped by what is left of Game Club profit this month. */
+  const methodWithdrawable = useMemo(() => {
+    const gameClubAvailable = Math.max(0, monthlyBalance?.gameClub.available ?? 0);
+    return Object.fromEntries(methodBreakdown.methods.map((row) => [
+      row.method,
+      availableForPaymentMethod(row.available, gameClubAvailable),
+    ])) as Record<OwnerWithdrawalPaymentMethod, number>;
+  }, [methodBreakdown, monthlyBalance]);
+  // Methods switched off for the club stay selectable only while they still hold money.
+  const pickerMethods = OWNER_WITHDRAWAL_PAYMENT_METHODS.filter((method) => (
+    method === 'playstation'
+    || (enabledPaymentMethods as readonly string[]).includes(method)
+    || methodWithdrawable[method] > 0
+  ));
+  const withdrawable = usesPaymentMethod
+    ? (form.paymentMethod ? methodWithdrawable[form.paymentMethod] : 0)
+    : sourceAvailable;
+
+  useEffect(() => {
+    if (!usesPaymentMethod) return;
+    setForm((current) => {
+      if (current.paymentMethod && methodWithdrawable[current.paymentMethod] > 0) return current;
+      const next = OWNER_WITHDRAWAL_PAYMENT_METHODS.find((method) => methodWithdrawable[method] > 0) ?? '';
+      return next === current.paymentMethod ? current : { ...current, paymentMethod: next };
+    });
+  }, [methodWithdrawable, usesPaymentMethod]);
+
+  useEffect(() => {
+    setForm((current) => {
+      const amount = clampWithdrawalInput(current.amount, withdrawable);
+      return amount === current.amount ? current : { ...current, amount };
+    });
+  }, [withdrawable]);
+
   const monthlyOverallProfit = monthlyBalance?.totalEarned ?? 0;
   const monthlyWithdrawn = monthlyBalance?.totalWithdrawn ?? 0;
   const monthlyAvailable = monthlyBalance?.totalAvailable ?? 0;
   const amountValue = parseCurrencyInput(form.amount);
-  const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= sourceAvailable;
+  const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= withdrawable;
 
   function setField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -301,7 +373,7 @@ export default function MoneyTakenPage() {
       showToast(t('ownerOnly'), 'error');
       return;
     }
-    if (!Number.isFinite(amount) || amount <= 0 || amount > sourceAvailable) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > withdrawable || (usesPaymentMethod && !form.paymentMethod)) {
       showToast(t('exceedsAvailable'), 'error');
       return;
     }
@@ -311,18 +383,27 @@ export default function MoneyTakenPage() {
     setSaving(true);
     try {
       const supabase = createClient();
-      const { error: insertError } = await supabase.rpc('withdraw_owner_money_for_month', {
-        p_club_id: selectedClubId,
-        p_period_month: `${form.month}-01`,
-        p_source: form.source,
-        p_amount: amount,
-        p_comment: form.comment.trim() || null,
-      });
+      const rpcName = usesPaymentMethod ? 'withdraw_owner_game_club_money_by_method' : 'withdraw_owner_money_for_month';
+      const { error: insertError } = usesPaymentMethod
+        ? await supabase.rpc(rpcName, {
+          p_club_id: selectedClubId,
+          p_period_month: `${form.month}-01`,
+          p_payment_method: form.paymentMethod,
+          p_amount: amount,
+          p_comment: form.comment.trim() || null,
+        })
+        : await supabase.rpc(rpcName, {
+          p_club_id: selectedClubId,
+          p_period_month: `${form.month}-01`,
+          p_source: form.source,
+          p_amount: amount,
+          p_comment: form.comment.trim() || null,
+        });
 
       if (operationRequestId !== requestId.current) return;
       if (insertError) {
-        showToast(isMissingDatabaseFunction(insertError, 'withdraw_owner_money_for_month')
-          ? t('migrationRequired')
+        showToast(isMissingDatabaseFunction(insertError, rpcName)
+          ? t(usesPaymentMethod ? 'methodMigrationRequired' : 'migrationRequired')
           : insertError.code === '23514' ? t('exceedsAvailable') : t('saveError'), 'error');
         await loadData({ silent: true });
         return;
@@ -349,7 +430,7 @@ export default function MoneyTakenPage() {
       title: tc('delete'),
       description: t('deleteConfirmDetailed', {
         amount: currency(row.amount),
-        source: t(`sources.${row.source}`),
+        source: withdrawalSourceLabel(row),
         month: formatYearMonth(row.period_month.slice(0, 7), locale),
       }),
       confirmLabel: tc('delete'),
@@ -387,6 +468,13 @@ export default function MoneyTakenPage() {
   }
 
   const currency = (amount: number) => `${formatCurrency(amount)} ${tc('currency')}`;
+  const methodLabel = (method: OwnerWithdrawalPaymentMethod) => (
+    method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`)
+  );
+  function withdrawalSourceLabel(row: OwnerWithdrawal) {
+    const source = t(`sources.${row.source}`);
+    return row.payment_method ? `${source} · ${methodLabel(row.payment_method)}` : source;
+  }
   const sourceOptions = PROFIT_SOURCES.map((source) => ({ value: source, label: t(`sources.${source}`) }));
 
   const breakdownRows: BreakdownRow[] = [
@@ -397,14 +485,23 @@ export default function MoneyTakenPage() {
       withdrawn: monthlyBalance?.gameClub.withdrawn ?? 0,
       available: monthlyBalance?.gameClub.available ?? 0,
     },
-    ...CLUB_PAYMENT_METHODS.map((method) => ({
-      key: `method:${method}`,
-      label: method === 'playstation' ? t('playstation') : tc(`paymentMethods.${method}`),
-      earned: paymentMethodBalances[method],
-      withdrawn: null,
-      available: null,
+    ...methodBreakdown.methods.map((row) => ({
+      key: `method:${row.method}`,
+      label: methodLabel(row.method),
+      earned: row.earned,
+      withdrawn: row.withdrawn,
+      available: row.available,
       nested: true,
     })),
+    ...(methodBreakdown.unassignedWithdrawn > 0 ? [{
+      key: 'method:unassigned',
+      label: t('unassignedMethod'),
+      earned: null,
+      withdrawn: methodBreakdown.unassignedWithdrawn,
+      available: null,
+      nested: true,
+      hint: t('unassignedMethodHint'),
+    }] : []),
     {
       key: 'bar',
       label: t('sources.bar'),
@@ -414,46 +511,72 @@ export default function MoneyTakenPage() {
     },
   ];
 
-  const signedCell = (amount: number, tone: MetricTone) => (
-    <span className={cn('font-semibold', metricToneClassName[tone])}>{formatCurrency(amount)}</span>
+  const emptyCell = <span className="text-gray-300">—</span>;
+  const amountCell = (amount: number, className: string) => (
+    <span className={cn('tabular-nums', className)}>{formatCurrency(amount)}</span>
   );
+  // Fixed widths keep the three money columns aligned between source and method rows.
+  const moneyColumnClassName = 'w-[22%] whitespace-nowrap';
 
   const breakdownColumns: DataTableColumn<BreakdownRow>[] = [
     {
       key: 'label',
       header: t('source'),
-      render: (row) => (
-        <span className={cn(row.nested ? 'pl-5 text-gray-500' : 'font-semibold text-gray-900')}>{row.label}</span>
-      ),
+      className: 'w-[34%]',
+      render: (row) => (row.nested ? (
+        <span className="flex items-center gap-2 pl-4 text-gray-600">
+          <span aria-hidden="true" className="h-4 w-px shrink-0 bg-gray-200" />
+          <span className="min-w-0">
+            <span className="block">{row.label}</span>
+            {row.hint ? <span className="block text-xs leading-5 text-gray-400">{row.hint}</span> : null}
+          </span>
+        </span>
+      ) : (
+        <span className="font-semibold text-gray-900">{row.label}</span>
+      )),
     },
     {
       key: 'earned',
       header: t('earnedBeforeWithdrawals'),
       align: 'right',
-      className: 'whitespace-nowrap',
-      render: (row) => (row.nested
-        ? <span className="text-gray-600">{formatCurrency(row.earned)}</span>
-        : signedCell(row.earned, toneForAmount(row.earned, 'default'))),
+      className: moneyColumnClassName,
+      render: (row) => (row.earned === null
+        ? emptyCell
+        : amountCell(row.earned, cn(
+          row.nested ? 'text-gray-700' : 'font-semibold',
+          metricToneClassName[toneForAmount(row.earned, row.nested ? 'muted' : 'default')],
+        ))),
     },
     {
       key: 'withdrawn',
       header: t('monthlyWithdrawn'),
       align: 'right',
-      className: 'whitespace-nowrap',
-      render: (row) => (row.withdrawn === null
-        ? <span className="text-gray-300">—</span>
-        : <span className={cn(row.withdrawn > 0 ? 'text-danger-600' : 'text-gray-600')}>{formatCurrency(row.withdrawn)}</span>),
+      className: moneyColumnClassName,
+      render: (row) => amountCell(row.withdrawn, cn(
+        !row.nested && 'font-semibold',
+        row.withdrawn > 0 ? 'text-danger-600' : 'text-gray-400',
+      )),
     },
     {
       key: 'available',
       header: t('monthlyRemaining'),
       align: 'right',
-      className: 'whitespace-nowrap',
+      className: moneyColumnClassName,
       render: (row) => (row.available === null
-        ? <span className="text-gray-300">—</span>
-        : signedCell(row.available, toneForAmount(row.available))),
+        ? emptyCell
+        : amountCell(row.available, cn(
+          !row.nested && 'font-semibold',
+          metricToneClassName[toneForAmount(row.available)],
+        ))),
     },
   ];
+
+  const breakdownFooter = {
+    label: tc('total'),
+    earned: amountCell(monthlyOverallProfit, metricToneClassName[toneForAmount(monthlyOverallProfit, 'default')]),
+    withdrawn: amountCell(monthlyWithdrawn, monthlyWithdrawn > 0 ? 'text-danger-600' : 'text-gray-400'),
+    available: amountCell(monthlyAvailable, metricToneClassName[toneForAmount(monthlyAvailable)]),
+  };
 
   const historyRows: HistoryRow[] = withdrawalMonths.flatMap(([month, rows]) => rows.map((withdrawal) => ({ month, withdrawal })));
 
@@ -467,7 +590,17 @@ export default function MoneyTakenPage() {
     {
       key: 'source',
       header: t('source'),
-      render: (row) => <Badge variant="neutral">{t(`sources.${row.withdrawal.source}`)}</Badge>,
+      className: 'whitespace-nowrap',
+      render: (row) => (
+        <span className="flex flex-col items-start gap-1">
+          <Badge variant="neutral">{t(`sources.${row.withdrawal.source}`)}</Badge>
+          {row.withdrawal.source === 'game_club' ? (
+            <span className={cn('text-xs', row.withdrawal.payment_method ? 'text-gray-600' : 'text-gray-400')}>
+              {row.withdrawal.payment_method ? methodLabel(row.withdrawal.payment_method) : t('unassignedMethod')}
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     {
       key: 'amount',
@@ -482,7 +615,7 @@ export default function MoneyTakenPage() {
       className: 'min-w-[160px]',
       render: (row) => (row.withdrawal.comment
         ? <span className="break-words text-gray-600">{row.withdrawal.comment}</span>
-        : <span className="text-gray-300">—</span>),
+        : emptyCell),
     },
     {
       key: 'recorded',
@@ -499,7 +632,7 @@ export default function MoneyTakenPage() {
         <IconButton
           variant="danger"
           size="sm"
-          label={`${tc('delete')}: ${t(`sources.${row.withdrawal.source}`)} · ${currency(row.withdrawal.amount)}`}
+          label={`${tc('delete')}: ${withdrawalSourceLabel(row.withdrawal)} · ${currency(row.withdrawal.amount)}`}
           icon={<Trash2 size={16} />}
           loading={deletingId === row.withdrawal.id}
           disabled={loading || !!error || saving || deletingId !== null}
@@ -583,7 +716,9 @@ export default function MoneyTakenPage() {
             minWidth={640}
             columns={breakdownColumns}
             data={breakdownRows}
+            footer={breakdownFooter}
             keyExtractor={(row) => row.key}
+            rowClassName={(row) => (row.nested ? 'bg-gray-50/40' : undefined)}
           />
         )}
       </Card>
@@ -606,21 +741,53 @@ export default function MoneyTakenPage() {
               <div className="space-y-4">
                 <Field
                   label={t('source')}
-                  hint={(
+                  hint={usesPaymentMethod ? undefined : (
                     <>
                       {t('availableForSource')}:{' '}
-                      <span className={sourceAvailable < 0 ? 'font-semibold text-danger-600' : 'font-semibold text-success-600'}>{currency(sourceAvailable)}</span>
+                      <span className="font-semibold tabular-nums text-success-600">{currency(sourceAvailable)}</span>
                     </>
                   )}
                 >
                   <SegmentedControl label={t('source')} options={sourceOptions} value={form.source} onChange={(source) => setField('source', source)} disabled={loading} />
                 </Field>
 
+                {usesPaymentMethod ? (
+                  <Field
+                    label={t('paymentMethod')}
+                    required
+                    hint={form.paymentMethod ? (
+                      <>
+                        {t('availableForMethod', { method: methodLabel(form.paymentMethod) })}:{' '}
+                        <span className="font-semibold tabular-nums text-success-600">{currency(withdrawable)}</span>
+                      </>
+                    ) : t('noMethodAvailable')}
+                  >
+                    <SegmentedControl
+                      label={t('paymentMethod')}
+                      columns="auto"
+                      className="grid-cols-2 sm:grid-cols-4"
+                      value={form.paymentMethod}
+                      onChange={(paymentMethod) => setField('paymentMethod', paymentMethod)}
+                      disabled={loading}
+                      options={pickerMethods.map((method) => ({
+                        value: method,
+                        disabled: methodWithdrawable[method] <= 0,
+                        label: (
+                          <span className="flex flex-col items-center py-1 leading-tight">
+                            <span>{methodLabel(method)}</span>
+                            <span className="mt-0.5 text-[11px] font-normal tabular-nums opacity-80">{formatCurrency(methodWithdrawable[method])}</span>
+                          </span>
+                        ),
+                      }))}
+                    />
+                  </Field>
+                ) : null}
+
                 <Field
                   label={`${t('amount')} (${tc('currency')})`}
                   htmlFor="withdrawal-amount"
                   required
-                  hint={form.source === 'all' ? t('allAllocation') : undefined}
+                  hint={form.source === 'all' ? t(methodsSupported ? 'allAllocationUnassigned' : 'allAllocation') : undefined}
                   error={form.amount && !amountValid ? t('exceedsAvailable') : undefined}
                 >
                   <CurrencyInput
@@ -628,7 +795,7 @@ export default function MoneyTakenPage() {
                     required
                     value={form.amount}
                     invalid={Boolean(form.amount) && !amountValid}
-                    onValueChange={(value) => setField('amount', clampWithdrawalInput(value, sourceAvailable))}
+                    onValueChange={(value) => setField('amount', clampWithdrawalInput(value, withdrawable))}
                   />
                 </Field>
 

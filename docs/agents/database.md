@@ -17,7 +17,7 @@ migrations.
 | `expenses` | Current expense ledger | Includes `payment_source` and payment method. |
 | `new_debts` | Debt principal ledger | Append-only to application users. |
 | `debt_payments` | Debt collection ledger | Append-only; trigger updates parent. |
-| `owner_withdrawals` | Monthly/source withdrawals | Insert through the take-all RPC. |
+| `owner_withdrawals` | Monthly/source withdrawals; Game Club rows may name a `payment_method` (066) | Insert through `withdraw_owner_money_for_month` or `withdraw_owner_game_club_money_by_method`. |
 | `telegram_report_deliveries` | Service-only delivery state | Never expose to browser roles. |
 
 Retired read-only ledgers: `income_transactions`, `expense_transactions`, and
@@ -158,3 +158,12 @@ its salary loader. It reuses the canonical owner-profit aggregate without changi
 that function or its migration-health fingerprint. The same migration prevents
 deleting the final live salary rate under the employee lock. Employee settings
 can restore a missing rate left by older versions, retaining deleted audit rows.
+
+Migration 066 adds a nullable `owner_withdrawals.payment_method` (`cash`,
+`terminal`, `card`, `playstation`; Game Club rows only) and the owner-only RPC
+`withdraw_owner_game_club_money_by_method`. A second insert trigger caps a
+method withdrawal by that method's monthly Game Club balance; the existing 051
+trigger still caps the overall Game Club month. Older rows stay unassigned and
+are never reclassified. The 050/051 function bodies tracked by migration health
+are unchanged. Owner Profit reads the column separately and falls back to
+source-only withdrawals when it is missing.

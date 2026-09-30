@@ -809,7 +809,7 @@
   },
   "moneyTaken": {
     "earnedBeforeWithdrawals": "Pul yechishdan oldingi daromad",
-    "clubMethodsBeforeWithdrawals": "Quyidagi naqd pul, terminal, karta va PlayStation summalari operatsion xarajatlardan keyin, egasi pul yechishidan oldin ko‘rsatilgan.",
+    "clubMethodsBeforeWithdrawals": "O‘yin klubi foydasi to‘lov usullari bo‘yicha ajratilgan: operatsion xarajatlardan keyin topilgan, egasi yechgan va har birida qolgan summa.",
     "playstation": "PlayStation",
     "monthlyWithdrawn": "Shu oyda yechilgan",
     "monthlyRemaining": "Egasi pul yechganidan keyingi qoldiq",
@@ -847,7 +847,14 @@
     "deleteError": "Pul olish yozuvini o'chirib bo'lmadi. Qayta urinib ko'ring.",
     "deleteConfirmDetailed": "{month} uchun {amount} ({source}) pul olish yozuvi o'chirilsinmi? Miqdor shu oyning mavjud qoldig'iga qaytadi.",
     "breakdownTitle": "Manbalar bo'yicha taqsimot",
-    "recordedColumn": "Yozilgan"
+    "recordedColumn": "Yozilgan",
+    "paymentMethod": "Qayerdan olinadi",
+    "availableForMethod": "Mavjud: {method}",
+    "noMethodAvailable": "Bu oy uchun hech bir to‘lov usulida o‘yin klubi foydasi qolmagan.",
+    "unassignedMethod": "To‘lov usulisiz",
+    "unassignedMethodHint": "To‘lov usullari hisobga olinishidan oldin yozilgan. Usulni belgilash uchun o‘chirib, qayta yeching.",
+    "methodMigrationRequired": "To‘lov usuli bo‘yicha pul yechish uchun ma’lumotlar bazasining 066 migratsiyasi talab qilinadi. Yechishni yozishdan oldin uni qo‘llang.",
+    "allAllocationUnassigned": "«Barchasi» avval o‘yin klubi, keyin bar foydasini to‘lov usulisiz ishlatadi. Muayyan usuldan pul olish uchun «O‘yin klubi»ni tanlang."
   },
   "calendar": {
     "selectDate": "Sanani tanlang",
