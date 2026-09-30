@@ -5,8 +5,9 @@
 /*
  * Colour tokens as RGB triplets so Tailwind opacity modifiers keep working
  * (`bg-gray-950/40`). Light values on :root; the dark set follows the system
- * setting. Component code never branches on the theme: `bg-surface`,
- * `text-gray-900`, `bg-primary-50` and friends simply resolve differently.
+ * setting unless the user picks a theme (data-theme on <html>). Component
+ * code never branches on the theme: `bg-surface`, `text-gray-900`,
+ * `bg-primary-50` and friends simply resolve differently.
  */
 :root {
   color-scheme: light;
@@ -60,8 +61,12 @@
   --c-purple-700: 87 56 187;
 }
 
+/*
+ * Dark tokens. "System" (no data-theme) follows the OS setting; the in-app
+ * theme switch sets data-theme on <html> to force light or dark.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --c-surface: 21 27 38;
     --c-gray-50: 15 19 27;
@@ -112,6 +117,58 @@
     --c-purple-600: 173 152 255;
     --c-purple-700: 196 181 255;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-surface: 21 27 38;
+  --c-gray-50: 15 19 27;
+  --c-gray-100: 22 28 39;
+  --c-gray-200: 35 43 58;
+  --c-gray-300: 47 58 77;
+  --c-gray-400: 91 104 125;
+  --c-gray-500: 139 151 171;
+  --c-gray-600: 167 177 193;
+  --c-gray-700: 197 205 216;
+  --c-gray-800: 223 228 236;
+  --c-gray-900: 238 241 246;
+  --c-gray-950: 248 250 252;
+  --c-primary-50: 27 36 68;
+  --c-primary-100: 35 48 96;
+  --c-primary-200: 44 63 133;
+  --c-primary-300: 63 91 184;
+  --c-primary-400: 95 134 255;
+  --c-primary-500: 111 146 255;
+  --c-primary-600: 59 99 246;
+  --c-primary-700: 143 168 255;
+  --c-primary-800: 185 205 255;
+  --c-primary-900: 220 230 255;
+  --c-success-50: 18 41 31;
+  --c-success-100: 25 64 51;
+  --c-success-500: 47 191 135;
+  --c-success-600: 60 207 149;
+  --c-success-700: 111 224 178;
+  --c-danger-50: 46 23 23;
+  --c-danger-100: 71 32 31;
+  --c-danger-400: 240 138 134;
+  --c-danger-500: 239 107 102;
+  --c-danger-600: 255 122 115;
+  --c-danger-700: 255 161 156;
+  --c-warning-50: 43 35 20;
+  --c-warning-100: 61 49 24;
+  --c-warning-500: 230 180 96;
+  --c-warning-600: 240 194 110;
+  --c-warning-700: 247 212 143;
+  --c-orange-50: 46 28 16;
+  --c-orange-100: 66 40 26;
+  --c-orange-500: 245 144 79;
+  --c-orange-600: 249 164 104;
+  --c-orange-700: 255 189 138;
+  --c-purple-50: 34 28 61;
+  --c-purple-100: 46 37 85;
+  --c-purple-500: 155 130 255;
+  --c-purple-600: 173 152 255;
+  --c-purple-700: 196 181 255;
 }
 
 @layer base {

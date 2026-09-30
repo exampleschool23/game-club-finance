@@ -36,7 +36,7 @@ const UZBEK_MONTHS = [
   'dekabr',
 ] as const;
 
-let currentFormatterLocale: FormatterLocale = 'en';
+let currentFormatterLocale: FormatterLocale = 'ru';
 
 function isFormatterLocale(locale: string): locale is FormatterLocale {
   return locale === 'ru' || locale === 'uz' || locale === 'en';

@@ -11,7 +11,7 @@
  * Feedback:          InlineAlert, Toast/useToast, Modal, ConfirmDialog/useConfirm, EmptyState,
  *                    Badge, Spinner, skeletons
  * Data display:      MetricCard, AmountCard, StatTile, DataTable
- * Misc:              LanguageSwitcher
+ * Misc:              LanguageSwitcher, ThemeSwitcher
  */
 export { Avatar, initialsOf } from './Avatar';
 export { Badge, type BadgeVariant } from './Badge';
@@ -34,6 +34,7 @@ export {
 export { IconButton } from './IconButton';
 export { InlineAlert, type InlineAlertVariant } from './InlineAlert';
 export { LanguageSwitcher } from './LanguageSwitcher';
+export { ThemeSwitcher } from './ThemeSwitcher';
 export { AmountCard, MetricCard, StatTile, metricToneClassName, toneForAmount, type MetricTone } from './MetricCard';
 export { Modal } from './Modal';
 export { PageHeader } from './PageHeader';

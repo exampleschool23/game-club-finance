@@ -937,6 +937,12 @@
       "qr": "QR-kod",
       "transfer": "O'tkazma",
       "debt": "Qarz"
+    },
+    "theme": {
+      "label": "Mavzu",
+      "light": "Yorug‘",
+      "dark": "Qorong‘i",
+      "system": "Tizimdagidek"
     }
   },
   "salaries": {

@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
 import { canAccessFeature, featureForPath, type FeatureKey } from '@/lib/permissions';
-import { Avatar, IconButton, LanguageSwitcher, initialsOf } from '@/components/PresentationFoundation';
+import { Avatar, IconButton, LanguageSwitcher, ThemeSwitcher, initialsOf } from '@/components/PresentationFoundation';
 import { isTopModal, trapFocus, useModalLayer } from '@/components/PresentationFoundation/Modal';
 
 interface SidebarClubOption {
@@ -270,8 +270,9 @@ export function Sidebar({
             loading={signingOut}
           />
         </div>
-        <div className="px-1">
-          <LanguageSwitcher className="w-full [&>button]:flex-1" />
+        <div className="flex gap-2 px-1">
+          <LanguageSwitcher className="min-w-0 flex-1 [&>button]:flex-1" />
+          <ThemeSwitcher />
         </div>
       </div>
     </div>

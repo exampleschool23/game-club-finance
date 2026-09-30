@@ -19,7 +19,14 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: "media",
+  // Matches globals.css: the OS setting unless <html data-theme> forces a theme.
+  darkMode: [
+    "variant",
+    [
+      '@media (prefers-color-scheme: dark) { &:not([data-theme="light"], [data-theme="light"] *) }',
+      '&:is([data-theme="dark"], [data-theme="dark"] *)',
+    ],
+  ],
   theme: {
     extend: {
       fontFamily: {

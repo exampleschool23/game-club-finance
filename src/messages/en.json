@@ -937,6 +937,12 @@
       "qr": "QR Code",
       "transfer": "Transfer",
       "debt": "Debt"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
     }
   },
   "salaries": {

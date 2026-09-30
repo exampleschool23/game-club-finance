@@ -2,7 +2,10 @@ import type { Metadata, Viewport } from 'next';
 import { Onest } from 'next/font/google';
 import './globals.css';
 import { getLocale, getMessages } from 'next-intl/server';
+import { cookies } from 'next/headers';
 import { AppIntlProvider } from '@/components/i18n/AppIntlProvider';
+import { AppThemeProvider } from '@/components/theme/AppThemeContext';
+import { THEME_COOKIE, parseAppTheme, themeAttribute } from '@/lib/theme';
 
 // Cyrillic-first geometric sans; the variable font covers every weight used.
 const onest = Onest({ subsets: ['latin', 'cyrillic'], variable: '--font-sans', display: 'swap' });
@@ -28,10 +31,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [locale, messages] = await Promise.all([getLocale(), getMessages()]);
+  const [locale, messages, cookieStore] = await Promise.all([getLocale(), getMessages(), cookies()]);
+  const theme = parseAppTheme(cookieStore.get(THEME_COOKIE)?.value);
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-theme={themeAttribute(theme)}>
       {supabaseOrigin ? (
         <head>
           <link rel="dns-prefetch" href={supabaseOrigin} />
@@ -39,9 +43,11 @@ export default async function RootLayout({
         </head>
       ) : null}
       <body className={`${onest.variable} font-sans`}>
-        <AppIntlProvider initialLocale={locale} initialMessages={messages}>
-          {children}
-        </AppIntlProvider>
+        <AppThemeProvider initialTheme={theme}>
+          <AppIntlProvider initialLocale={locale} initialMessages={messages}>
+            {children}
+          </AppIntlProvider>
+        </AppThemeProvider>
       </body>
     </html>
   );
