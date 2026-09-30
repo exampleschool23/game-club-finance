@@ -16,6 +16,7 @@
     "import:june-bar-items": "node scripts/import-june-bar-items.cjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
+    "prepare": "node scripts/install-git-hooks.cjs",
     "seed:test-data": "node scripts/seed-test-data.cjs --confirm",
     "reset:test-data": "node scripts/reset-test-data.cjs --confirm"
   },

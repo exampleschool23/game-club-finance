@@ -287,6 +287,38 @@ export function stockLevel(currentStock: number, threshold: number | null | unde
   return isLowStock(currentStock, threshold) ? 'low' : 'ok';
 }
 
+export interface LowStockProductInput {
+  name: string;
+  current_stock: number | string | null;
+  low_stock_threshold: number | string | null;
+  tracks_inventory?: boolean | null;
+  is_active?: boolean | null;
+  is_deleted?: boolean | null;
+}
+
+export interface LowStockProduct {
+  name: string;
+  currentStock: number;
+  threshold: number;
+  level: Exclude<StockLevel, 'ok'>;
+}
+
+/**
+ * Active, tracked products that are out of stock or at/below their threshold.
+ * Out-of-stock items come first, then the lowest remaining stock.
+ */
+export function listLowStockProducts(products: LowStockProductInput[]): LowStockProduct[] {
+  return products
+    .filter((product) => product.is_active !== false && product.is_deleted !== true && product.tracks_inventory !== false)
+    .map((product) => {
+      const currentStock = Number(product.current_stock ?? 0) || 0;
+      const threshold = resolveLowStockThreshold(product.low_stock_threshold === null ? null : Number(product.low_stock_threshold));
+      return { name: product.name, currentStock, threshold, level: stockLevel(currentStock, threshold) };
+    })
+    .filter((product): product is LowStockProduct => product.level !== 'ok')
+    .sort((a, b) => a.currentStock - b.currentStock || a.name.localeCompare(b.name, 'ru'));
+}
+
 export interface StockTotalsRowInput {
   tracksInventory: boolean;
   previousStock: number;

@@ -16,6 +16,7 @@ import {
   isWholePositiveStockQuantity,
   recalculateFutureStockCounts,
   isLowStock,
+  listLowStockProducts,
   LOW_STOCK_DEFAULT,
   stockLevel,
   summarizeStockRows,
@@ -400,6 +401,24 @@ describe('low stock', () => {
     expect(stockLevel(0, 10)).toBe('out');
     expect(stockLevel(3, 10)).toBe('low');
     expect(stockLevel(30, 10)).toBe('ok');
+  });
+
+  it('lists active tracked products that are out or low, emptiest first', () => {
+    const base = { tracks_inventory: true, is_active: true, is_deleted: false };
+    expect(listLowStockProducts([
+      { ...base, name: 'Cola', current_stock: 3, low_stock_threshold: null },
+      { ...base, name: 'Water', current_stock: '0', low_stock_threshold: '10' },
+      { ...base, name: 'Chips', current_stock: 20, low_stock_threshold: 10 },
+      { ...base, name: 'Snickers', current_stock: 3, low_stock_threshold: 4 },
+      { ...base, name: 'Tea', current_stock: 0, low_stock_threshold: 5, tracks_inventory: false },
+      { ...base, name: 'Old', current_stock: 0, low_stock_threshold: 5, is_deleted: true },
+      { ...base, name: 'Paused', current_stock: 1, low_stock_threshold: 5, is_active: false },
+      { name: 'Legacy', current_stock: 2, low_stock_threshold: 0 },
+    ])).toEqual([
+      { name: 'Water', currentStock: 0, threshold: 10, level: 'out' },
+      { name: 'Cola', currentStock: 3, threshold: 5, level: 'low' },
+      { name: 'Snickers', currentStock: 3, threshold: 4, level: 'low' },
+    ]);
   });
 });
 

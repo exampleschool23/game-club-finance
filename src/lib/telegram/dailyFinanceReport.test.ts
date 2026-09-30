@@ -410,6 +410,44 @@ describe('formatRussianDailyFinanceReport', () => {
       { date: '2026-08-03', amount: 0 },
     ]);
   });
+
+  it('lists low-stock products in the text report and counts them in the caption', () => {
+    const baseRows = {
+      clubName: 'Main Game Club',
+      businessDate: '2026-09-29',
+      businessDateLabel: '29 сентября 2026',
+      cashRows: [],
+      stockRows: [],
+      stockPurchaseRows: [],
+      expenseRows: [],
+      debtRows: [],
+    };
+    const product = { tracks_inventory: true, is_active: true, is_deleted: false };
+    const input = buildDailyFinanceReportInput({
+      ...baseRows,
+      lowStockProductRows: [
+        { ...product, name: 'Cola', current_stock: 3, low_stock_threshold: null },
+        { ...product, name: 'Red Bull', current_stock: 0, low_stock_threshold: 6 },
+        { ...product, name: 'Water', current_stock: 40, low_stock_threshold: 10 },
+      ],
+    });
+
+    expect(formatRussianDailyFinanceReport(input).split('\n').slice(-3)).toEqual([
+      '⚠️ Заканчивается на складе (2):',
+      '  • Red Bull: нет в наличии',
+      '  • Cola: 3 шт. (порог 5)',
+    ]);
+    expect(formatRussianDailyFinanceReportCaption(input)).toBe([
+      '📊 Ежедневный финансовый отчёт',
+      'Рабочий день: 29 сентября 2026',
+      '⚠️ Заканчивается на складе: 2',
+    ].join('\n'));
+
+    const healthy = buildDailyFinanceReportInput(baseRows);
+    expect(healthy.lowStockProducts).toBeUndefined();
+    expect(formatRussianDailyFinanceReport(healthy)).not.toContain('Заканчивается');
+    expect(formatRussianDailyFinanceReportCaption(healthy)).not.toContain('Заканчивается');
+  });
 });
 
 describe('previousTashkentDateIso', () => {

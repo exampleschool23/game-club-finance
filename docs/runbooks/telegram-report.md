@@ -58,6 +58,16 @@ If application code arrives before the required database migration, the route
 fails closed with HTTP 500 and sends nothing. A later recovery run can catch up
 the same business date after the migration is applied.
 
+## Low-stock section
+
+The report lists active, inventory-tracked products that are out of stock or at
+or below their `low_stock_threshold` (default 5, via `listLowStockProducts` in
+`src/lib/calculations/stock.ts`). It uses live `products.current_stock` at send
+time, not the report date's saved closing counts, so a recovery run for an old
+date shows today's stock. The section and the caption count appear only when at
+least one product qualifies. If the products read fails, the section is omitted
+and the finance report is still sent.
+
 ## Rendering behavior
 
 The route statically imports the Sharp renderer so Vercel traces the native

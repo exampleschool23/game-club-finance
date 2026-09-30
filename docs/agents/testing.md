@@ -18,6 +18,11 @@ npm run build
 `npm test` runs Vitest in the Node environment. Tests are colocated as
 `*.test.ts` or `*.test.tsx` near the behavior they protect.
 
+`npm install` sets `core.hooksPath` to `.githooks`, whose `pre-commit` hook runs
+typecheck, lint, and tests (about 40 seconds). It skips `npm run build`, so run
+the build yourself before pushing risky changes. `git commit --no-verify` bypasses
+the hook only in an emergency; the checks are the only gate before Vercel deploys.
+
 ## Change-to-test matrix
 
 | Change | Minimum focused coverage | Full checks? |

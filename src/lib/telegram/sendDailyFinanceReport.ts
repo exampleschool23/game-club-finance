@@ -14,6 +14,7 @@ import type {
   StockCountRow,
   StockPurchaseCostRow,
 } from '../calculations/dashboardMetrics';
+import type { LowStockProductInput } from '../calculations/stock';
 import type {
   DailyFinanceReportDebtPaymentRow,
   DailyFinanceReportDebtRow,
@@ -89,6 +90,31 @@ export function previousComparableMonthRangeIso(date: string): { from: string; t
   };
 }
 
+/**
+ * Live catalog rows for the low-stock section. `*` tolerates databases that
+ * predate optional product columns. A failure only drops the section; it must
+ * never block the finance report.
+ */
+export async function getLowStockProductRows(
+  supabase: SupabaseClient,
+  clubId: string,
+): Promise<LowStockProductInput[] | undefined> {
+  try {
+    const { data, error } = await fetchAllRows<LowStockProductInput>(() =>
+      supabase
+        .from('products')
+        .select('*')
+        .eq('club_id', clubId)
+        .order('id', { ascending: true }),
+    );
+    if (error) throw error;
+    return (data ?? []) as LowStockProductInput[];
+  } catch (error) {
+    console.error('[telegram/daily-finance] low-stock products unavailable; omitting section:', error);
+    return undefined;
+  }
+}
+
 async function getClub(supabase: SupabaseClient, clubId: string): Promise<ClubRow> {
   const { data, error } = await supabase
     .from('clubs')
@@ -115,7 +141,7 @@ export async function buildDailyFinanceTelegramReport(
 ): Promise<DailyFinanceReportBuildResult> {
   const monthStart = monthStartIso(businessDate);
   const previousMonthRange = previousComparableMonthRangeIso(businessDate);
-  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, inventoryRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes, previousCashRes, previousStockRes, previousPurchaseRes, previousExpenseRes, previousDebtPaymentRes, previousInventoryRes] = await Promise.all([
+  const [clubRes, cashRes, stockRes, purchaseRes, expenseRes, inventoryRes, debtRes, debtPaymentRes, monthCashRes, monthStockRes, monthPurchaseRes, monthExpenseRes, previousCashRes, previousStockRes, previousPurchaseRes, previousExpenseRes, previousDebtPaymentRes, previousInventoryRes, lowStockProductRows] = await Promise.all([
     getClub(supabase, clubId),
     fetchAllRows<DailyCashRow>(() =>
       supabase
@@ -276,6 +302,7 @@ export async function buildDailyFinanceTelegramReport(
         .order('date', { ascending: true })
         .order('product_id', { ascending: true }),
     ),
+    getLowStockProductRows(supabase, clubId),
   ]);
 
   const firstError = [
@@ -321,6 +348,7 @@ export async function buildDailyFinanceTelegramReport(
     inventoryRows: (inventoryRes.data ?? []) as InventorySnapshotRow[],
     debtRows: (debtRes.data ?? []) as DailyFinanceReportDebtRow[],
     debtPaymentRows: (debtPaymentRes.data ?? []) as DailyFinanceReportDebtPaymentRow[],
+    lowStockProductRows,
   });
   let imagePng: Buffer | null = null;
   try {

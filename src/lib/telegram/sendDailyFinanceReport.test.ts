@@ -1,5 +1,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sendTelegramMessage, sendTelegramPhoto } from './sendDailyFinanceReport';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getLowStockProductRows, sendTelegramMessage, sendTelegramPhoto } from './sendDailyFinanceReport';
+
+function productsClient(result: { data: unknown[] | null; error: unknown }) {
+  const query = {
+    select: () => query,
+    eq: () => query,
+    order: () => query,
+    range: async () => result,
+  };
+  return { from: () => query } as unknown as SupabaseClient;
+}
+
+describe('getLowStockProductRows', () => {
+  it('returns the club catalog rows', async () => {
+    const rows = [{ name: 'Cola', current_stock: 1, low_stock_threshold: 5 }];
+    await expect(getLowStockProductRows(productsClient({ data: rows, error: null }), 'club')).resolves.toEqual(rows);
+  });
+
+  it('omits the section instead of failing the report when products cannot be read', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(getLowStockProductRows(productsClient({ data: null, error: new Error('boom') }), 'club'))
+      .resolves.toBeUndefined();
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});
 
 describe('sendTelegramMessage', () => {
   afterEach(() => {

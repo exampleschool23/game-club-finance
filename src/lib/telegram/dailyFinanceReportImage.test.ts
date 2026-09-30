@@ -166,6 +166,28 @@ describe('daily finance report image', () => {
     expect(expanded).toContain('height="1890"');
   });
 
+  it('adds a low-stock card only when products are running out', () => {
+    const lowStockProducts = Array.from({ length: 14 }, (_, index) => ({
+      name: index === 0 ? 'Очень длинное название напитка без сахара 0,5 л' : `Товар ${index}`,
+      currentStock: index === 0 ? 0 : index,
+      threshold: 20,
+      level: index === 0 ? 'out' as const : 'low' as const,
+    }));
+    const empty = buildDailyFinanceReportSvg({ ...reportInput(), lowStockProducts: [] });
+    const withAlerts = buildDailyFinanceReportSvg({ ...reportInput(), lowStockProducts });
+
+    expect(empty).toContain('height="1776"');
+    expect(empty).not.toContain('ЗАКАНЧИВАЕТСЯ НА СКЛАДЕ');
+    expect(withAlerts).toContain('ЗАКАНЧИВАЕТСЯ НА СКЛАДЕ · 14');
+    expect(withAlerts).toContain('нет в наличии');
+    expect(withAlerts).toContain('1 шт. · порог 20');
+    expect(withAlerts).toContain('Очень длинное название напи…');
+    expect(withAlerts).toContain('Товар 11');
+    expect(withAlerts).not.toContain('Товар 12');
+    expect(withAlerts).toContain('и ещё 2');
+    expect(withAlerts).toContain('height="2188"');
+  });
+
   it('configures application-owned Noto Sans before the static Sharp import', () => {
     const rendererSource = readFileSync(
       resolve(process.cwd(), 'src/lib/telegram/dailyFinanceReportImage.ts'),

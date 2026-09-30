@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { formatCurrency } from '../formatters';
+import type { LowStockProduct } from '../calculations/stock';
 import type { DailyFinanceIncomePoint, DailyFinanceReportInput } from './dailyFinanceReport';
 import { REPORT_FONT_DIRECTORY, REPORT_FONT_FILES } from './reportFontConfig';
 
@@ -260,6 +261,52 @@ function kpiTile(
     <text x="${x + 20}" y="${y + (change === undefined ? 176 : 196)}" font-size="15" fill="${MUTED}">${escapeXml(footer)}</text>`;
 }
 
+const LOW_STOCK_MAX_ITEMS = 12;
+const LOW_STOCK_ROW_HEIGHT = 40;
+
+function truncate(value: string, maxChars: number): string {
+  return value.length > maxChars ? `${value.slice(0, maxChars - 1)}…` : value;
+}
+
+function lowStockQuantity(value: number): string {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
+}
+
+/** Two-column list of products that are out of stock or at/below their threshold. */
+function lowStockSection(items: LowStockProduct[], y: number): { svg: string; height: number } {
+  const visible = items.slice(0, LOW_STOCK_MAX_ITEMS);
+  const hidden = items.length - visible.length;
+  const rows = Math.ceil(visible.length / 2);
+  const height = 96 + rows * LOW_STOCK_ROW_HEIGHT + (hidden > 0 ? 36 : 0) + 16;
+  const columnWidth = (PAGE_WIDTH - 56 - 32) / 2;
+  const itemsSvg = visible.map((item, index) => {
+    const column = index % 2;
+    const x = PAGE_X + 28 + column * (columnWidth + 32);
+    const rowY = y + 100 + Math.floor(index / 2) * LOW_STOCK_ROW_HEIGHT;
+    const out = item.level === 'out';
+    const color = out ? RED : ORANGE;
+    const value = out
+      ? 'нет в наличии'
+      : `${lowStockQuantity(item.currentStock)} шт. · порог ${lowStockQuantity(item.threshold)}`;
+    return `<circle cx="${x + 7}" cy="${rowY - 7}" r="6" fill="${color}"/>
+    <text x="${x + 26}" y="${rowY}" font-size="20" fill="${TEXT}">${escapeXml(truncate(item.name, 28))}</text>
+    <text x="${x + columnWidth}" y="${rowY}" text-anchor="end" font-size="20" font-weight="700" fill="${color}">${escapeXml(value)}</text>`;
+  }).join('\n    ');
+  const more = hidden > 0
+    ? `<text x="${PAGE_X + 28}" y="${y + 100 + rows * LOW_STOCK_ROW_HEIGHT}" font-size="18" fill="${MUTED}">и ещё ${hidden} — см. раздел «Товары» в приложении</text>`
+    : '';
+
+  return {
+    height,
+    svg: `${card(PAGE_X, y, PAGE_WIDTH, height, '#FFFBF5', '#FBD5B5')}
+    ${iconBadge(PAGE_X + 46, y + 44, 18, ORANGE, GLYPH_ALERT)}
+    <text x="${PAGE_X + 76}" y="${y + 51}" font-size="20" font-weight="800" fill="${INK}">ЗАКАНЧИВАЕТСЯ НА СКЛАДЕ · ${items.length}</text>
+    <text x="${WIDTH - PAGE_X - 28}" y="${y + 51}" text-anchor="end" font-size="16" fill="${MUTED}">по текущим остаткам</text>
+    ${itemsSvg}
+    ${more}`,
+  };
+}
+
 export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): string {
   const monthClubIncome = input.monthToDateRevenue;
   const monthBarSales = input.monthBarSales ?? input.barMoneyLeft;
@@ -294,7 +341,10 @@ export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): stri
   // Key indicators and footer.
   const kpiY = detailY + detailHeight + 24;
   const kpiHeight = 300;
-  const footerY = kpiY + kpiHeight + 20;
+  const lowStock = input.lowStockProducts?.length
+    ? lowStockSection(input.lowStockProducts, kpiY + kpiHeight + 24)
+    : null;
+  const footerY = kpiY + kpiHeight + (lowStock ? 24 + lowStock.height : 0) + 20;
   const height = footerY + 60;
 
   const clubRows = [
@@ -442,6 +492,7 @@ export function buildDailyFinanceReportSvg(input: DailyFinanceReportInput): stri
     ${kpiTile(kpiX(2) + 3, kpiY + 62, kpiWidth - 12, ORANGE, GLYPH_CUP, ['ДОХОД БАРА', 'ЗА МЕСЯЦ'], input.barMoneyLeft, 'к прошлому месяцу', input.barMoneyLeftChange)}
     ${kpiTile(kpiX(3), kpiY + 62, kpiWidth - 12, SLATE, GLYPH_BOX, ['СТОИМОСТЬ', 'СКЛАДА'], input.inventoryValue, 'к прошлому месяцу', input.inventoryValueChange)}
     ${kpiTile(kpiX(4) - 6, kpiY + 62, kpiWidth - 6, RED, GLYPH_ALERT, ['АКТИВНЫЕ', 'ДОЛГИ'], input.activeDebts, 'долги клиентов')}
+    ${lowStock?.svg ?? ''}
 
     <circle cx="${PAGE_X + 18}" cy="${footerY + 18}" r="11" fill="${MUTED}"/>
     <text x="${PAGE_X + 18}" y="${footerY + 24}" text-anchor="middle" font-size="16" font-weight="800" fill="#FFFFFF">i</text>

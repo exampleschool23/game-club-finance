@@ -16,6 +16,8 @@ import type {
   StockPurchaseCostRow,
   ProductValueRow,
 } from '../calculations/dashboardMetrics';
+import { listLowStockProducts } from '../calculations/stock';
+import type { LowStockProduct, LowStockProductInput } from '../calculations/stock';
 
 export interface DailyFinanceReportInput {
   clubName: string;
@@ -58,6 +60,8 @@ export interface DailyFinanceReportInput {
   monthTotalIncome?: number;
   /** Game club income per calendar day from the first of the month through the report date. */
   monthDailyGameClubIncome?: DailyFinanceIncomePoint[];
+  /** Active tracked products that are out of stock or at/below their threshold. */
+  lowStockProducts?: LowStockProduct[];
 }
 
 export interface DailyFinanceIncomePoint {
@@ -106,6 +110,8 @@ export interface DailyFinanceReportRows {
   inventoryRows?: InventorySnapshotRow[];
   debtRows: DailyFinanceReportDebtRow[];
   debtPaymentRows?: DailyFinanceReportDebtPaymentRow[];
+  /** Live product catalog rows; omitted when the catalog could not be read. */
+  lowStockProductRows?: LowStockProductInput[];
 }
 
 function money(value: number): string {
@@ -185,6 +191,26 @@ function summarizeOperatingCosts(rows: ExpenseRow[]) {
     utilitiesCosts: 0,
     otherOperatingCosts: 0,
   });
+}
+
+function quantity(value: number): string {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
+}
+
+/** Russian text for one low-stock product, e.g. "Cola: 3 шт. (порог 5)". */
+export function lowStockItemLabel(item: LowStockProduct): string {
+  return item.level === 'out'
+    ? `${item.name}: нет в наличии`
+    : `${item.name}: ${quantity(item.currentStock)} шт. (порог ${quantity(item.threshold)})`;
+}
+
+function lowStockLines(items: LowStockProduct[] | undefined): string[] {
+  if (!items?.length) return [];
+  return [
+    '',
+    `⚠️ Заканчивается на складе (${items.length}):`,
+    ...items.map((item) => `  • ${lowStockItemLabel(item)}`),
+  ];
 }
 
 function percent(value: number, total: number): string {
@@ -339,6 +365,9 @@ export function buildDailyFinanceReportInput(rows: DailyFinanceReportRows): Dail
       monthDebtRows,
       monthRange,
     ),
+    lowStockProducts: rows.lowStockProductRows === undefined
+      ? undefined
+      : listLowStockProducts(rows.lowStockProductRows),
   };
 }
 
@@ -385,6 +414,7 @@ export function formatRussianDailyFinanceReport(input: DailyFinanceReportInput):
     '',
     `📦 Стоимость склада: ${money(input.inventoryValue)}`,
     `🤝 Активные долги: ${money(input.activeDebts)}`,
+    ...lowStockLines(input.lowStockProducts),
   ].join('\n');
 }
 
@@ -392,5 +422,8 @@ export function formatRussianDailyFinanceReportCaption(input: DailyFinanceReport
   return [
     '📊 Ежедневный финансовый отчёт',
     `Рабочий день: ${input.businessDateLabel}`,
+    ...(input.lowStockProducts?.length
+      ? [`⚠️ Заканчивается на складе: ${input.lowStockProducts.length}`]
+      : []),
   ].join('\n');
 }
