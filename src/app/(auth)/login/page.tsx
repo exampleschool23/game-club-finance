@@ -6,6 +6,7 @@ import { Gamepad2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useTranslations } from 'next-intl';
 import { Button, Field, InlineAlert, Input, LanguageSwitcher } from '@/components/PresentationFoundation';
+import { LOGIN_NEXT_COOKIE, safeRedirectPath } from '@/lib/validation';
 
 function GoogleIcon() {
   return (
@@ -25,32 +26,44 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(searchParams.get('error') ?? '');
+  // Provider error text is untrusted and untranslated: only its presence matters.
+  const [error, setError] = useState(() => (searchParams.get('error') ? t('oauthError') : ''));
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const next = safeRedirectPath(searchParams.get('next'));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (authError) {
-      setError(t('loginError'));
+      if (authError) {
+        setError(t('loginError'));
+        setLoading(false);
+        return;
+      }
+
+      // Keep the button busy while the dashboard loads.
+      router.replace(next ?? '/');
+      router.refresh();
+    } catch {
+      setError(t('networkError'));
       setLoading(false);
-      return;
     }
-
-    router.push('/');
-    router.refresh();
   }
 
   async function handleGoogleLogin() {
     setError('');
     setGoogleLoading(true);
     try {
+      // Carry the deep link through the provider round trip; the callback re-validates it.
+      document.cookie = next
+        ? `${LOGIN_NEXT_COOKIE}=${encodeURIComponent(next)}; path=/; max-age=600; samesite=lax`
+        : `${LOGIN_NEXT_COOKIE}=; path=/; max-age=0; samesite=lax`;
       const supabase = createClient();
       const { data, error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -86,7 +99,7 @@ function LoginForm() {
         <LanguageSwitcher />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate={false}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <Field label={t('email')} htmlFor="login-email">
           <Input
             id="login-email"
@@ -140,7 +153,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-900 to-primary-700 px-4 py-8">
+    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-primary-900 to-primary-700 px-4 py-8">
       <div className="w-full max-w-sm">
         <Suspense fallback={<div className="h-[420px] animate-pulse rounded-2xl bg-white/80" aria-hidden="true" />}>
           <LoginForm />

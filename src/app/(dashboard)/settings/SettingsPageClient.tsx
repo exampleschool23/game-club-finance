@@ -28,6 +28,8 @@ import {
   PageHeader,
   SectionHeading,
   Select,
+  Checkbox,
+  Skeleton,
   useToast,
 } from '@/components/PresentationFoundation';
 import { createClient } from '@/lib/supabase/client';
@@ -35,7 +37,7 @@ import { useClub } from '@/components/layout/DashboardShell';
 import { normalizePaymentMethods } from '@/lib/paymentMethods';
 import { normalizeBusinessDayStartHour } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import { PAYMENT_METHODS, type EntryPaymentMethod } from '@/types';
+import { PAYMENT_METHODS, type EntryPaymentMethod, type UserRole } from '@/types';
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -46,6 +48,7 @@ function hourLabel(hour: number): string {
 export function SettingsPageClient() {
   const t = useTranslations('settings');
   const tc = useTranslations('common');
+  const tRoles = useTranslations('team.roles');
   const { memberships, role: clubRole, selectedClub, setSelectedClubId, refreshClubs } = useClub();
   const { showToast, toastElement } = useToast();
   const [account, setAccount] = useState<{ email?: string | null; fullName?: string | null; role?: string | null }>({});
@@ -62,6 +65,11 @@ export function SettingsPageClient() {
   const [paymentMethodsError, setPaymentMethodsError] = useState('');
   const [accountLoadError, setAccountLoadError] = useState('');
   const isOwner = clubRole === 'owner';
+  const savedPaymentMethodsKey = normalizePaymentMethods(selectedClub?.enabled_payment_methods).join(',');
+
+  function roleLabel(role: string | null | undefined): string {
+    return role === 'owner' || role === 'admin' || role === 'viewer' ? tRoles(role as UserRole) : (role ?? '');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +100,8 @@ export function SettingsPageClient() {
     loadAccount()
       .catch((loadError) => {
         if (!cancelled) {
-          setAccountLoadError(loadError instanceof Error ? loadError.message : String(loadError));
+          console.error('Failed to load account', loadError);
+          setAccountLoadError(t('accountLoadError'));
         }
       })
       .finally(() => {
@@ -102,17 +111,19 @@ export function SettingsPageClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setBusinessDayStartHour(normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour));
     setBusinessDayError('');
   }, [selectedClub?.business_day_start_hour, selectedClub?.id]);
 
+  // Depend on the joined value, not the array reference: a silent club refresh
+  // returns a new array and must not wipe an unsaved draft.
   useEffect(() => {
-    setPaymentMethods(normalizePaymentMethods(selectedClub?.enabled_payment_methods));
+    setPaymentMethods(normalizePaymentMethods(savedPaymentMethodsKey ? savedPaymentMethodsKey.split(',') : []));
     setPaymentMethodsError('');
-  }, [selectedClub?.enabled_payment_methods, selectedClub?.id]);
+  }, [savedPaymentMethodsKey, selectedClub?.id]);
 
   async function handleCreateClub(event: React.FormEvent) {
     event.preventDefault();
@@ -124,27 +135,39 @@ export function SettingsPageClient() {
     setClubSaving(true);
     setClubError('');
 
-    const supabase = createClient();
-    const { data, error } = await supabase.rpc('create_club_with_owner', {
-      p_name: clubForm.name.trim(),
-      p_address: clubForm.address.trim() || null,
-    });
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc('create_club_with_owner', {
+        p_name: clubForm.name.trim(),
+        p_address: clubForm.address.trim() || null,
+      });
 
-    setClubSaving(false);
+      if (error) {
+        console.error('Failed to create club', error);
+        setClubError(t('saveError'));
+        return;
+      }
 
-    if (error) {
-      setClubError(error.message);
-      return;
+      setClubForm({ name: '', address: '' });
+      setCreateClubOpen(false);
+      showToast(t('clubCreated'));
+
+      const createdClub = Array.isArray(data) ? data[0] : data;
+      try {
+        // Load the new membership first so the selection points at a known club.
+        await refreshClubs();
+      } catch (refreshError) {
+        console.error('Failed to refresh clubs', refreshError);
+      }
+      if (createdClub?.id) {
+        setSelectedClubId(createdClub.id);
+      }
+    } catch (saveError) {
+      console.error('Failed to create club', saveError);
+      setClubError(t('saveError'));
+    } finally {
+      setClubSaving(false);
     }
-
-    const createdClub = Array.isArray(data) ? data[0] : data;
-    if (createdClub?.id) {
-      setSelectedClubId(createdClub.id);
-    }
-    setClubForm({ name: '', address: '' });
-    setCreateClubOpen(false);
-    showToast(t('clubCreated'));
-    await refreshClubs();
   }
 
   async function handleSaveBusinessDay(event: React.FormEvent) {
@@ -158,24 +181,30 @@ export function SettingsPageClient() {
     setBusinessDaySaving(true);
     setBusinessDayError('');
 
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('clubs')
-      .update({
-        business_day_start_hour: businessDayStartHour,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', selectedClub.id);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('clubs')
+        .update({
+          business_day_start_hour: businessDayStartHour,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedClub.id);
 
-    setBusinessDaySaving(false);
+      if (error) {
+        console.error('Failed to save business day', error);
+        setBusinessDayError(t('saveError'));
+        return;
+      }
 
-    if (error) {
-      setBusinessDayError(error.message);
-      return;
+      showToast(t('businessDaySaved'));
+      await refreshClubs();
+    } catch (saveError) {
+      console.error('Failed to save business day', saveError);
+      setBusinessDayError(t('saveError'));
+    } finally {
+      setBusinessDaySaving(false);
     }
-
-    showToast(t('businessDaySaved'));
-    await refreshClubs();
   }
 
   function togglePaymentMethod(method: EntryPaymentMethod) {
@@ -201,27 +230,33 @@ export function SettingsPageClient() {
     setPaymentMethodsSaving(true);
     setPaymentMethodsError('');
 
-    const supabase = createClient();
-    const { error } = await supabase
-      .from('clubs')
-      .update({
-        enabled_payment_methods: paymentMethods,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', selectedClub.id);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('clubs')
+        .update({
+          enabled_payment_methods: paymentMethods,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedClub.id);
 
-    setPaymentMethodsSaving(false);
-    if (error) {
-      setPaymentMethodsError(error.message);
-      return;
+      if (error) {
+        console.error('Failed to save payment methods', error);
+        setPaymentMethodsError(t('saveError'));
+        return;
+      }
+
+      showToast(t('paymentMethodsSaved'));
+      await refreshClubs();
+    } catch (saveError) {
+      console.error('Failed to save payment methods', saveError);
+      setPaymentMethodsError(t('saveError'));
+    } finally {
+      setPaymentMethodsSaving(false);
     }
-
-    showToast(t('paymentMethodsSaved'));
-    await refreshClubs();
   }
 
-  const savedPaymentMethods = normalizePaymentMethods(selectedClub?.enabled_payment_methods);
-  const paymentMethodsChanged = paymentMethods.join(',') !== savedPaymentMethods.join(',');
+  const paymentMethodsChanged = paymentMethods.join(',') !== savedPaymentMethodsKey;
   const businessDayChanged = businessDayStartHour !== normalizeBusinessDayStartHour(selectedClub?.business_day_start_hour);
 
   return (
@@ -254,33 +289,33 @@ export function SettingsPageClient() {
               />
             </CardHeader>
 
-            <div className="space-y-1.5 p-2" role="listbox" aria-label={t('clubs')}>
+            <ul className="space-y-1.5 p-2" aria-label={t('clubs')}>
               {memberships.map((membership) => {
                 const selected = selectedClub?.id === membership.club.id;
                 return (
-                  <button
-                    key={membership.club.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => setSelectedClubId(membership.club.id)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-                      selected ? 'bg-primary-50 text-primary-800' : 'text-gray-700 hover:bg-gray-50',
-                    )}
-                  >
-                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', selected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500')}>
-                      <Building2 size={17} aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{membership.club.name}</span>
-                      <span className="block text-xs capitalize text-gray-500">{membership.role}</span>
-                    </span>
-                    {selected && <Check size={17} className="shrink-0 text-primary-600" aria-hidden="true" />}
-                  </button>
+                  <li key={membership.club.id}>
+                    <button
+                      type="button"
+                      aria-current={selected ? 'true' : undefined}
+                      onClick={() => setSelectedClubId(membership.club.id)}
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                        selected ? 'bg-primary-50 text-primary-800' : 'text-gray-700 hover:bg-gray-50',
+                      )}
+                    >
+                      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', selected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500')}>
+                        <Building2 size={17} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{membership.club.name}</span>
+                        <span className="block text-xs text-gray-500">{roleLabel(membership.role)}</span>
+                      </span>
+                      {selected && <Check size={17} className="shrink-0 text-primary-600" aria-hidden="true" />}
+                    </button>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
 
             {createClubOpen && isOwner && (
               <form onSubmit={handleCreateClub} className="space-y-3 border-t border-gray-100 bg-gray-50/70 p-4">
@@ -315,8 +350,8 @@ export function SettingsPageClient() {
               <div className="min-w-0">
                 {accountLoading ? (
                   <div className="space-y-2" role="status" aria-label={tc('loading')}>
-                    <div className="h-4 w-32 animate-pulse rounded bg-gray-200" />
-                    <div className="h-3 w-40 animate-pulse rounded bg-gray-100" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-40 bg-gray-100" />
                   </div>
                 ) : (
                   <>
@@ -326,7 +361,7 @@ export function SettingsPageClient() {
                 )}
               </div>
             </div>
-            {account.role && <Badge variant="neutral" className="mt-3 capitalize">{account.role}</Badge>}
+            {account.role && <Badge variant="neutral" className="mt-3">{roleLabel(account.role)}</Badge>}
           </Card>
         </aside>
 
@@ -340,7 +375,7 @@ export function SettingsPageClient() {
                   <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500"><MapPin size={14} aria-hidden="true" />{selectedClub.address}</p>
                 )}
               </div>
-              <Badge variant="primary" className="w-fit capitalize">{clubRole}</Badge>
+              <Badge variant="primary" className="w-fit">{roleLabel(clubRole)}</Badge>
             </div>
           </CardHeader>
 
@@ -385,28 +420,20 @@ export function SettingsPageClient() {
                 const enabled = paymentMethods.includes(method);
                 const MethodIcon = method === 'cash' ? Banknote : method === 'terminal' ? CreditCard : WalletCards;
                 return (
-                  <button
+                  <Checkbox
                     key={method}
-                    type="button"
-                    aria-pressed={enabled}
+                    variant="card"
+                    checked={enabled}
                     disabled={!selectedClub || !isOwner || paymentMethodsSaving}
-                    onClick={() => togglePaymentMethod(method)}
-                    className={cn(
-                      'group flex min-h-24 flex-col items-start justify-between rounded-xl border p-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60',
-                      enabled ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50',
-                    )}
-                  >
-                    <span className="flex w-full items-center justify-between">
-                      <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', enabled ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500')}><MethodIcon size={18} aria-hidden="true" /></span>
-                      <span className={cn('flex h-5 w-5 items-center justify-center rounded-full border', enabled ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 bg-white')} aria-hidden="true">
-                        {enabled && <Check size={13} strokeWidth={3} />}
+                    onChange={() => togglePaymentMethod(method)}
+                    label={(
+                      <span className="flex items-center gap-2">
+                        <MethodIcon size={16} aria-hidden="true" className={enabled ? 'text-primary-600' : 'text-gray-400'} />
+                        {tc(`paymentMethods.${method}`)}
                       </span>
-                    </span>
-                    <span>
-                      <span className={cn('block text-sm font-bold', enabled ? 'text-primary-800' : 'text-gray-700')}>{tc(`paymentMethods.${method}`)}</span>
-                      <span className={cn('mt-0.5 block text-xs font-medium', enabled ? 'text-primary-600' : 'text-gray-400')}>{enabled ? t('enabled') : t('disabled')}</span>
-                    </span>
-                  </button>
+                    )}
+                    description={enabled ? t('enabled') : t('disabled')}
+                  />
                 );
               })}
             </div>

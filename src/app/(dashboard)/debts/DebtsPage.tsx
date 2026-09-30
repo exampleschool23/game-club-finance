@@ -20,7 +20,9 @@ import {
   Modal,
   Money,
   PageHeader,
+  SectionHeading,
   SegmentedControl,
+  Skeleton,
   useToast,
 } from '@/components/PresentationFoundation';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
@@ -28,7 +30,7 @@ import { todayIso } from '@/lib/utils';
 import { formatCurrency, formatDate, parseCurrencyInput } from '@/lib/formatters';
 import { calculateRemainingDebt, canManageDebts, getDebtStatus } from '@/lib/calculations/debt';
 import { getDebtDateIssue, validateDebtPayment } from '@/lib/validation';
-import { Plus, Users, Wallet } from 'lucide-react';
+import { AlertTriangle, Plus, RefreshCw, Users, Wallet } from 'lucide-react';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
 import type { NewDebt, DebtPayment, EntryPaymentMethod } from '@/types';
 
@@ -38,6 +40,11 @@ function statusVariant(status: string): DebtStatusVariant {
   if (status === 'paid') return 'success';
   if (status === 'partial') return 'warning';
   return 'danger';
+}
+
+/** Single source for the outstanding amount shown in the list, the modal and validation. */
+function remainingFor(debt: Pick<NewDebt, 'amount' | 'paid_amount'>): number {
+  return calculateRemainingDebt(Number(debt.amount) || 0, Number(debt.paid_amount) || 0);
 }
 
 export default function DebtsPage() {
@@ -57,7 +64,12 @@ export default function DebtsPage() {
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [showPaid, setShowPaid] = useState(false);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState('');
+  // Club the open modal belongs to; a submit is refused if the selected club changed meanwhile.
+  const [formClubId, setFormClubId] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const paymentsRequestSequence = useRef(0);
   const canManage = canManageDebts(role);
 
   const [addForm, setAddForm] = useState({
@@ -86,6 +98,18 @@ export default function DebtsPage() {
     }));
   }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
+  // Switching clubs closes any open form and drops cached payment history of the previous club.
+  useEffect(() => {
+    paymentsRequestSequence.current += 1;
+    setAddOpen(false);
+    setPayDebtId(null);
+    setPaymentsMap({});
+    setPaymentsLoading(false);
+    setPaymentsError('');
+    setFormClubId(null);
+    setError('');
+  }, [selectedClubId]);
+
   const fetchDebts = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++requestSequence.current;
     if (!silent) setLoading(true);
@@ -95,55 +119,78 @@ export default function DebtsPage() {
       return;
     }
 
-    const supabase = createClient();
-    const { data, error: fetchError } = await supabase
-      .from('new_debts')
-      .select('*')
-      .eq('club_id', selectedClubId)
-      .order('date', { ascending: false });
-    if (requestId !== requestSequence.current) return;
-    if (fetchError) {
-      setLoadError(fetchError.message);
+    try {
+      const supabase = createClient();
+      const { data, error: fetchError } = await supabase
+        .from('new_debts')
+        .select('*')
+        .eq('club_id', selectedClubId)
+        .order('date', { ascending: false });
+      if (requestId !== requestSequence.current) return;
+      if (fetchError) {
+        console.error('Failed to load debts', fetchError);
+        setLoadError(t('loadError'));
+        setLoading(false);
+        return;
+      }
+      setLoadError('');
+      setDebts((data as NewDebt[]) ?? []);
       setLoading(false);
-      return;
+    } catch (fetchError) {
+      if (requestId !== requestSequence.current) return;
+      console.error('Failed to load debts', fetchError);
+      setLoadError(t('loadError'));
+      setLoading(false);
     }
-    setLoadError('');
-    setDebts((data as NewDebt[]) ?? []);
-    setLoading(false);
-  }, [selectedClubId]);
+  }, [selectedClubId, t]);
 
   useEffect(() => {
-    fetchDebts().catch((fetchError) => {
-      setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-      setLoading(false);
-    });
+    void fetchDebts();
     return () => { requestSequence.current += 1; };
   }, [fetchDebts]);
 
-  async function loadPayments(debtId: string) {
-    if (!selectedClubId) return;
+  async function loadPayments(debtId: string, clubId: string) {
+    const requestId = ++paymentsRequestSequence.current;
+    setPaymentsLoading(true);
+    setPaymentsError('');
 
-    const supabase = createClient();
-    const { data, error: fetchError } = await supabase
-      .from('debt_payments')
-      .select('*')
-      .eq('club_id', selectedClubId)
-      .eq('debt_id', debtId)
-      .order('date', { ascending: false });
-    if (fetchError) {
-      setError(fetchError.message);
-      return;
+    try {
+      const supabase = createClient();
+      const { data, error: fetchError } = await supabase
+        .from('debt_payments')
+        .select('*')
+        .eq('club_id', clubId)
+        .eq('debt_id', debtId)
+        .order('date', { ascending: false });
+      if (requestId !== paymentsRequestSequence.current) return;
+      if (fetchError) {
+        console.error('Failed to load debt payments', fetchError);
+        setPaymentsError(t('paymentsLoadError'));
+        return;
+      }
+      setPaymentsMap((prev) => ({ ...prev, [debtId]: (data as DebtPayment[]) ?? [] }));
+    } catch (fetchError) {
+      if (requestId !== paymentsRequestSequence.current) return;
+      console.error('Failed to load debt payments', fetchError);
+      setPaymentsError(t('paymentsLoadError'));
+    } finally {
+      if (requestId === paymentsRequestSequence.current) setPaymentsLoading(false);
     }
-    setPaymentsMap((prev) => ({ ...prev, [debtId]: (data as DebtPayment[]) ?? [] }));
   }
 
   function openPayModal(debtId: string) {
+    if (!selectedClubId) return;
     setPayDebtId(debtId);
+    setFormClubId(selectedClubId);
     setPayForm({ amount: '', payment_method: defaultPaymentMethod(enabledPaymentMethods), date: businessToday, comment: '' });
     setError('');
-    loadPayments(debtId).catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : tc('error'));
-    });
+    void loadPayments(debtId, selectedClubId);
+  }
+
+  function closePayModal() {
+    paymentsRequestSequence.current += 1;
+    setPaymentsLoading(false);
+    setPayDebtId(null);
   }
 
   function openAddDebtModal(personName = '') {
@@ -155,6 +202,7 @@ export default function DebtsPage() {
       comment: '',
     });
     setError('');
+    setFormClubId(selectedClubId || null);
     setAddOpen(true);
   }
 
@@ -162,6 +210,7 @@ export default function DebtsPage() {
     e.preventDefault();
     const amount = parseCurrencyInput(addForm.amount);
     if (!selectedClubId) { setError(tc('error')); return; }
+    if (formClubId !== selectedClubId) { setError(t('clubChanged')); return; }
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     if (!addForm.person_name.trim()) { setError(tc('required')); return; }
     const dateIssue = getDebtDateIssue({ date: addForm.date, businessDate: businessToday });
@@ -169,28 +218,36 @@ export default function DebtsPage() {
     setSaving(true);
     setError('');
 
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
 
-    const { error: err } = await supabase.from('new_debts').insert({
-      club_id: selectedClubId,
-      person_name: addForm.person_name.trim(),
-      amount,
-      remaining_amount: amount,
-      date: addForm.date,
-      category: addForm.category,
-      comment: addForm.comment.trim() || null,
-      status: 'unpaid',
-      created_by: session?.user?.id ?? null,
-    });
+      const { error: err } = await supabase.from('new_debts').insert({
+        club_id: selectedClubId,
+        person_name: addForm.person_name.trim(),
+        amount,
+        remaining_amount: amount,
+        date: addForm.date,
+        category: addForm.category,
+        comment: addForm.comment.trim() || null,
+        status: 'unpaid',
+        created_by: session?.user?.id ?? null,
+      });
 
-    setSaving(false);
-    if (err) {
-      setError(err.message);
-    } else {
+      if (err) {
+        console.error('Failed to save debt', err);
+        setError(t('saveError'));
+        return;
+      }
+
       setAddOpen(false);
       showToast(t('debtSaved'));
       await fetchDebts({ silent: true });
+    } catch (saveError) {
+      console.error('Failed to save debt', saveError);
+      setError(t('saveError'));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -199,6 +256,7 @@ export default function DebtsPage() {
     if (!payDebtId) return;
     const amount = parseCurrencyInput(payForm.amount);
     if (!selectedClubId) { setError(tc('error')); return; }
+    if (formClubId !== selectedClubId) { setError(t('clubChanged')); return; }
     if (!amount || amount <= 0) { setError(tc('invalidAmount')); return; }
     const debt = debts.find((row) => row.id === payDebtId);
     if (!debt) { setError(tc('error')); return; }
@@ -219,36 +277,52 @@ export default function DebtsPage() {
     }
     const paymentValidation = validateDebtPayment({
       paymentAmount: amount,
-      remainingDebt: debt.remaining_amount,
+      remainingDebt: remainingFor(debt),
     });
     if (!paymentValidation.valid) { setError(t('paymentExceedsRemaining')); return; }
     setSaving(true);
     setError('');
 
-    const supabase = createClient();
-    const { error: err } = await supabase.from('debt_payments').insert({
-      club_id: selectedClubId,
-      debt_id: payDebtId,
-      amount,
-      payment_method: payForm.payment_method,
-      date: payForm.date,
-      comment: payForm.comment.trim() || null,
-    });
+    try {
+      const supabase = createClient();
+      const { error: err } = await supabase.from('debt_payments').insert({
+        club_id: selectedClubId,
+        debt_id: payDebtId,
+        amount,
+        payment_method: payForm.payment_method,
+        date: payForm.date,
+        comment: payForm.comment.trim() || null,
+      });
 
-    setSaving(false);
-    if (err) {
-      setError(err.message);
-    } else {
-      setPayDebtId(null);
+      if (err) {
+        console.error('Failed to save debt payment', err);
+        setError(t('saveError'));
+        return;
+      }
+
+      const paidDebtId = payDebtId;
+      closePayModal();
+      // The cached history for this debt is now stale.
+      setPaymentsMap((prev) => {
+        const next = { ...prev };
+        delete next[paidDebtId];
+        return next;
+      });
       showToast(t('paymentSaved'));
       await fetchDebts({ silent: true });
+    } catch (saveError) {
+      console.error('Failed to save debt payment', saveError);
+      setError(t('saveError'));
+    } finally {
+      setSaving(false);
     }
   }
 
   const activeDebt = payDebtId ? debts.find((d) => d.id === payDebtId) : null;
   const unpaid = debts.filter((d) => d.status !== 'paid');
   const paid = debts.filter((d) => d.status === 'paid');
-  const outstandingTotal = unpaid.reduce((sum, debt) => sum + calculateRemainingDebt(debt.amount, debt.paid_amount), 0);
+  const outstandingTotal = unpaid.reduce((sum, debt) => sum + remainingFor(debt), 0);
+  const activePayments = payDebtId ? paymentsMap[payDebtId] ?? [] : [];
   const paymentMethodOptions = enabledPaymentMethods.map((method) => ({
     value: method,
     label: tc(`paymentMethods.${method}`),
@@ -266,10 +340,20 @@ export default function DebtsPage() {
         ) : undefined}
       />
 
-      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
-
       {loading ? (
         <DetailListSkeleton rows={7} />
+      ) : loadError ? (
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            title={loadError}
+            action={(
+              <Button variant="outline" onClick={() => void fetchDebts()} icon={<RefreshCw size={16} aria-hidden="true" />}>
+                {tc('retry')}
+              </Button>
+            )}
+          />
+        </Card>
       ) : debts.length === 0 ? (
         <Card>
           <EmptyState
@@ -284,17 +368,19 @@ export default function DebtsPage() {
         <div className="space-y-6">
           {unpaid.length > 0 && (
             <section>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                  {t('unpaid')} / {t('partial')}
-                </h2>
-                <Badge variant="danger">
-                  {t('remaining')}: <Money amount={outstandingTotal} />
-                </Badge>
-              </div>
+              <SectionHeading
+                size="sm"
+                className="mb-3 sm:items-center"
+                title={t('outstanding')}
+                action={(
+                  <Badge variant="danger">
+                    {t('remaining')}: <Money amount={outstandingTotal} />
+                  </Badge>
+                )}
+              />
               <div className="space-y-3">
                 {unpaid.map((debt) => {
-                  const remaining = calculateRemainingDebt(debt.amount, debt.paid_amount);
+                  const remaining = remainingFor(debt);
                   const status = getDebtStatus(debt.amount, debt.paid_amount);
                   return (
                     <Card key={debt.id} as="article" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -337,14 +423,17 @@ export default function DebtsPage() {
 
           {paid.length > 0 && (
             <section>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                  {t('paid')} <span className="font-medium normal-case text-gray-400">({paid.length})</span>
-                </h2>
-                <Button variant="ghost" size="sm" aria-expanded={showPaid} onClick={() => setShowPaid((value) => !value)}>
-                  {showPaid ? t('hidePaid') : t('showPaid')}
-                </Button>
-              </div>
+              <SectionHeading
+                size="sm"
+                className="mb-3 sm:items-center"
+                title={t('paid')}
+                badge={<Badge variant="neutral" size="sm">{paid.length}</Badge>}
+                action={(
+                  <Button variant="ghost" size="sm" aria-expanded={showPaid} onClick={() => setShowPaid((value) => !value)}>
+                    {showPaid ? t('hidePaid') : t('showPaid')}
+                  </Button>
+                )}
+              />
               {showPaid && (
                 <div className="space-y-2">
                   {paid.map((debt) => (
@@ -418,12 +507,12 @@ export default function DebtsPage() {
 
       <Modal
         open={Boolean(payDebtId && activeDebt)}
-        onClose={() => setPayDebtId(null)}
+        onClose={closePayModal}
         title={t('partialPayment')}
         locked={saving}
         footer={(
           <>
-            <Button variant="outline" onClick={() => setPayDebtId(null)} disabled={saving}>{tc('cancel')}</Button>
+            <Button variant="outline" onClick={closePayModal} disabled={saving}>{tc('cancel')}</Button>
             <Button type="submit" form="add-payment-form" loading={saving} loadingLabel={tc('saving')}>{tc('save')}</Button>
           </>
         )}
@@ -433,15 +522,29 @@ export default function DebtsPage() {
             <Card tone="muted" padding="sm">
               <p className="font-semibold text-gray-800">{activeDebt.person_name}</p>
               <p className="text-sm text-gray-500">
-                {t('remaining')}: <Money amount={activeDebt.remaining_amount} className="font-semibold text-gray-900" />
+                {t('remaining')}: <Money amount={remainingFor(activeDebt)} className="font-semibold text-gray-900" />
               </p>
             </Card>
 
-            {(paymentsMap[payDebtId] ?? []).length > 0 && (
+            {paymentsLoading ? (
+              <div role="status" aria-label={t('paymentsLoading')} className="space-y-2">
+                <Skeleton className="h-3 w-32 bg-gray-100" />
+                <Skeleton className="h-9 w-full rounded-lg bg-gray-100" />
+              </div>
+            ) : paymentsError ? (
+              <InlineAlert
+                variant="warning"
+                action={formClubId ? (
+                  <Button variant="ghost" size="sm" onClick={() => void loadPayments(payDebtId, formClubId)}>{tc('retry')}</Button>
+                ) : undefined}
+              >
+                {paymentsError}
+              </InlineAlert>
+            ) : activePayments.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase text-gray-500">{t('debtPayments')}</p>
                 <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
-                  {(paymentsMap[payDebtId] ?? []).map((p) => (
+                  {activePayments.map((p) => (
                     <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm text-gray-600">
                       <span>{formatDate(p.date, locale)} · {tc.has(`paymentMethods.${p.payment_method}`) ? tc(`paymentMethods.${p.payment_method as EntryPaymentMethod}`) : p.payment_method}</span>
                       <span className="font-medium text-success-600">+<Money amount={p.amount} /></span>

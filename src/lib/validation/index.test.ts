@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  classifyDatabaseWriteError,
+  safeRedirectPath,
   validateAmount,
   validateQuantity,
   validateDate,
@@ -144,5 +146,50 @@ describe('validateAll', () => {
     const result = validateAll({ valid: true }, { valid: false, error: 'bad' }, { valid: false, error: 'worse' });
     expect(result.valid).toBe(false);
     expect(result.error).toBe('bad');
+  });
+});
+
+describe('classifyDatabaseWriteError', () => {
+  it('maps insufficient privilege to permission', () => {
+    expect(classifyDatabaseWriteError({ code: '42501', message: 'Salary editing access is required.' })).toBe('permission');
+  });
+  it('maps check violations to check', () => {
+    expect(classifyDatabaseWriteError({ code: '23514', message: 'violates check constraint' })).toBe('check');
+  });
+  it('treats anything else as unknown', () => {
+    expect(classifyDatabaseWriteError({ code: 'P0001', message: 'Invalid salary entry.' })).toBe('unknown');
+    expect(classifyDatabaseWriteError(new Error('network'))).toBe('unknown');
+    expect(classifyDatabaseWriteError(null)).toBe('unknown');
+    expect(classifyDatabaseWriteError('boom')).toBe('unknown');
+  });
+});
+
+describe('safeRedirectPath', () => {
+  it('keeps same-origin paths with their query string', () => {
+    expect(safeRedirectPath('/daily-cash')).toBe('/daily-cash');
+    expect(safeRedirectPath('/reports?month=2026-09&tab=1')).toBe('/reports?month=2026-09&tab=1');
+    expect(safeRedirectPath('/salaries/employees/abc')).toBe('/salaries/employees/abc');
+  });
+  it('rejects empty and non-path values', () => {
+    expect(safeRedirectPath(null)).toBeNull();
+    expect(safeRedirectPath(undefined)).toBeNull();
+    expect(safeRedirectPath('')).toBeNull();
+    expect(safeRedirectPath('daily-cash')).toBeNull();
+  });
+  it('rejects absolute and protocol-relative URLs', () => {
+    expect(safeRedirectPath('https://evil.example/')).toBeNull();
+    expect(safeRedirectPath('//evil.example/path')).toBeNull();
+    expect(safeRedirectPath('/\\evil.example')).toBeNull();
+    expect(safeRedirectPath('/\tevil')).toBeNull();
+    expect(safeRedirectPath('javascript:alert(1)')).toBeNull();
+  });
+  it('rejects control characters', () => {
+    expect(safeRedirectPath('/\n/evil.example')).toBeNull();
+    expect(safeRedirectPath('/\t/evil.example')).toBeNull();
+  });
+  it('refuses to loop back into the login flow', () => {
+    expect(safeRedirectPath('/login')).toBeNull();
+    expect(safeRedirectPath('/login?next=/x')).toBeNull();
+    expect(safeRedirectPath('/auth/callback?code=1')).toBeNull();
   });
 });

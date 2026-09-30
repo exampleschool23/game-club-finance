@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { Banknote, Check, History, Pencil, Power, Users, Wallet, X } from 'lucide-react';
+import { Banknote, Building2, Check, History, Pencil, Power, Users, Wallet, X } from 'lucide-react';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
   Badge,
@@ -40,6 +40,7 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatDateOnly
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
 import { canAccessFeature } from '@/lib/permissions';
 import { todayIso } from '@/lib/utils';
+import { classifyDatabaseWriteError } from '@/lib/validation';
 import type { EntryPaymentMethod } from '@/types';
 
 const employeeRoles = ['Manager', 'Admin', 'Cleaner'] as const;
@@ -51,12 +52,19 @@ function knownEmployeeRole(value: string) {
 type SetupMode = 'new' | 'salary' | 'kpi' | 'profile';
 type SalaryView = 'operations' | 'employees' | 'history';
 type EntryKind = SalaryEntry['kind'];
+type SavingTarget = 'entry' | 'employee' | 'role' | 'deactivate' | 'delete';
 
 const emptyData: Awaited<ReturnType<typeof loadSalaries>> = { employees: [], rates: [], entries: [], monthlyProfit: [] };
 
 export default function SalariesPage({ view = 'operations', employeeId }: { view?: SalaryView; employeeId?: string }) {
-  const { selectedClubId } = useClub();
-  if (!selectedClubId) return <MetricGridSkeleton count={3} className="sm:grid-cols-3" />;
+  const t = useTranslations('salaries');
+  const { selectedClubId, loading: clubLoading } = useClub();
+  if (!selectedClubId) {
+    if (clubLoading) return <MetricGridSkeleton count={3} className="sm:grid-cols-3" />;
+    return <Card><EmptyState icon={Building2} title={t('noClubTitle')} description={t('noClubDescription')} /></Card>;
+  }
+  // Each /salaries route is its own page, so switching views remounts anyway;
+  // the key additionally resets all local state when the club changes.
   return <SalaryManager key={`${selectedClubId}:${view}:${employeeId ?? ''}`} clubId={selectedClubId} view={view} employeeId={employeeId} />;
 }
 
@@ -75,10 +83,12 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
   const [deletion, setDeletion] = useState<{ id: string; kind: 'entry' | 'rate'; label: string } | null>(null);
   const [roleEdit, setRoleEdit] = useState<{ id: string; role: string } | null>(null);
   const [roleError, setRoleError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [savingTarget, setSavingTarget] = useState<SavingTarget | null>(null);
+  const saving = savingTarget !== null;
   const [loadError, setLoadError] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [errorForm, setErrorForm] = useState<'entry' | 'employee' | null>(null);
+  const [entryError, setEntryError] = useState('');
+  const [employeeError, setEmployeeError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [setupMode, setSetupMode] = useState<SetupMode>('new');
   const [entrySelected, setEntrySelected] = useState<SalaryEmployee | null>(null);
   const [selectedEmployee, setSelected] = useState<SalaryEmployee | null>(null);
@@ -86,6 +96,8 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
   const [entryForm, setEntryForm] = useState(() => ({ id: crypto.randomUUID(), kind: 'payment' as EntryKind, amount: '', date: today, comment: '', payment_method: defaultPaymentMethod(enabledPaymentMethods), payment_source: 'game_club' }));
   const generation = useRef(0);
   const mutating = useRef(false);
+  // Unsaved "new employee" draft, kept while the user looks at another setup mode.
+  const newEmployeeDraft = useRef<typeof employeeForm | null>(null);
   const balances = useMemo(() => calculateSalaries({ ...data, throughDate: today }), [data, today]);
   const historyEmployee = data.employees.find((employee) => employee.id === employeeId);
   const currentRate = (id: string) => data.rates.filter((r) => !r.deleted_at && r.employee_id === id && r.effective_date <= today).sort((a, b) => b.effective_date.localeCompare(a.effective_date))[0];
@@ -100,6 +112,11 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
     return known ? t(`roles.${known}`) : value || t('noRole');
   };
   const currency = (value: number) => `${formatCurrency(value)} ${tc('currency')}`;
+  const writeErrorMessage = (error: unknown) => {
+    console.error('Salary write failed', error);
+    const kind = classifyDatabaseWriteError(error);
+    return kind === 'permission' ? t('permissionError') : kind === 'check' ? t('checkError') : t('saveError');
+  };
 
   const reload = useCallback(async ({ silent = false } = {}) => {
     const request = ++generation.current;
@@ -119,12 +136,9 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
     return () => { generation.current += 1; };
   }, [reload]);
 
-  function openEmployee(employee: SalaryEmployee | null, mode: SetupMode = employee ? 'profile' : 'new') {
-    if (saving || !canEdit) return;
+  function employeeFormFor(employee: SalaryEmployee | null) {
     const rate = employee ? displayRate(employee) : undefined;
-    setSetupMode(mode);
-    setSelected(employee);
-    setEmployeeForm({
+    return {
       id: employee?.id ?? crypto.randomUUID(),
       name: employee?.name ?? '',
       job_title: knownEmployeeRole(employee?.job_title ?? '') ?? employee?.job_title ?? '',
@@ -133,33 +147,56 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
       amount: rate ? formatCurrencyInput(Number(rate.amount)) : '0',
       kpi: String(rate?.kpi_percent ?? 0),
       active: rate?.active ?? true,
-    });
-    setFormError('');
-    requestAnimationFrame(() => document.getElementById('salary-employee-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
+  }
+
+  // Forms are rendered inline, so selecting an employee or switching a
+  // segmented option never scrolls the page.
+  function selectSetupEmployee(employee: SalaryEmployee | null) {
+    if (savingTarget === 'employee' || !canEdit) return;
+    setSelected(employee);
+    setEmployeeForm(employeeFormFor(employee));
+    setEmployeeError('');
+  }
+
+  function changeSetupMode(mode: SetupMode) {
+    if (savingTarget === 'employee' || !canEdit || mode === setupMode) return;
+    setEmployeeError('');
+    if (setupMode === 'new') newEmployeeDraft.current = employeeForm;
+    if (mode === 'new') {
+      // A new employee always gets a fresh id so it can never overwrite the selected one.
+      setSelected(null);
+      setEmployeeForm(newEmployeeDraft.current ?? employeeFormFor(null));
+    } else if (setupMode === 'new') {
+      setEmployeeForm(employeeFormFor(selectedEmployee));
+    }
+    setSetupMode(mode);
   }
 
   function openEntry(employee: SalaryEmployee | null, kind: EntryKind = 'payment') {
-    if (saving || !canEdit) return;
+    if (savingTarget === 'entry' || !canEdit) return;
     setEntrySelected(employee);
-    setEntryForm((current) => ({ ...current, id: crypto.randomUUID(), kind, date: today }));
-    setFormError('');
-    requestAnimationFrame(() => document.getElementById('salary-entry-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    // Keep the typed amount and comment; only a new request id and kind change.
+    setEntryForm((current) => (current.kind === kind && employee?.id === entrySelected?.id
+      ? current
+      : { ...current, id: crypto.randomUUID(), kind, date: employee?.id === entrySelected?.id ? current.date : today }));
+    setEntryError('');
   }
 
   async function save(event: FormEvent, dialog: 'entry' | 'employee') {
-    setErrorForm(dialog);
+    const setError = dialog === 'entry' ? setEntryError : setEmployeeError;
     const targetEmployee = dialog === 'entry' ? entrySelected : selectedEmployee;
     event.preventDefault();
     if (mutating.current || !canEdit) return;
     if ((dialog === 'entry' || setupMode !== 'new') && !targetEmployee) return;
     const amount = dialog === 'employee' && setupMode === 'kpi' ? Number(employeeForm.kpi) : parseCurrencyInput(dialog === 'employee' ? employeeForm.amount : entryForm.amount);
     if (!Number.isFinite(amount) || amount >= 100000000000000 || (dialog === 'employee' ? amount < 0 : amount <= 0)) {
-      setFormError(tc('invalidAmount'));
+      setError(tc('invalidAmount'));
       return;
     }
     mutating.current = true;
-    setSaving(true);
-    setFormError('');
+    setSavingTarget(dialog);
+    setError('');
     try {
       const db = createClient();
       const result = dialog === 'employee' && (setupMode === 'salary' || setupMode === 'kpi')
@@ -182,18 +219,19 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
       if (result.error) throw result.error;
       if (dialog === 'entry') setEntryForm((form) => ({ ...form, id: crypto.randomUUID(), amount: '', comment: '' }));
       else if (setupMode === 'new') {
+        newEmployeeDraft.current = null;
         setEmployeeForm((form) => ({ ...form, id: crypto.randomUUID(), name: '', job_title: '', amount: '0', kpi: '0' }));
       }
       showToast(t('saved'));
       await reload({ silent: true });
-    } catch { setFormError(t('saveError')); }
-    finally { mutating.current = false; setSaving(false); }
+    } catch (error) { setError(writeErrorMessage(error)); }
+    finally { mutating.current = false; setSavingTarget(null); }
   }
 
   async function saveEmployeeRole() {
     if (!roleEdit || !canEdit || mutating.current) return;
     mutating.current = true;
-    setSaving(true);
+    setSavingTarget('role');
     setRoleError('');
     try {
       const result = await createClient().rpc('change_salary_employee_role', { p_club_id: clubId, p_employee_id: roleEdit.id, p_job_title: roleEdit.role });
@@ -201,41 +239,41 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
       setData((previous) => ({ ...previous, employees: previous.employees.map((employee) => employee.id === roleEdit.id ? { ...employee, job_title: roleEdit.role } : employee) }));
       setRoleEdit(null);
       showToast(t('saved'));
-    } catch { setRoleError(t('saveError')); }
-    finally { mutating.current = false; setSaving(false); }
+    } catch (error) { setRoleError(writeErrorMessage(error)); }
+    finally { mutating.current = false; setSavingTarget(null); }
   }
 
   async function deactivateEmployee(employee: SalaryEmployee) {
     if (mutating.current || !canEdit) return;
-    const confirmed = await confirm({ title: `${t('deactivate')} · ${employee.name}`, description: t('deactivated'), confirmLabel: t('deactivate') });
+    const confirmed = await confirm({ title: `${t('deactivate')} · ${employee.name}`, description: t('deactivateConfirm', { name: employee.name }), confirmLabel: t('deactivate') });
     if (!confirmed) return;
     mutating.current = true;
-    setSaving(true);
+    setSavingTarget('deactivate');
     try {
       const result = await createClient().rpc('deactivate_salary_employee', { p_club_id: clubId, p_employee_id: employee.id });
       if (result.error) throw result.error;
       showToast(t('deactivated'));
       await reload({ silent: true });
-    } catch { showToast(t('saveError'), 'error'); }
-    finally { mutating.current = false; setSaving(false); }
+    } catch (error) { showToast(writeErrorMessage(error), 'error'); }
+    finally { mutating.current = false; setSavingTarget(null); }
   }
 
   async function deleteRecord() {
     if (!deletion || !canEdit || mutating.current) return;
     mutating.current = true;
-    setSaving(true);
-    setFormError('');
+    setSavingTarget('delete');
+    setDeleteError('');
     try {
       const result = await createClient().rpc('delete_salary_record', { p_club_id: clubId, p_id: deletion.id, p_kind: deletion.kind });
       if (result.error) throw result.error;
       setDeletion(null);
       showToast(t('deletedSuccess'));
       await reload({ silent: true });
-    } catch { setFormError(t('saveError')); }
-    finally { mutating.current = false; setSaving(false); }
+    } catch (error) { setDeleteError(writeErrorMessage(error)); }
+    finally { mutating.current = false; setSavingTarget(null); }
   }
 
-  const formDisabled = saving || loading || loadError;
+  const formDisabled = (dialog: 'entry' | 'employee') => savingTarget === dialog || loading || loadError;
   const setupModeOptions = (['new', 'salary', 'kpi', 'profile'] as const).map((mode) => ({
     value: mode,
     label: t(mode === 'new' ? 'addEmployee' : mode === 'salary' ? 'changeSalary' : mode === 'kpi' ? 'changeKpi' : 'editEmployee'),
@@ -252,7 +290,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
           onChange={(event) => {
             const employee = data.employees.find((e) => e.id === event.target.value) ?? null;
             if (dialog === 'entry') openEntry(employee, entryForm.kind);
-            else openEmployee(employee, setupMode);
+            else selectSetupEmployee(employee);
           }}
         >
           <option value="">{t('selectEmployee')}</option>
@@ -287,7 +325,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
               ariaLabel={t('effectiveDate')}
               min={selectedEmployee ? (selectedEmployee.joined_on > today ? selectedEmployee.joined_on : today) : '2000-01-01'}
               max={selectedEmployee ? (selectedEmployee.joined_on > today ? selectedEmployee.joined_on : today) : undefined}
-              disabled={saving}
+              disabled={savingTarget === 'employee'}
               value={employeeForm.date}
               onChange={(date) => setEmployeeForm({ ...employeeForm, date })}
             />
@@ -330,7 +368,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
           <CurrencyInput id="salary-entry-amount" required value={entryForm.amount} onValueChange={(value) => setEntryForm({ ...entryForm, amount: value })} />
         </Field>
         <Field label={t('date')}>
-          <DatePicker ariaLabel={t('date')} min={selected?.joined_on} max={today} disabled={saving} value={entryForm.date} onChange={(date) => setEntryForm({ ...entryForm, date })} />
+          <DatePicker ariaLabel={t('date')} min={selected?.joined_on} max={today} disabled={savingTarget === 'entry'} value={entryForm.date} onChange={(date) => setEntryForm({ ...entryForm, date })} />
         </Field>
         {entryForm.kind === 'payment' && (
           <>
@@ -354,13 +392,17 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
     );
   }
 
+  function formErrorFor(dialog: 'entry' | 'employee') {
+    return dialog === 'entry' ? entryError : employeeError;
+  }
+
   function renderForm(dialog: 'entry' | 'employee') {
     const selected = dialog === 'entry' ? entrySelected : selectedEmployee;
     const title = dialog === 'entry'
       ? t('recordOperations')
       : t(setupMode === 'new' ? 'addEmployee' : setupMode === 'salary' ? 'changeSalary' : setupMode === 'kpi' ? 'changeKpi' : 'editEmployee');
     return (
-      <Card as="section" id={dialog === 'entry' ? 'salary-entry-form' : 'salary-employee-form'} tone="primary" padding="lg" className="mb-6 scroll-mt-6 rounded-2xl">
+      <Card as="section" id={dialog === 'entry' ? 'salary-entry-form' : 'salary-employee-form'} tone="primary" padding="lg" className="mb-6 rounded-2xl">
         <SectionHeading title={title} className="mb-5" />
         {dialog === 'employee' && (
           <SegmentedControl
@@ -369,12 +411,12 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
             label={t('salarySetup')}
             options={setupModeOptions}
             value={setupMode}
-            disabled={formDisabled}
-            onChange={(mode) => openEmployee(selectedEmployee, mode)}
+            disabled={formDisabled('employee')}
+            onChange={changeSetupMode}
           />
         )}
         <form onSubmit={(event) => void save(event, dialog)} className="space-y-4">
-          <fieldset disabled={formDisabled} className="grid gap-4 sm:grid-cols-2">
+          <fieldset disabled={formDisabled(dialog)} className="grid gap-4 sm:grid-cols-2">
             {dialog === 'entry' && (
               <>
                 <SegmentedControl
@@ -390,13 +432,13 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
             {(dialog === 'entry' || setupMode !== 'new') && renderEmployeeSelect(dialog, selected)}
             {dialog === 'employee' ? renderEmployeeFields() : renderEntryFields(selected)}
           </fieldset>
-          {formError && errorForm === dialog && <InlineAlert variant="danger">{formError}</InlineAlert>}
+          {formErrorFor(dialog) && <InlineAlert variant="danger">{formErrorFor(dialog)}</InlineAlert>}
           <Button
             type="submit"
             fullWidth
-            loading={saving}
+            loading={savingTarget === dialog}
             loadingLabel={tc('saving')}
-            disabled={loading || loadError || ((dialog === 'entry' || setupMode !== 'new') && !selected)}
+            disabled={loading || loadError || (saving && savingTarget !== dialog) || ((dialog === 'entry' || setupMode !== 'new') && !selected)}
           >
             {dialog === 'entry' ? t(`record_${entryForm.kind}`) : tc('save')}
           </Button>
@@ -504,7 +546,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
                           <option value="">{t('selectRole')}</option>
                           {employeeRoles.map((option) => <option key={option} value={option}>{t(`roles.${option}`)}</option>)}
                         </Select>
-                        <IconButton type="submit" variant="soft" label={tc('save')} icon={<Check size={18} />} loading={saving} disabled={!roleEdit.role} />
+                        <IconButton type="submit" variant="soft" label={tc('save')} icon={<Check size={18} />} loading={savingTarget === 'role'} disabled={!roleEdit.role || (saving && savingTarget !== 'role')} />
                         <IconButton label={tc('cancel')} icon={<X size={18} />} disabled={saving} onClick={() => { setRoleEdit(null); setRoleError(''); }} />
                       </div>
                     </Field>
@@ -580,7 +622,7 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
                     {entry.deleted_at ? (
                       <Badge variant="neutral" size="sm">{t('deleted')} · {formatDateTime(entry.deleted_at, locale)}</Badge>
                     ) : canEdit && (
-                      <Button variant="dangerOutline" size="sm" disabled={saving} onClick={() => { setFormError(''); setDeletion({ id: entry.id, kind: 'entry', label: `${t(entry.kind)} · ${formatDateOnly(entry.date, locale)} · ${currency(Number(entry.amount))}` }); }}>
+                      <Button variant="dangerOutline" size="sm" disabled={saving} onClick={() => { setDeleteError(''); setDeletion({ id: entry.id, kind: 'entry', label: `${t(entry.kind)} · ${formatDateOnly(entry.date, locale)} · ${currency(Number(entry.amount))}` }); }}>
                         {t('delete')}
                       </Button>
                     )}
@@ -591,27 +633,34 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
             </div>
             <div>
               <SectionHeading size="sm" title={t('rateHistory')} className="mb-3" />
+              {!data.rates.some((r) => r.employee_id === historyEmployee.id) && <EmptyState compact bordered title={t('noRates')} />}
               <ul className="divide-y divide-gray-100">
-                {data.rates.filter((r) => r.employee_id === historyEmployee.id).sort((a, b) => b.effective_date.localeCompare(a.effective_date)).map((rate) => (
-                  <li className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-gray-600" key={rate.id}>
-                    <p className={rate.deleted_at ? 'line-through opacity-60' : ''}>
-                      {formatDateOnly(rate.effective_date, locale)} · {t(rate.salary_type)} · {currency(Number(rate.amount))} · {t('kpi')}: {Number(rate.kpi_percent)}% · {t(rate.active ? 'active' : 'inactive')}
-                    </p>
-                    {rate.deleted_at ? (
-                      <Badge variant="neutral" size="sm">{t('deleted')} · {formatDateTime(rate.deleted_at, locale)}</Badge>
-                    ) : canEdit && (
-                      <Button
-                        variant="dangerOutline"
-                        size="sm"
-                        disabled={saving || !canDeleteSalaryRate(data.rates, rate)}
-                        title={!canDeleteSalaryRate(data.rates, rate) ? t('lastRateHelp') : undefined}
-                        onClick={() => { setFormError(''); setDeletion({ id: rate.id, kind: 'rate', label: `${formatDateOnly(rate.effective_date, locale)} · ${currency(Number(rate.amount))} · ${Number(rate.kpi_percent)}%` }); }}
-                      >
-                        {t('delete')}
-                      </Button>
-                    )}
-                  </li>
-                ))}
+                {data.rates.filter((r) => r.employee_id === historyEmployee.id).sort((a, b) => b.effective_date.localeCompare(a.effective_date)).map((rate) => {
+                  const deletable = canDeleteSalaryRate(data.rates, rate);
+                  return (
+                    <li className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-gray-600" key={rate.id}>
+                      <p className={rate.deleted_at ? 'line-through opacity-60' : ''}>
+                        {formatDateOnly(rate.effective_date, locale)} · {t(rate.salary_type)} · {currency(Number(rate.amount))} · {t('kpi')}: {Number(rate.kpi_percent)}% · {t(rate.active ? 'active' : 'inactive')}
+                      </p>
+                      {rate.deleted_at ? (
+                        <Badge variant="neutral" size="sm">{t('deleted')} · {formatDateTime(rate.deleted_at, locale)}</Badge>
+                      ) : canEdit && (
+                        <div className="flex flex-col items-end gap-1">
+                          <Button
+                            variant="dangerOutline"
+                            size="sm"
+                            disabled={saving || !deletable}
+                            aria-describedby={!deletable ? `rate-delete-hint-${rate.id}` : undefined}
+                            onClick={() => { setDeleteError(''); setDeletion({ id: rate.id, kind: 'rate', label: `${formatDateOnly(rate.effective_date, locale)} · ${currency(Number(rate.amount))} · ${Number(rate.kpi_percent)}%` }); }}
+                          >
+                            {t('delete')}
+                          </Button>
+                          {!deletable && <p id={`rate-delete-hint-${rate.id}`} className="max-w-xs text-right text-xs text-gray-500">{t('lastRateHelp')}</p>}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>
@@ -627,13 +676,13 @@ function SalaryManager({ clubId, view, employeeId }: { clubId: string; view: Sal
         footer={(
           <>
             <Button variant="outline" disabled={saving} onClick={() => setDeletion(null)}>{tc('cancel')}</Button>
-            <Button variant="danger" loading={saving} loadingLabel={tc('saving')} onClick={() => void deleteRecord()}>{t('delete')}</Button>
+            <Button variant="danger" loading={savingTarget === 'delete'} loadingLabel={tc('saving')} onClick={() => void deleteRecord()}>{t('delete')}</Button>
           </>
         )}
       >
         <p className="mb-3 font-semibold">{deletion?.label}</p>
         <p className="text-sm leading-6 text-gray-600">{t(deletion?.kind === 'rate' ? 'deleteRateHelp' : 'deleteEntryHelp')}</p>
-        {formError && <InlineAlert variant="danger" className="mt-4">{formError}</InlineAlert>}
+        {deleteError && <InlineAlert variant="danger" className="mt-4">{deleteError}</InlineAlert>}
       </Modal>
 
       {toastElement}

@@ -16,7 +16,7 @@ const toneClasses: Record<CardTone, string> = {
   primary: 'border-primary-100 bg-white shadow-sm',
   info: 'border-blue-100 bg-blue-50 shadow-sm',
   success: 'border-success-100 bg-success-50/70',
-  warning: 'border-amber-200 bg-amber-50',
+  warning: 'border-warning-500/30 bg-warning-50',
   orange: 'border-orange-100 bg-orange-50 shadow-sm',
   muted: 'border-gray-100 bg-gray-50',
 };

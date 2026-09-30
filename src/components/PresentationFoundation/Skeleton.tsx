@@ -1,12 +1,18 @@
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden="true" className={cn('animate-pulse rounded bg-gray-200', className)} />;
 }
 
-const statusProps = { role: 'status', 'aria-label': 'Loading' } as const;
+/** Announces the placeholder as a translated "Loading…" status. */
+function useLoadingStatus() {
+  const tc = useTranslations('common');
+  return { role: 'status', 'aria-label': tc('loading'), 'aria-busy': true } as const;
+}
 
 export function MetricGridSkeleton({ count = 4, className }: { count?: number; className?: string }) {
+  const statusProps = useLoadingStatus();
   return (
     <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4', className)} {...statusProps}>
       {Array.from({ length: count }).map((_, index) => (
@@ -28,6 +34,7 @@ export function MetricGridSkeleton({ count = 4, className }: { count?: number; c
 }
 
 export function TableSkeleton({ rows = 6, columns = 4, className }: { rows?: number; columns?: number; className?: string }) {
+  const statusProps = useLoadingStatus();
   const template = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` };
   return (
     <div className={cn('overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm', className)} {...statusProps}>
@@ -48,6 +55,7 @@ export function TableSkeleton({ rows = 6, columns = 4, className }: { rows?: num
 }
 
 export function FormSkeleton({ className }: { className?: string }) {
+  const statusProps = useLoadingStatus();
   return (
     <div className={cn('rounded-xl border border-gray-200 bg-white p-5 shadow-sm', className)} {...statusProps}>
       <div className="space-y-5">
@@ -74,6 +82,7 @@ export function FormSkeleton({ className }: { className?: string }) {
 }
 
 export function DetailListSkeleton({ rows = 5, className }: { rows?: number; className?: string }) {
+  const statusProps = useLoadingStatus();
   return (
     <div className={cn('space-y-3', className)} {...statusProps}>
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -108,6 +117,7 @@ export function ChartSkeleton({ className }: { className?: string }) {
 
 /** Generic page-level placeholder used while the shell or a route is loading. */
 export function PageSkeleton() {
+  const statusProps = useLoadingStatus();
   return (
     <div className="space-y-6" {...statusProps}>
       <div className="space-y-2">

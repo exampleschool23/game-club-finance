@@ -104,6 +104,10 @@
     "totalDeductions": "Total deductions",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
+    "loadErrorDashboard": "Could not load dashboard data. Check your connection and try again.",
+    "monthlyChartLoadError": "Could not load the monthly income history.",
+    "noDeductionsForDay": "No deductions on this day",
+    "chartLegendLabel": "{title}: legend",
     "details": "View details",
     "backToDashboard": "Back to dashboard",
     "noBarMoneyData": "No bar calculation data for this period",
@@ -204,7 +208,10 @@
     "expenseCategories": "Expenses",
     "allExpenses": "All expenses",
     "noData": "No report data for this period",
-    "salaryPaymentProtected": "Salary payments are part of employee history and cannot be deleted."
+    "salaryPaymentProtected": "Salary payments are part of employee history and cannot be deleted.",
+    "loadError": "Could not load the report. Check your connection and try again.",
+    "deleteError": "Could not delete the entry. Try again.",
+    "deleteEntryConfirmDetailed": "Delete “{category}” ({type}, {amount}) from {date}? This cannot be undone."
   },
   "dailyCash": {
     "title": "Daily Cash Entry",
@@ -256,7 +263,12 @@
     "entryUpdated": "Entry updated.",
     "entrySaved": "Entry saved.",
     "entryDeleted": "Entry deleted.",
-    "deleteConfirm": "Delete this daily cash entry? Bar sales and expenses are not affected."
+    "deleteConfirm": "Delete this daily cash entry? Bar sales and expenses are not affected.",
+    "deleteConfirmDetailed": "Delete the daily cash entry for {date} ({amount})? Bar sales and expenses are not affected.",
+    "loadError": "Could not load the daily cash entry. Check your connection and try again.",
+    "saveError": "Could not save the entry. Check your connection and try again.",
+    "duplicateEntryError": "An entry for this date already exists. Reload the page to edit it.",
+    "deleteError": "Could not delete the entry. Try again."
   },
   "closingStock": {
     "viewerReadOnlyTitle": "View-only access",
@@ -521,6 +533,9 @@
     "success": "Expense saved",
     "deleteSuccess": "Expense deleted",
     "deleteConfirm": "Delete this expense? This cannot be undone.",
+    "saveError": "Could not save the expense. Check your connection and try again.",
+    "paymentMethodUnavailable": "No payment method is enabled for this club. Ask the owner to enable one in Settings.",
+    "futureDateError": "Expenses cannot be saved for a future business date.",
     "recentExpenses": "Recent Expenses",
     "todaySpend": "Spent today",
     "todayEntries": "Entries today",
@@ -581,7 +596,13 @@
     "debtSaved": "Debt saved",
     "paymentSaved": "Payment recorded",
     "showPaid": "Show paid",
-    "hidePaid": "Hide paid"
+    "hidePaid": "Hide paid",
+    "outstanding": "Unpaid and partial",
+    "loadError": "Could not load debts. Check your connection and try again.",
+    "saveError": "Could not save. Check your connection and access, then try again.",
+    "paymentsLoadError": "Could not load payment history.",
+    "paymentsLoading": "Loading payment history…",
+    "clubChanged": "The selected club changed. Close this form and open it again."
   },
   "dailyReport": {
     "title": "Daily Report",
@@ -608,7 +629,8 @@
     "profit": "Profit",
     "grossProfit": "Gross Profit",
     "expensesList": "Expenses",
-    "noData": "No data for this date"
+    "noData": "No data for this date",
+    "loadError": "Could not load the daily report. Check your connection and try again."
   },
   "monthlyReport": {
     "title": "Monthly Report",
@@ -629,7 +651,8 @@
     "expenses": "Expenses",
     "profit": "Profit",
     "totals": "Totals",
-    "noData": "No data for this month"
+    "noData": "No data for this month",
+    "loadError": "Could not load the monthly report. Check your connection and try again."
   },
   "settings": {
     "migrationHealth": {
@@ -688,7 +711,9 @@
     "paymentMethodsOwnerOnly": "Only owners can change this setting.",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "paymentMethodsHint": "Changes apply only after saving."
+    "paymentMethodsHint": "Changes apply only after saving.",
+    "saveError": "Could not save. Check your connection and owner access, then try again.",
+    "accountLoadError": "Could not load your account details. Refresh the page to try again."
   },
   "team": {
     "title": "Team",
@@ -775,7 +800,18 @@
     "accessSettings": "Access settings",
     "autoSave": "Role and page permissions save automatically.",
     "memberRole": "Role in this club",
-    "removeAccessHelp": "Remove this member’s access to {club}."
+    "removeAccessHelp": "Remove this member’s access to {club}.",
+    "loadError": "Could not load team members. Check your connection and try again.",
+    "saveError": "Could not update access. Check your connection and owner access, then try again.",
+    "notClubOwner": "View only: you are not an owner of this club.",
+    "noOwnedClubs": "No other clubs you own are available.",
+    "ownerOnlyFeature": "Owners only — cannot be granted to other roles.",
+    "promoteOwnerTitle": "Make this member an owner?",
+    "promoteOwnerConfirm": "{name} will get full control of {club}, including team access, settings and owner money.",
+    "promoteOwnerAction": "Make owner",
+    "demoteOwnerTitle": "Remove owner rights?",
+    "demoteOwnerConfirm": "{name} will no longer be an owner of {club} and will become {role}.",
+    "demoteOwnerAction": "Change role"
   },
   "approval": {
     "title": "Waiting for owner approval",
@@ -791,7 +827,9 @@
     "loginError": "Invalid email or password",
     "title": "Sign in",
     "or": "or",
-    "loginWithGoogle": "Continue with Google"
+    "loginWithGoogle": "Continue with Google",
+    "oauthError": "Sign-in with Google did not complete. Please try again.",
+    "networkError": "Could not reach the server. Check your connection and try again."
   },
   "moneyTaken": {
     "earnedBeforeWithdrawals": "Earned before withdrawals",
@@ -834,7 +872,11 @@
     "recordedAt": "Recorded {date}",
     "historyTitle": "Profit withdrawal history",
     "historyDescription": "Each profit withdrawal is assigned to its selected month and kept separate from operating expenses.",
-    "noHistory": "No profit has been withdrawn yet."
+    "noHistory": "No profit has been withdrawn yet.",
+    "loadError": "Could not load owner profit balances. Check your connection and try again.",
+    "saveError": "Could not record the withdrawal. Check your connection and try again.",
+    "deleteError": "Could not delete the withdrawal. Try again.",
+    "deleteConfirmDetailed": "Delete the {source} withdrawal of {amount} for {month}? The amount will return to that month's available balance."
   },
   "calendar": {
     "selectDate": "Select date",
@@ -1013,7 +1055,13 @@
     "deactivate": "Deactivate",
     "deactivated": "Employee deactivated. Previous history and unpaid balance are preserved.",
     "changeRole": "Change role",
-    "lastRateHelp": "Keep at least one salary rate. Edit the employee settings or deactivate the employee instead."
+    "lastRateHelp": "Keep at least one salary rate. Edit the employee settings or deactivate the employee instead.",
+    "deactivateConfirm": "{name} will stop accruing salary and KPI from today. Previous history and any unpaid balance are kept.",
+    "noClubTitle": "No club selected",
+    "noClubDescription": "Select a club to see its employees and salaries.",
+    "noRates": "No salary rates yet.",
+    "permissionError": "You do not have permission to change salaries in this club. Ask a club owner for salary editing access.",
+    "checkError": "The values were rejected. Check the amount, percentage and date, then try again."
   },
   "testChecklist": {
     "title": "System sanity checks",
@@ -1042,6 +1090,11 @@
     "debtsFail": "{count} debts have a negative remaining amount.",
     "expenses": "All expenses have positive amounts",
     "expensesOk": "All {count} expenses for today are valid.",
-    "expensesFail": "{count} expenses have a zero or negative amount."
+    "expensesFail": "{count} expenses have a zero or negative amount.",
+    "loadErrorTitle": "Could not run the checks",
+    "loadErrorDescription": "Some data could not be loaded, so no results are shown. This is not a failed check. Try again.",
+    "retry": "Try again",
+    "passed": "Passed",
+    "failed": "Failed"
   }
 }

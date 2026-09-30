@@ -1,10 +1,19 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { safeRedirectPath } from './lib/validation';
 
 function hasSupabaseAuthCookie(request: NextRequest) {
   return request.cookies
     .getAll()
     .some(({ name, value }) => name.startsWith('sb-') && name.includes('-auth-token') && Boolean(value));
+}
+
+/** Sends an anonymous visitor to /login, remembering the page they asked for. */
+function redirectToLogin(request: NextRequest) {
+  const loginUrl = new URL('/login', request.url);
+  const next = safeRedirectPath(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+  if (next && next !== '/') loginUrl.searchParams.set('next', next);
+  return NextResponse.redirect(loginUrl);
 }
 
 export async function proxy(request: NextRequest) {
@@ -15,7 +24,7 @@ export async function proxy(request: NextRequest) {
 
   // There is no session to validate; do not contact Auth just to redirect.
   if (isProtectedPage && !hasAuthCookie) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return redirectToLogin(request);
   }
 
   // The dashboard layout validates the user before rendering. Avoid making the
@@ -57,11 +66,12 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user && !isAuthPage && !isAuthCallback) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return redirectToLogin(request);
   }
 
   if (user && isAuthPage) {
-    return NextResponse.redirect(new URL('/', request.url));
+    const next = safeRedirectPath(request.nextUrl.searchParams.get('next')) ?? '/';
+    return NextResponse.redirect(new URL(next, request.url));
   }
 
   return supabaseResponse;

@@ -1,25 +1,45 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { LOGIN_NEXT_COOKIE, safeRedirectPath } from '@/lib/validation';
+
+function decodeCookieValue(value: string | undefined): string | undefined {
+  if (!value || value.startsWith('/')) return value;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
-  const errorDescription = searchParams.get('error_description');
+  // The login page stores the requested deep link before leaving for the provider.
+  const next = safeRedirectPath(decodeCookieValue(request.cookies.get(LOGIN_NEXT_COOKIE)?.value));
+
+  function redirectToLogin(withError: boolean) {
+    const loginUrl = new URL('/login', origin);
+    // Only a fixed marker is forwarded; provider error text is never shown to users.
+    if (withError) loginUrl.searchParams.set('error', 'oauth');
+    if (next) loginUrl.searchParams.set('next', next);
+    const redirect = NextResponse.redirect(loginUrl);
+    redirect.cookies.delete(LOGIN_NEXT_COOKIE);
+    return redirect;
+  }
 
   // Google / Supabase returned an OAuth error (e.g. user denied, bad redirect URL)
   if (error) {
-    const loginUrl = new URL('/login', origin);
-    loginUrl.searchParams.set('error', errorDescription ?? error);
-    return NextResponse.redirect(loginUrl);
+    return redirectToLogin(true);
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/login', origin));
+    return redirectToLogin(false);
   }
 
-  const response = NextResponse.redirect(`${origin}/`);
+  const response = NextResponse.redirect(new URL(next ?? '/', origin));
+  response.cookies.delete(LOGIN_NEXT_COOKIE);
 
   try {
     const supabase = createServerClient(
@@ -40,12 +60,12 @@ export async function GET(request: NextRequest) {
     );
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (exchangeError) {
-      const loginUrl = new URL('/login', origin);
-      loginUrl.searchParams.set('error', exchangeError.message);
-      return NextResponse.redirect(loginUrl);
+      console.error('OAuth code exchange failed', exchangeError.message);
+      return redirectToLogin(true);
     }
-  } catch {
-    return NextResponse.redirect(new URL('/login', origin));
+  } catch (exchangeError) {
+    console.error('OAuth callback failed', exchangeError);
+    return redirectToLogin(true);
   }
 
   return response;

@@ -6,10 +6,13 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Avatar,
   Badge,
+  type BadgeVariant,
   Button,
   Card,
   CardHeader,
+  Checkbox,
   EmptyState,
   Field,
   IconButton,
@@ -29,6 +32,7 @@ import { isMissingDatabaseColumn } from '@/lib/supabase/errors';
 import {
   Building2,
   ChevronDown,
+  Lock,
   RefreshCw,
   Settings2,
   X,
@@ -68,26 +72,24 @@ function normalizeRole(role: string | null | undefined): UserRole {
   return role === 'owner' || role === 'admin' || role === 'viewer' ? role : 'viewer';
 }
 
-function initials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('') || '?';
-}
+const ROLE_BADGE_VARIANT: Record<UserRole, BadgeVariant> = {
+  owner: 'warning',
+  admin: 'primary',
+  viewer: 'neutral',
+};
 
 export default function TeamPageClient() {
   const router = useRouter();
   const t = useTranslations('team');
   const tc = useTranslations('common');
   const { locale } = useAppLocale();
-  const { selectedClubId, role: currentClubRole, loading: clubLoading, refreshClubs } = useClub();
+  const { selectedClubId, role: currentClubRole, loading: clubLoading, memberships: currentMemberships, refreshClubs } = useClub();
   const { showToast, toastElement } = useToast();
   const { confirm, confirmDialog } = useConfirm();
   const requestSequence = useRef(0);
   const [currentUserId, setCurrentUserId] = useState('');
   const [authorized, setAuthorized] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [profiles, setProfiles] = useState<TeamMember[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessDraft>>({});
@@ -100,17 +102,18 @@ export default function TeamPageClient() {
   const [featureAccessAvailable, setFeatureAccessAvailable] = useState(true);
   const [error, setError] = useState('');
 
-  const loadProfiles = useCallback(async ({ silent = false } = {}) => {
-    const requestId = ++requestSequence.current;
-    if (!selectedClubId) {
-      setProfiles([]);
-      setClubs([]);
-      setLoading(false);
-      return;
-    }
+  // Clubs the signed-in user owns. Membership changes are only offered for these;
+  // other clubs are shown read-only (RLS enforces the same boundary).
+  const ownedClubIds = useMemo(
+    () => new Set(currentMemberships.filter((membership) => membership.role === 'owner').map((membership) => membership.club.id)),
+    [currentMemberships],
+  );
 
-    if (!silent) setLoading(true);
-    setError('');
+  const showError = useCallback((message: string) => {
+    showToast(message, 'error');
+  }, [showToast]);
+
+  const fetchProfiles = useCallback(async (requestId: number) => {
     const supabase = createClient();
     const [membershipRes, profileRes, clubRes] = await Promise.all([
       supabase
@@ -152,7 +155,8 @@ export default function TeamPageClient() {
     }
 
     if (membershipError || profileRes.error || clubRes.error) {
-      setError(membershipError?.message ?? profileRes.error?.message ?? clubRes.error?.message ?? 'Error');
+      console.error('Failed to load team', membershipError ?? profileRes.error ?? clubRes.error);
+      setError(t('loadError'));
       setProfiles([]);
       setClubs([]);
       setLoading(false);
@@ -189,7 +193,29 @@ export default function TeamPageClient() {
     setClubs(clubRows);
     setProfiles(teamRows);
     setLoading(false);
-  }, [selectedClubId]);
+  }, [t]);
+
+  const loadProfiles = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++requestSequence.current;
+    if (!selectedClubId) {
+      setProfiles([]);
+      setClubs([]);
+      setLoading(false);
+      return;
+    }
+
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      await fetchProfiles(requestId);
+    } catch (loadError) {
+      if (requestId !== requestSequence.current) return;
+      console.error('Failed to load team', loadError);
+      setError(t('loadError'));
+      setLoading(false);
+    }
+  }, [fetchProfiles, selectedClubId, t]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -208,26 +234,32 @@ export default function TeamPageClient() {
       if (cancelled) return;
 
       if (currentClubRole !== 'owner') {
-        router.replace('/');
+        setAuthorized(false);
+        setAccessDenied(true);
         return;
       }
 
       setCurrentUserId(session.user.id);
+      setAccessDenied(false);
       setAuthorized(true);
     }
 
     authorize().catch((err) => {
-      if (!cancelled) setError(String(err));
+      if (cancelled) return;
+      console.error('Failed to authorize team page', err);
+      setError(t('loadError'));
+      setAuthorized(false);
+      setAccessDenied(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [clubLoading, currentClubRole, router]);
+  }, [clubLoading, currentClubRole, router, t]);
 
   useEffect(() => {
     if (!authorized) return;
-    loadProfiles().catch((err) => setError(String(err)));
+    void loadProfiles();
     return () => { requestSequence.current += 1; };
   }, [authorized, loadProfiles]);
 
@@ -260,7 +292,7 @@ export default function TeamPageClient() {
 
   function availableClubsForProfile(profile: TeamMember) {
     const assignedClubIds = new Set(profile.memberships.map((membership) => membership.clubId));
-    return clubs.filter((club) => !assignedClubIds.has(club.id));
+    return clubs.filter((club) => ownedClubIds.has(club.id) && !assignedClubIds.has(club.id));
   }
 
   function draftForProfile(profile: TeamMember) {
@@ -305,82 +337,128 @@ export default function TeamPageClient() {
   async function addClubAccess(profile: TeamMember) {
     const draft = draftForProfile(profile);
 
-    if (!draft.clubId) {
-      setError(t('selectClubFirst'));
+    if (!draft.clubId || !ownedClubIds.has(draft.clubId)) {
+      showError(t('selectClubFirst'));
       return;
+    }
+
+    if (draft.role === 'owner') {
+      const clubName = clubs.find((club) => club.id === draft.clubId)?.name ?? '';
+      const confirmed = await confirm({
+        title: t('promoteOwnerTitle'),
+        description: t('promoteOwnerConfirm', { name: profile.full_name, club: clubName }),
+        confirmLabel: t('promoteOwnerAction'),
+        tone: 'primary',
+      });
+      if (!confirmed) return;
     }
 
     setSavingId(`${profile.id}:${draft.clubId}:add`);
-    setError('');
 
-    const supabase = createClient();
-    const { error: insertError } = await supabase
-      .from('club_memberships')
-      .insert({
-        club_id: draft.clubId,
-        user_id: profile.id,
-        role: draft.role,
-      });
+    try {
+      const supabase = createClient();
+      const { error: insertError } = await supabase
+        .from('club_memberships')
+        .insert({
+          club_id: draft.clubId,
+          user_id: profile.id,
+          role: draft.role,
+        });
 
-    setSavingId(null);
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
+      if (insertError) {
+        console.error('Failed to add club access', insertError);
+        showError(t('saveError'));
+        return;
+      }
 
-    showToast(t('accessAdded'));
-    await loadProfiles({ silent: true });
+      showToast(t('accessAdded'));
+      await loadProfiles({ silent: true });
 
-    if (profile.id === currentUserId) {
-      await refreshClubs();
+      if (profile.id === currentUserId) {
+        await refreshClubs();
+      }
+    } catch (saveError) {
+      console.error('Failed to add club access', saveError);
+      showError(t('saveError'));
+    } finally {
+      setSavingId(null);
     }
   }
 
   async function updateMembershipRole(profile: TeamMember, membership: TeamMembership, role: UserRole) {
     if (membership.role === role) return;
 
+    if (!ownedClubIds.has(membership.clubId)) {
+      showError(t('notClubOwner'));
+      return;
+    }
+
     if (profile.id === currentUserId && membership.role === 'owner' && role !== 'owner') {
-      setError(t('selfDemoteBlocked'));
+      showError(t('selfDemoteBlocked'));
       return;
     }
 
     if (membership.role === 'owner' && role !== 'owner' && ownerCountForClub(membership.clubId) <= 1) {
-      setError(t('lastOwnerBlocked'));
+      showError(t('lastOwnerBlocked'));
       return;
+    }
+
+    if (role === 'owner' || membership.role === 'owner') {
+      const promoting = role === 'owner';
+      const confirmed = await confirm({
+        title: promoting ? t('promoteOwnerTitle') : t('demoteOwnerTitle'),
+        description: promoting
+          ? t('promoteOwnerConfirm', { name: profile.full_name, club: membership.clubName })
+          : t('demoteOwnerConfirm', { name: profile.full_name, club: membership.clubName, role: t(`roles.${role}`) }),
+        confirmLabel: promoting ? t('promoteOwnerAction') : t('demoteOwnerAction'),
+        tone: 'primary',
+      });
+      if (!confirmed) return;
     }
 
     setSavingId(`${profile.id}:${membership.clubId}:role`);
-    setError('');
 
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from('club_memberships')
-      .update({ role, updated_at: new Date().toISOString() })
-      .eq('club_id', membership.clubId)
-      .eq('user_id', profile.id);
+    try {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from('club_memberships')
+        .update({ role, updated_at: new Date().toISOString() })
+        .eq('club_id', membership.clubId)
+        .eq('user_id', profile.id);
 
-    setSavingId(null);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
+      if (updateError) {
+        console.error('Failed to update role', updateError);
+        showError(t('saveError'));
+        return;
+      }
 
-    showToast(t('saved'));
-    await loadProfiles({ silent: true });
+      showToast(t('saved'));
+      await loadProfiles({ silent: true });
 
-    if (profile.id === currentUserId) {
-      await refreshClubs();
+      if (profile.id === currentUserId) {
+        await refreshClubs();
+      }
+    } catch (saveError) {
+      console.error('Failed to update role', saveError);
+      showError(t('saveError'));
+    } finally {
+      setSavingId(null);
     }
   }
 
   async function removeClubAccess(profile: TeamMember, membership: TeamMembership) {
+    if (!ownedClubIds.has(membership.clubId)) {
+      showError(t('notClubOwner'));
+      return;
+    }
+
     if (profile.id === currentUserId) {
-      setError(t('selfRemoveBlocked'));
+      showError(t('selfRemoveBlocked'));
       return;
     }
 
     if (membership.role === 'owner' && ownerCountForClub(membership.clubId) <= 1) {
-      setError(t('lastOwnerBlocked'));
+      showError(t('lastOwnerBlocked'));
       return;
     }
 
@@ -392,23 +470,29 @@ export default function TeamPageClient() {
     if (!confirmed) return;
 
     setSavingId(`${profile.id}:${membership.clubId}:remove`);
-    setError('');
 
-    const supabase = createClient();
-    const { error: deleteError } = await supabase
-      .from('club_memberships')
-      .delete()
-      .eq('club_id', membership.clubId)
-      .eq('user_id', profile.id);
+    try {
+      const supabase = createClient();
+      const { error: deleteError } = await supabase
+        .from('club_memberships')
+        .delete()
+        .eq('club_id', membership.clubId)
+        .eq('user_id', profile.id);
 
-    setSavingId(null);
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
+      if (deleteError) {
+        console.error('Failed to remove club access', deleteError);
+        showError(t('saveError'));
+        return;
+      }
+
+      showToast(t('removed'));
+      await loadProfiles({ silent: true });
+    } catch (saveError) {
+      console.error('Failed to remove club access', saveError);
+      showError(t('saveError'));
+    } finally {
+      setSavingId(null);
     }
-
-    showToast(t('removed'));
-    await loadProfiles({ silent: true });
   }
 
   async function updateMembershipFeatureAccess(
@@ -419,13 +503,13 @@ export default function TeamPageClient() {
   ) {
     const definition = FEATURE_DEFINITIONS.find((feature) => feature.key === featureKey);
     if (membership.role === 'owner' || (definition && 'ownerOnly' in definition && definition.ownerOnly)) return;
+    if (!ownedClubIds.has(membership.clubId)) return;
 
     const currentAccess = featureAccessForMembership(membership.role, membership.featureAccess);
     const nextAccess = updateFeatureAccessSelection(currentAccess, featureKey, enabled);
     const membershipSavingId = `${profile.id}:${membership.clubId}:features`;
 
     setSavingId(membershipSavingId);
-    setError('');
     setProfiles((current) => current.map((member) => member.id !== profile.id
       ? member
       : {
@@ -435,29 +519,39 @@ export default function TeamPageClient() {
             : item),
         }));
 
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from('club_memberships')
-      .update({ feature_access: nextAccess, updated_at: new Date().toISOString() })
-      .eq('club_id', membership.clubId)
-      .eq('user_id', profile.id);
+    const rollback = () => setProfiles((current) => current.map((member) => member.id !== profile.id
+      ? member
+      : {
+          ...member,
+          memberships: member.memberships.map((item) => item.clubId === membership.clubId
+            ? { ...item, featureAccess: membership.featureAccess }
+            : item),
+        }));
 
-    setSavingId(null);
-    if (updateError) {
-      setProfiles((current) => current.map((member) => member.id !== profile.id
-        ? member
-        : {
-            ...member,
-            memberships: member.memberships.map((item) => item.clubId === membership.clubId
-              ? { ...item, featureAccess: membership.featureAccess }
-              : item),
-          }));
-      setError(updateError.message);
-      return;
+    try {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from('club_memberships')
+        .update({ feature_access: nextAccess, updated_at: new Date().toISOString() })
+        .eq('club_id', membership.clubId)
+        .eq('user_id', profile.id);
+
+      if (updateError) {
+        console.error('Failed to update feature access', updateError);
+        rollback();
+        showError(t('saveError'));
+        return;
+      }
+
+      showToast(t('featureAccessSaved'));
+      if (profile.id === currentUserId) await refreshClubs();
+    } catch (saveError) {
+      console.error('Failed to update feature access', saveError);
+      rollback();
+      showError(t('saveError'));
+    } finally {
+      setSavingId(null);
     }
-
-    showToast(t('featureAccessSaved'));
-    if (profile.id === currentUserId) await refreshClubs();
   }
 
   function renderAccessControls(profile: TeamMember, buttonLabel: string) {
@@ -466,10 +560,11 @@ export default function TeamPageClient() {
     const saving = isSavingProfile(profile.id);
 
     if (availableClubs.length === 0) {
+      const ownsAnyOtherClub = clubs.some((club) => ownedClubIds.has(club.id));
       return (
         <div className="flex items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-500">
           <ShieldCheck size={16} className="text-success-500" aria-hidden="true" />
-          {t('allClubsAdded')}
+          {ownsAnyOtherClub ? t('allClubsAdded') : t('noOwnedClubs')}
         </div>
       );
     }
@@ -514,62 +609,70 @@ export default function TeamPageClient() {
     const membershipId = `${profile.id}:${membership.clubId}`;
     const featureAccess = featureAccessForMembership(membership.role, membership.featureAccess);
     const savingFeatures = savingId === `${membershipId}:features`;
+    const canManage = ownedClubIds.has(membership.clubId);
 
     return (
       <div className="border-t border-gray-200/70 pt-5">
-        <div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-600">
-                <ShieldCheck size={16} className="text-primary-600" aria-hidden="true" />
-                {t('pageAccess')}
-              </div>
-              <p className="mt-1 text-sm text-gray-500">
-                {membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
-              </p>
-            </div>
-            <Badge variant="outline" icon={<Building2 size={13} aria-hidden="true" />}>{membership.clubName}</Badge>
-          </div>
+        <SectionHeading
+          as="h3"
+          size="sm"
+          icon={<ShieldCheck size={16} aria-hidden="true" />}
+          iconClassName="h-8 w-8"
+          title={t('pageAccess')}
+          description={membership.role === 'owner' ? t('ownerFeatureAccessHelp') : t('featureAccessHelp')}
+          action={<Badge variant="outline" icon={<Building2 size={13} aria-hidden="true" />}>{membership.clubName}</Badge>}
+        />
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {FEATURE_DEFINITIONS.map((feature) => {
-              const ownerOnly = 'ownerOnly' in feature && feature.ownerOnly;
-              const disabled = savingFeatures || isSavingProfile(profile.id) || membership.role === 'owner' || ownerOnly;
-              const checked = membership.role === 'owner'
-                ? true
-                : !ownerOnly && featureAccess.includes(feature.key);
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {FEATURE_DEFINITIONS.map((feature) => {
+            const ownerOnly = 'ownerOnly' in feature && feature.ownerOnly;
+            const disabled = savingFeatures || isSavingProfile(profile.id) || membership.role === 'owner' || ownerOnly || !canManage;
+            const checked = membership.role === 'owner'
+              ? true
+              : !ownerOnly && featureAccess.includes(feature.key);
 
-              return (
-                <label
-                  key={feature.key}
-                  className={cn(
-                    'flex min-h-[76px] gap-3 rounded-xl border p-3 transition focus-within:ring-2 focus-within:ring-primary-500',
-                    checked ? 'border-primary-300 bg-primary-50/50' : 'border-gray-200 bg-white',
-                    disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-primary-300',
-                  )}
-                  title={ownerOnly && membership.role !== 'owner' ? t('features.teamDescription') : undefined}
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 flex-none accent-primary-600"
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={(event) => updateMembershipFeatureAccess(profile, membership, feature.key, event.target.checked)}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-bold text-gray-900">{t(`features.${feature.labelKey}`)}</span>
-                    <span className="mt-0.5 block text-xs leading-5 text-gray-500">{t(`features.${feature.descriptionKey}`)}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
+            return (
+              <Checkbox
+                key={feature.key}
+                variant="card"
+                className="min-h-[76px]"
+                checked={checked}
+                disabled={disabled}
+                onChange={(event) => updateMembershipFeatureAccess(profile, membership, feature.key, event.target.checked)}
+                label={t(`features.${feature.labelKey}`)}
+                description={(
+                  <>
+                    {t(`features.${feature.descriptionKey}`)}
+                    {ownerOnly && membership.role !== 'owner' && (
+                      <span className="mt-1 flex items-center gap-1 font-medium text-gray-600">
+                        <Lock size={12} aria-hidden="true" />
+                        {t('ownerOnlyFeature')}
+                      </span>
+                    )}
+                  </>
+                )}
+              />
+            );
+          })}
         </div>
       </div>
     );
   }
 
+  if (accessDenied) {
+    return (
+      <Card>
+        <EmptyState icon={Lock} title={tc('accessDeniedTitle')} description={tc('accessDeniedDescription')} />
+      </Card>
+    );
+  }
+
   if (!authorized) {
+    if (error) {
+      return (
+        <InlineAlert variant="danger">{error}</InlineAlert>
+      );
+    }
     return <TableSkeleton rows={6} columns={4} />;
   }
 
@@ -579,37 +682,44 @@ export default function TeamPageClient() {
         title={t('title')}
         description={t('description')}
         action={(
-          <Button variant="outline" disabled={loading || Boolean(savingId)} onClick={() => loadProfiles()} icon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden="true" />}>
+          <Button variant="outline" disabled={loading || Boolean(savingId)} onClick={() => void loadProfiles()} icon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} aria-hidden="true" />}>
             {t('refresh')}
           </Button>
         )}
       />
 
-      {error && <InlineAlert variant="danger" className="mb-4">{error}</InlineAlert>}
+      {error && (
+        <InlineAlert
+          variant="danger"
+          className="mb-4"
+          action={<Button variant="outline" size="sm" disabled={loading} onClick={() => void loadProfiles()}>{tc('retry')}</Button>}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
       {loading ? (
         <TableSkeleton rows={7} columns={4} />
       ) : (
         <div className="space-y-6">
           {pendingProfiles.length > 0 && (
-            <Card as="section" padding="none" tone="warning" className="overflow-hidden rounded-2xl bg-amber-50/40">
-              <div className="flex items-center justify-between px-4 py-3 sm:px-5">
-                <div className="flex items-center gap-2.5">
-                  <UserPlus size={17} className="text-amber-600" aria-hidden="true" />
-                  <h2 className="text-sm font-bold text-amber-950">{t('pendingApproval')}</h2>
-                </div>
-                <Badge variant="warning" className="bg-white">{pendingProfiles.length}</Badge>
-              </div>
-              <div className="divide-y divide-amber-100">
+            <Card as="section" padding="none" tone="warning" className="overflow-hidden rounded-2xl">
+              <SectionHeading
+                size="sm"
+                className="px-4 py-3 sm:px-5"
+                icon={<UserPlus size={17} aria-hidden="true" />}
+                iconClassName="h-8 w-8 bg-white text-warning-600"
+                title={t('pendingApproval')}
+                badge={<Badge variant="warning" className="bg-white">{pendingProfiles.length}</Badge>}
+              />
+              <div className="divide-y divide-warning-50">
                 {pendingProfiles.map((profile) => (
                   <div
                     key={profile.id}
                     className="grid gap-4 bg-white p-4 sm:px-5 lg:grid-cols-[minmax(240px,1fr)_minmax(440px,1.5fr)] lg:items-center"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gray-950 text-sm font-black text-white">
-                        {initials(profile.full_name)}
-                      </span>
+                      <Avatar name={profile.full_name} tone="neutral" />
                       <div className="min-w-0">
                         <p className="truncate font-bold text-gray-950">{profile.full_name}</p>
                         {profile.email && <p className="truncate text-xs text-gray-500">{profile.email}</p>}
@@ -672,19 +782,13 @@ export default function TeamPageClient() {
                       const saving = isSavingProfile(profile.id);
                       const protectedOwner = membership.role === 'owner'
                         && (profile.id === currentUserId || ownerCountForClub(membership.clubId) <= 1);
-                      const roleStyle = membership.role === 'owner'
-                        ? 'bg-amber-50 text-amber-800 ring-amber-200/70'
-                        : membership.role === 'admin'
-                          ? 'bg-primary-50 text-primary-700 ring-primary-200/70'
-                          : 'bg-gray-100 text-gray-600 ring-gray-200/70';
+                      const canManage = ownedClubIds.has(membership.clubId);
 
                       return (
                         <article key={profile.id} className={expanded ? 'bg-primary-50/20' : 'bg-white'}>
                           <div className="grid items-center gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_148px] lg:gap-5">
                             <div className="flex min-w-0 items-center gap-3">
-                              <span className={`flex h-11 w-11 flex-none items-center justify-center rounded-2xl text-sm font-bold ring-1 ring-inset ${roleStyle}`}>
-                                {initials(profile.full_name)}
-                              </span>
+                              <Avatar name={profile.full_name} tone={membership.role === 'viewer' ? 'neutral' : 'primary'} />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
                                   <h3 className="break-words text-sm font-bold text-gray-950">{profile.full_name}</h3>
@@ -698,9 +802,9 @@ export default function TeamPageClient() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <Building2 size={15} className="shrink-0 text-gray-400" aria-hidden="true" />
                                 <span className="break-words text-sm font-medium text-gray-800">{membership.clubName}</span>
-                                <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${roleStyle}`}>
+                                <Badge size="sm" variant={ROLE_BADGE_VARIANT[membership.role]}>
                                   {t(`roles.${membership.role}`)}
-                                </span>
+                                </Badge>
                               </div>
                               <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[23px] text-xs text-gray-500">
                                 {featureAccessAvailable && <span>{membership.role === 'owner' ? t('allPages') : t('enabledPages', { count: accessCount })}</span>}
@@ -728,13 +832,14 @@ export default function TeamPageClient() {
 
                           {expanded && (
                             <div id={`member-access-${profile.id}`} className="border-t border-primary-100 bg-gray-50/80 px-4 py-5 sm:px-5">
-                              <div className="mb-5 flex items-start justify-between gap-3">
-                                <div>
-                                  <h4 className="text-sm font-bold text-gray-900">{t('accessSettings')}</h4>
-                                  <p className="mt-1 text-xs text-gray-500">{t('autoSave')}</p>
-                                </div>
-                                <IconButton variant="ghost" size="sm" label={t('hideAccess')} icon={<X size={17} />} onClick={() => setExpandedMemberId(null)} />
-                              </div>
+                              <SectionHeading
+                                as="h3"
+                                size="sm"
+                                className="mb-5"
+                                title={t('accessSettings')}
+                                description={canManage ? t('autoSave') : t('notClubOwner')}
+                                action={<IconButton variant="ghost" size="sm" label={t('hideAccess')} icon={<X size={17} />} onClick={() => setExpandedMemberId(null)} />}
+                              />
                               <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
                                 <Field label={t('gameClubs')} htmlFor={`member-club-${profile.id}`}>
                                   <Select
@@ -753,13 +858,13 @@ export default function TeamPageClient() {
                                 <Field
                                   label={t('memberRole')}
                                   htmlFor={`member-role-${profile.id}`}
-                                  hint={protectedOwner ? (profile.id === currentUserId ? t('selfDemoteBlocked') : t('lastOwnerBlocked')) : t('autoSave')}
+                                  hint={!canManage ? t('notClubOwner') : protectedOwner ? (profile.id === currentUserId ? t('selfDemoteBlocked') : t('lastOwnerBlocked')) : t('autoSave')}
                                 >
                                   <Select
                                     id={`member-role-${profile.id}`}
                                     className="font-medium"
                                     value={membership.role}
-                                    disabled={saving || protectedOwner}
+                                    disabled={saving || protectedOwner || !canManage}
                                     onChange={(event) => updateMembershipRole(profile, membership, event.target.value as UserRole)}
                                   >
                                     {ROLES.map((role) => <option key={role} value={role}>{t(`roles.${role}`)}</option>)}
@@ -787,13 +892,13 @@ export default function TeamPageClient() {
                               {featureAccessAvailable && renderFeatureAccessPanel(profile, membership)}
                               <div className="mt-5 flex flex-col gap-3 border-t border-gray-200/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
                                 <p className="text-xs leading-5 text-gray-500">
-                                  {profile.id === currentUserId ? t('selfRemoveBlocked') : protectedOwner ? t('lastOwnerBlocked') : t('removeAccessHelp', { club: membership.clubName })}
+                                  {!canManage ? t('notClubOwner') : profile.id === currentUserId ? t('selfRemoveBlocked') : protectedOwner ? t('lastOwnerBlocked') : t('removeAccessHelp', { club: membership.clubName })}
                                 </p>
                                 <Button
                                   variant="dangerOutline"
                                   size="sm"
                                   className="shrink-0"
-                                  disabled={saving || profile.id === currentUserId || protectedOwner}
+                                  disabled={saving || profile.id === currentUserId || protectedOwner || !canManage}
                                   onClick={() => removeClubAccess(profile, membership)}
                                   aria-label={t('removeClubAccess', { club: membership.clubName })}
                                   icon={<Trash2 size={15} aria-hidden="true" />}

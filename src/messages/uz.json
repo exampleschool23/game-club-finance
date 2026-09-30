@@ -104,6 +104,10 @@
     "totalDeductions": "Jami chegirmalar",
     "expandAll": "Barchasini ochish",
     "collapseAll": "Barchasini yopish",
+    "loadErrorDashboard": "Boshqaruv paneli ma'lumotlarini yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
+    "monthlyChartLoadError": "Oylik daromad tarixini yuklab bo'lmadi.",
+    "noDeductionsForDay": "Bu kunda ayirmalar yo'q",
+    "chartLegendLabel": "{title}: shartli belgilar",
     "details": "Batafsil",
     "backToDashboard": "Bosh sahifaga qaytish",
     "noBarMoneyData": "Bu davr uchun bar hisob-kitob ma'lumotlari yo'q",
@@ -204,7 +208,10 @@
     "expenseCategories": "Xarajatlar",
     "allExpenses": "Barcha xarajatlar",
     "noData": "Bu davr uchun hisobot ma'lumoti yo'q",
-    "salaryPaymentProtected": "Ish haqi to‘lovlari xodim tarixining bir qismi bo‘lib, ularni o‘chirib bo‘lmaydi."
+    "salaryPaymentProtected": "Ish haqi to‘lovlari xodim tarixining bir qismi bo‘lib, ularni o‘chirib bo‘lmaydi.",
+    "loadError": "Hisobotni yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
+    "deleteError": "Yozuvni o'chirib bo'lmadi. Qayta urinib ko'ring.",
+    "deleteEntryConfirmDetailed": "{date} sanasidagi «{category}» ({type}, {amount}) o'chirilsinmi? Bu amalni qaytarib bo'lmaydi."
   },
   "dailyCash": {
     "title": "Kunlik kassa",
@@ -256,7 +263,12 @@
     "entryUpdated": "Yozuv yangilandi.",
     "entrySaved": "Yozuv saqlandi.",
     "entryDeleted": "Yozuv o'chirildi.",
-    "deleteConfirm": "Ushbu kunlik kassa yozuvi oʻchirilsinmi? Bar savdosi va xarajatlarga taʼsir qilmaydi."
+    "deleteConfirm": "Ushbu kunlik kassa yozuvi oʻchirilsinmi? Bar savdosi va xarajatlarga taʼsir qilmaydi.",
+    "deleteConfirmDetailed": "{date} sanasidagi kunlik kassa yozuvi ({amount}) oʻchirilsinmi? Bar savdosi va xarajatlarga taʼsir qilmaydi.",
+    "loadError": "Kunlik kassa yozuvini yuklab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.",
+    "saveError": "Yozuvni saqlab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.",
+    "duplicateEntryError": "Bu sana uchun yozuv allaqachon mavjud. Uni tahrirlash uchun sahifani yangilang.",
+    "deleteError": "Yozuvni oʻchirib boʻlmadi. Qayta urinib koʻring."
   },
   "closingStock": {
     "viewerReadOnlyTitle": "Faqat koʻrish",
@@ -521,6 +533,9 @@
     "success": "Xarajat saqlandi",
     "deleteSuccess": "Xarajat o'chirildi",
     "deleteConfirm": "Bu xarajat o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.",
+    "saveError": "Xarajatni saqlab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
+    "paymentMethodUnavailable": "Bu klub uchun birorta ham to'lov usuli yoqilmagan. Egasidan uni Sozlamalarda yoqishni so'rang.",
+    "futureDateError": "Xarajatni kelgusi ish sanasiga saqlab bo'lmaydi.",
     "recentExpenses": "So'nggi xarajatlar",
     "todaySpend": "Bugungi xarajat",
     "todayEntries": "Bugungi yozuvlar",
@@ -581,7 +596,13 @@
     "debtSaved": "Qarz saqlandi",
     "paymentSaved": "Toʻlov qayd etildi",
     "showPaid": "Toʻlanganlarni koʻrsatish",
-    "hidePaid": "Toʻlanganlarni yashirish"
+    "hidePaid": "Toʻlanganlarni yashirish",
+    "outstanding": "To‘lanmagan va qisman to‘langan",
+    "loadError": "Qarzlarni yuklab bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.",
+    "saveError": "Saqlab bo‘lmadi. Internet aloqasi va kirish huquqini tekshirib, qayta urinib ko‘ring.",
+    "paymentsLoadError": "To‘lovlar tarixini yuklab bo‘lmadi.",
+    "paymentsLoading": "To‘lovlar tarixi yuklanmoqda…",
+    "clubChanged": "Tanlangan klub o‘zgardi. Formani yopib, qayta oching."
   },
   "dailyReport": {
     "title": "Kunlik hisobot",
@@ -608,7 +629,8 @@
     "profit": "Foyda",
     "grossProfit": "Yalpi foyda",
     "expensesList": "Xarajatlar",
-    "noData": "Bu sana uchun ma'lumot yo'q"
+    "noData": "Bu sana uchun ma'lumot yo'q",
+    "loadError": "Kunlik hisobotni yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring."
   },
   "monthlyReport": {
     "title": "Oylik hisobot",
@@ -629,7 +651,8 @@
     "expenses": "Xarajatlar",
     "profit": "Foyda",
     "totals": "Jami",
-    "noData": "Bu oy uchun ma'lumot yo'q"
+    "noData": "Bu oy uchun ma'lumot yo'q",
+    "loadError": "Oylik hisobotni yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring."
   },
   "settings": {
     "migrationHealth": {
@@ -688,7 +711,9 @@
     "paymentMethodsOwnerOnly": "Bu sozlamani faqat ownerlar o'zgartira oladi.",
     "enabled": "Yoqilgan",
     "disabled": "O'chirilgan",
-    "paymentMethodsHint": "O'zgarishlar saqlangandan keyin qo'llanadi."
+    "paymentMethodsHint": "O'zgarishlar saqlangandan keyin qo'llanadi.",
+    "saveError": "Saqlab bo‘lmadi. Internet aloqasi va egasi huquqlarini tekshirib, qayta urinib ko‘ring.",
+    "accountLoadError": "Hisob ma’lumotlarini yuklab bo‘lmadi. Qayta urinish uchun sahifani yangilang."
   },
   "team": {
     "title": "Jamoa",
@@ -775,7 +800,18 @@
     "accessSettings": "Kirish sozlamalari",
     "autoSave": "Rol va bo‘limlarga kirish huquqlari avtomatik saqlanadi.",
     "memberRole": "Ushbu klubdagi rol",
-    "removeAccessHelp": "Bu a’zoning {club} klubiga kirish huquqini olib tashlash."
+    "removeAccessHelp": "Bu a’zoning {club} klubiga kirish huquqini olib tashlash.",
+    "loadError": "Jamoa a’zolarini yuklab bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.",
+    "saveError": "Kirish huquqini o‘zgartirib bo‘lmadi. Internet aloqasi va egasi huquqlarini tekshirib, qayta urinib ko‘ring.",
+    "notClubOwner": "Faqat ko‘rish: siz bu klubning egasi emassiz.",
+    "noOwnedClubs": "Siz egasi bo‘lgan boshqa klublar yo‘q.",
+    "ownerOnlyFeature": "Faqat egalar uchun — boshqa rollarga berib bo‘lmaydi.",
+    "promoteOwnerTitle": "A’zoni ega qilasizmi?",
+    "promoteOwnerConfirm": "{name} {club} klubini to‘liq boshqarish huquqini oladi: jamoa kirishi, sozlamalar va egasining pullari.",
+    "promoteOwnerAction": "Ega qilish",
+    "demoteOwnerTitle": "Egalik huquqini olib tashlaysizmi?",
+    "demoteOwnerConfirm": "{name} endi {club} klubining egasi bo‘lmaydi va «{role}» roliga o‘tadi.",
+    "demoteOwnerAction": "Rolni o‘zgartirish"
   },
   "approval": {
     "title": "Owner tasdig'i kutilmoqda",
@@ -791,7 +827,9 @@
     "loginError": "Noto'g'ri email yoki parol",
     "title": "Tizimga kirish",
     "or": "yoki",
-    "loginWithGoogle": "Google orqali kirish"
+    "loginWithGoogle": "Google orqali kirish",
+    "oauthError": "Google orqali kirish yakunlanmadi. Qayta urinib ko‘ring.",
+    "networkError": "Serverga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring."
   },
   "moneyTaken": {
     "earnedBeforeWithdrawals": "Pul yechishdan oldingi daromad",
@@ -834,7 +872,11 @@
     "recordedAt": "Yozilgan: {date}",
     "historyTitle": "Olingan foyda tarixi",
     "historyDescription": "Har bir olingan foyda tanlangan oyga biriktiriladi va operatsion xarajatlardan alohida yuritiladi.",
-    "noHistory": "Hali foyda olinmagan."
+    "noHistory": "Hali foyda olinmagan.",
+    "loadError": "Egasi foydasi qoldiqlarini yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
+    "saveError": "Pul olishni qayd etib bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.",
+    "deleteError": "Pul olish yozuvini o'chirib bo'lmadi. Qayta urinib ko'ring.",
+    "deleteConfirmDetailed": "{month} uchun {amount} ({source}) pul olish yozuvi o'chirilsinmi? Miqdor shu oyning mavjud qoldig'iga qaytadi."
   },
   "calendar": {
     "selectDate": "Sanani tanlang",
@@ -1013,7 +1055,13 @@
     "deactivate": "Faolsizlantirish",
     "deactivated": "Xodim faolsizlantirildi. Tarix va to‘lanmagan qoldiq saqlandi.",
     "changeRole": "Lavozimni o‘zgartirish",
-    "lastRateHelp": "Kamida bitta ish haqi stavkasi saqlanishi kerak. Xodim sozlamalarini o‘zgartiring yoki uni faolsizlantiring."
+    "lastRateHelp": "Kamida bitta ish haqi stavkasi saqlanishi kerak. Xodim sozlamalarini o‘zgartiring yoki uni faolsizlantiring.",
+    "deactivateConfirm": "Bugundan boshlab {name} uchun maosh va KPI hisoblanmaydi. Oldingi tarix va to‘lanmagan qoldiq saqlanadi.",
+    "noClubTitle": "Klub tanlanmagan",
+    "noClubDescription": "Xodimlar va maoshlarni ko‘rish uchun klubni tanlang.",
+    "noRates": "Hozircha maosh stavkalari yo‘q.",
+    "permissionError": "Bu klubda maoshlarni o‘zgartirishga huquqingiz yo‘q. Klub egasidan maoshlarni tahrirlash huquqini so‘rang.",
+    "checkError": "Qiymatlar qabul qilinmadi. Summa, foiz va sanani tekshirib, qayta urinib ko‘ring."
   },
   "testChecklist": {
     "title": "Tizim tekshiruvlari",
@@ -1042,6 +1090,11 @@
     "debtsFail": "{count} qarzda manfiy qoldiq bor.",
     "expenses": "Barcha xarajatlar musbat",
     "expensesOk": "Bugungi barcha {count} xarajat toʻgʻri.",
-    "expensesFail": "{count} xarajat nol yoki manfiy."
+    "expensesFail": "{count} xarajat nol yoki manfiy.",
+    "loadErrorTitle": "Tekshiruvlarni bajarib bo‘lmadi",
+    "loadErrorDescription": "Ba’zi ma’lumotlar yuklanmadi, shuning uchun natijalar ko‘rsatilmadi. Bu tekshiruv xatosi emas. Qayta urinib ko‘ring.",
+    "retry": "Qayta urinish",
+    "passed": "O‘tdi",
+    "failed": "O‘tmadi"
   }
 }

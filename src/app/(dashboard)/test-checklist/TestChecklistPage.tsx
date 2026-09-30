@@ -2,15 +2,15 @@
 
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { getTranslations } from 'next-intl/server';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { Badge, ButtonLink, Card, InlineAlert, PageHeader } from '@/components/PresentationFoundation';
+import { Badge, ButtonLink, Card, EmptyState, InlineAlert, PageHeader } from '@/components/PresentationFoundation';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { calculateBarMoney } from '@/lib/calculations/barMoney';
 import { calculateRemainingDebt } from '@/lib/calculations/debt';
 import { todayIso } from '@/lib/utils';
-import { formatNumber } from '@/lib/formatters';
+import { formatDateOnly, formatNumber } from '@/lib/formatters';
 
 interface CheckResult {
   name: string;
@@ -25,7 +25,7 @@ export default async function TestChecklistPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-  const t = await getTranslations('testChecklist');
+  const [t, locale] = await Promise.all([getTranslations('testChecklist'), getLocale()]);
 
   const { data: memberships } = await supabase
     .from('club_memberships')
@@ -57,6 +57,25 @@ export default async function TestChecklistPage() {
     supabase.from('expenses').select('*').eq('club_id', clubId).eq('date', today),
     supabase.from('new_debts').select('*').eq('club_id', clubId).neq('status', 'paid'),
   ]);
+
+  const queryError = cashRes.error ?? stockRes.error ?? purchaseRes.error ?? expenseRes.error ?? debtRes.error;
+  if (queryError) {
+    // A failed query must not be reported as a failed check.
+    console.error('Test checklist query failed', queryError);
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <PageHeader title={t('title')} description={t('subtitle', { date: formatDateOnly(today, locale) })} className="mb-0" />
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            title={t('loadErrorTitle')}
+            description={t('loadErrorDescription')}
+            action={<ButtonLink href="/test-checklist" variant="outline">{t('retry')}</ButtonLink>}
+          />
+        </Card>
+      </div>
+    );
+  }
 
   const cashEntry = cashRes.data;
   const stockRows = stockRes.data ?? [];
@@ -157,7 +176,7 @@ export default async function TestChecklistPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
-      <PageHeader title={t('title')} description={t('subtitle', { date: today })} className="mb-0" />
+      <PageHeader title={t('title')} description={t('subtitle', { date: formatDateOnly(today, locale) })} className="mb-0" />
 
       <InlineAlert variant={allPass ? 'success' : 'warning'}>
         {allPass ? t('allPassed', { count: checks.length }) : t('somePassed', { passed: passCount, count: checks.length })}
@@ -165,15 +184,15 @@ export default async function TestChecklistPage() {
 
       <div className="space-y-3">
         {checks.map((check) => (
-          <Card key={check.name} className={check.pass ? 'border-success-100' : 'border-red-200 bg-red-50'}>
+          <Card key={check.name} className={check.pass ? undefined : 'border-danger-500/30 bg-danger-50'}>
             <div className="flex items-start gap-3">
               {check.pass
                 ? <CheckCircle size={20} className="mt-0.5 shrink-0 text-success-500" aria-hidden="true" />
                 : <XCircle size={20} className="mt-0.5 shrink-0 text-danger-500" aria-hidden="true" />}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className={`font-semibold ${check.pass ? 'text-gray-900' : 'text-red-800'}`}>{check.name}</p>
-                  <Badge variant={check.pass ? 'success' : 'danger'} size="sm">{check.pass ? 'OK' : '!'}</Badge>
+                  <p className={`font-semibold ${check.pass ? 'text-gray-900' : 'text-danger-600'}`}>{check.name}</p>
+                  <Badge variant={check.pass ? 'success' : 'danger'} size="sm">{check.pass ? t('passed') : t('failed')}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-gray-600">{check.explanation}</p>
                 <ButtonLink href={check.link} variant="ghost" size="sm" className="mt-2 -ml-3 text-primary-700">{t('goToPage')}</ButtonLink>

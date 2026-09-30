@@ -105,3 +105,47 @@ export function validateEditWindow(opts: {
 export function validateAll(...results: ValidationResult[]): ValidationResult {
   return results.find((r) => !r.valid) ?? ok();
 }
+
+export type DatabaseWriteErrorKind = 'permission' | 'check' | 'unknown';
+
+/**
+ * Maps well-known Postgres error codes from a failed write to a coarse kind so
+ * pages can show a translated message instead of the raw database text.
+ * 42501 = insufficient_privilege (RLS / role checks), 23514 = check_violation.
+ */
+export function classifyDatabaseWriteError(error: unknown): DatabaseWriteErrorKind {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+  if (code === '42501') return 'permission';
+  if (code === '23514') return 'check';
+  return 'unknown';
+}
+
+/** Cookie that carries the post-login destination across the OAuth round trip. */
+export const LOGIN_NEXT_COOKIE = 'gcf-login-next';
+
+const REDIRECT_PROBE_ORIGIN = 'http://redirect.invalid';
+
+/**
+ * Returns a same-origin, path-only redirect target, or null when the value is
+ * unsafe (absolute or protocol-relative URL, backslashes, control characters)
+ * or would loop back into the login flow.
+ */
+export function safeRedirectPath(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) return null;
+  if (!value.startsWith('/') || value.startsWith('//')) return null;
+  // Browsers treat "\" like "/", so "/\evil.com" would be protocol-relative.
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return null;
+
+  let url: URL;
+  try {
+    url = new URL(value, REDIRECT_PROBE_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (url.origin !== REDIRECT_PROBE_ORIGIN) return null;
+  if (url.pathname === '/login' || url.pathname.startsWith('/login/') || url.pathname.startsWith('/auth/')) return null;
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
