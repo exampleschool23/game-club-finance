@@ -16,11 +16,11 @@ import { formatCurrencyInput } from '@/lib/formatters';
 
 /** Shared text-control styling; exported so bespoke controls can match it. */
 export const controlClassName =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition ' +
-  'placeholder:text-gray-400 hover:border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 ' +
-  'disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 aria-[invalid=true]:border-danger-500 aria-[invalid=true]:focus:ring-danger-500/20';
+  'w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm text-gray-900 outline-none transition ' +
+  'placeholder:text-gray-400 hover:border-gray-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/15 ' +
+  'disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 aria-[invalid=true]:border-danger-500 aria-[invalid=true]:focus:ring-danger-500/15';
 
-export const labelClassName = 'mb-1.5 block text-sm font-semibold text-gray-700';
+export const labelClassName = 'mb-1.5 block text-[13px] font-medium text-gray-700';
 
 export interface FieldProps {
   label?: ReactNode;
@@ -47,7 +47,7 @@ export function Field({ label, htmlFor, required, hint, error, labelAddon, child
       )}
       {children}
       {error ? (
-        <p role="alert" className="mt-1.5 text-xs font-semibold text-danger-600">{error}</p>
+        <p role="alert" className="mt-1.5 text-xs font-medium text-danger-600">{error}</p>
       ) : hint ? (
         <p className="mt-1.5 text-xs leading-5 text-gray-500">{hint}</p>
       ) : null}
@@ -90,7 +90,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       )}
       {control}
       {trailingAddon && (
-        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-bold uppercase tracking-wide text-gray-500">
+        <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-xs font-medium text-gray-500">
           {trailingAddon}
         </span>
       )}
@@ -238,11 +238,11 @@ export function Checkbox({ label, description, variant = 'plain', className, id,
       className={cn(
         'flex cursor-pointer items-start gap-2.5 text-sm text-gray-700 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-70',
         card &&
-          'min-h-11 rounded-xl border border-gray-200 bg-white px-3.5 py-3 transition hover:border-primary-300 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500',
+          'min-h-11 rounded-xl border border-gray-200 bg-white px-3.5 py-3 transition hover:border-gray-300 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50/60 has-[:checked]:ring-1 has-[:checked]:ring-primary-500 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500',
         className,
       )}
     >
-      <input id={id} type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary-600" {...rest} />
+      <input id={id} type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 accent-primary-600" {...rest} />
       <span className="min-w-0">
         <span className="block font-medium text-gray-800">{label}</span>
         {description && <span className="mt-0.5 block text-xs leading-5 text-gray-500">{description}</span>}

@@ -39,7 +39,7 @@ export function SearchInput({
         placeholder={placeholder}
         aria-label={label ?? placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className={cn(controlClassName, controlSize === 'sm' ? 'h-10' : 'h-11', 'pl-10 pr-9 [&::-webkit-search-cancel-button]:hidden')}
+        className={cn(controlClassName, controlSize === 'sm' ? 'h-10' : 'h-11', 'pl-10 pr-9 rounded-xl [&::-webkit-search-cancel-button]:hidden')}
       />
       {value && !disabled && (
         <button

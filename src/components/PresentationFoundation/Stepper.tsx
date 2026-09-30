@@ -65,11 +65,11 @@ export function Stepper({
         onWheel={(event) => event.currentTarget.blur()}
         onChange={(event) => onChange(event.target.value.replace(/\D/g, ''))}
         className={cn(
-          'rounded-lg border bg-white text-center font-bold tabular-nums text-gray-900 outline-none transition focus:ring-2 disabled:bg-gray-50 disabled:text-gray-400',
+          'rounded-xl border bg-white text-center font-bold tabular-nums text-gray-900 outline-none transition focus:ring-2 disabled:bg-gray-50 disabled:text-gray-400',
           size === 'sm' ? 'h-8 w-14 text-base sm:text-sm' : 'h-10 w-20 text-base sm:text-sm',
           invalid
             ? 'border-danger-400 text-danger-600 focus:ring-danger-200'
-            : 'border-gray-200 focus:border-primary-500 focus:ring-primary-100',
+            : 'border-gray-200 focus:border-primary-500 focus:ring-primary-500/15',
         )}
       />
       <IconButton

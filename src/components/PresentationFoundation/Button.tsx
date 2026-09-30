@@ -17,22 +17,31 @@ export type ButtonVariant =
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 const baseClasses =
-  'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-semibold transition ' +
+  'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-150 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ' +
-  'disabled:cursor-not-allowed disabled:opacity-50';
+  'active:enabled:scale-[0.98] disabled:cursor-not-allowed';
 
+// Disabled state is a distinct grey, not a faded copy of the enabled style,
+// so a form's "nothing to save yet" is readable at a glance.
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-primary-600 text-white shadow-sm hover:bg-primary-700',
-  secondary: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
-  outline: 'border border-gray-200 bg-white text-gray-800 shadow-sm hover:border-gray-300 hover:bg-gray-50',
-  ghost: 'text-gray-700 hover:bg-gray-100',
-  danger: 'bg-danger-500 text-white shadow-sm hover:bg-danger-600 focus-visible:ring-danger-500',
-  dangerOutline: 'border border-danger-500/30 bg-white text-danger-600 hover:bg-danger-50 focus-visible:ring-danger-500',
-  success: 'bg-success-600 text-white shadow-sm hover:bg-success-500',
+  primary:
+    'bg-primary-600 text-white shadow-sm hover:bg-primary-700 disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none',
+  secondary:
+    'bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400',
+  outline:
+    'border border-gray-200 bg-white text-gray-800 shadow-sm hover:border-gray-300 hover:bg-gray-50 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400 disabled:shadow-none',
+  ghost:
+    'text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:text-gray-400 disabled:hover:bg-transparent',
+  danger:
+    'bg-danger-600 text-white shadow-sm hover:bg-danger-700 focus-visible:ring-danger-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none',
+  dangerOutline:
+    'border border-danger-100 bg-white text-danger-600 hover:border-danger-400 hover:bg-danger-50 focus-visible:ring-danger-500 disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400',
+  success:
+    'bg-success-600 text-white shadow-sm hover:bg-success-700 focus-visible:ring-success-500 disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'min-h-9 px-3 text-xs',
+  sm: 'min-h-9 px-3 text-[13px]',
   md: 'min-h-11 px-4 text-sm',
   lg: 'min-h-12 px-5 text-base',
 };

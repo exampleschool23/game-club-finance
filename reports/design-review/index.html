@@ -1,0 +1,629 @@
+<title>Game Club Finance Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: a single reading column for the review, wide "screen" frames that show the proposed app look in place. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --line: #e4e7ec;
+  --fg: #111827;
+  --muted: #5d6675;
+  --faint: #8a93a3;
+  --accent: #2f5bff;
+  --accent-soft: #e9eeff;
+  --accent-fg: #ffffff;
+  --good: #0f9f6e;
+  --good-soft: #e3f6ee;
+  --bad: #d63d3d;
+  --bad-soft: #fdeceb;
+  --warn: #b7791f;
+  --warn-soft: #fcf3e3;
+  --shadow: 0 1px 2px rgba(17,24,39,.05), 0 4px 16px rgba(17,24,39,.05);
+  --font: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1017; --surface: #151923; --surface-2: #1b2130; --line: #262d3d;
+    --fg: #eef1f6; --muted: #a2abbb; --faint: #737d8f;
+    --accent: #6f8cff; --accent-soft: #1d2748; --accent-fg: #0b0f1a;
+    --good: #3ccf95; --good-soft: #13291f; --bad: #ff7a73; --bad-soft: #2e1717;
+    --warn: #e6b460; --warn-soft: #2b2314;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1017; --surface: #151923; --surface-2: #1b2130; --line: #262d3d;
+  --fg: #eef1f6; --muted: #a2abbb; --faint: #737d8f;
+  --accent: #6f8cff; --accent-soft: #1d2748; --accent-fg: #0b0f1a;
+  --good: #3ccf95; --good-soft: #13291f; --bad: #ff7a73; --bad-soft: #2e1717;
+  --warn: #e6b460; --warn-soft: #2b2314;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55; padding-inline: 16px; padding-block: 40px 80px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+.prose { max-width: 70ch; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -.02em; }
+h2 { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); font-size: 17px; margin-top: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+section { display: grid; gap: 20px; }
+.head { display: grid; gap: 8px; }
+.head p { color: var(--muted); max-width: 70ch; }
+
+/* Summary strip */
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.verdict div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: grid; gap: 4px; }
+.verdict b { font-size: 26px; font-weight: 800; }
+.verdict span { color: var(--muted); font-size: 13px; }
+
+/* Screen frames */
+.screen { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow); }
+.screen-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+.screen-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+.screen-bar span { margin-left: 8px; }
+.caption { color: var(--muted); font-size: 13px; }
+
+/* ---- Mock app ---- */
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 620px; font-size: 14px; }
+.side { background: var(--surface); border-right: 1px solid var(--line); padding: 14px 12px; display: flex; flex-direction: column; gap: 18px; }
+.club { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; border: 1px solid var(--line); }
+.logo { width: 32px; height: 32px; border-radius: 9px; background: var(--fg); color: var(--bg); display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none; }
+.club b { display: block; font-size: 13px; }
+.club small { color: var(--faint); font-size: 11px; }
+.club svg { margin-left: auto; color: var(--faint); }
+.nav { display: grid; gap: 2px; }
+.nav-label { font-size: 11px; font-weight: 600; color: var(--faint); letter-spacing: .06em; text-transform: uppercase; padding: 0 10px 6px; }
+.nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 500; }
+.nav a svg { width: 16px; height: 16px; flex: none; }
+.nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav a .count { margin-left: auto; font-size: 11px; background: var(--warn-soft); color: var(--warn); border-radius: 99px; padding: 1px 7px; font-weight: 600; }
+.me { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px; font-size: 12px; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 12px; flex: none; }
+.me small { display: block; color: var(--faint); }
+
+.main { padding: 22px 26px; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.topline { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.topline h4 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.topline p { color: var(--faint); font-size: 13px; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg span { padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.seg span.on { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); font-weight: 600; }
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 9px; font-weight: 600; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); white-space: nowrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.good { background: var(--good); border-color: var(--good); color: #fff; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi { padding: 16px 18px; display: grid; gap: 4px; border-left: 1px solid var(--line); min-width: 0; }
+.kpi:first-child { border-left: 0; }
+.kpi label { font-size: 12px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.kpi label .dot { width: 7px; height: 7px; border-radius: 50%; }
+.kpi strong { font-size: 22px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+.kpi strong small { font-size: 12px; color: var(--faint); font-weight: 500; margin-left: 3px; }
+.delta { font-size: 12px; font-weight: 600; }
+.delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+.delta em { font-style: normal; color: var(--faint); font-weight: 400; }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 16px; }
+.panel-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 18px 0; }
+.panel-h h5 { margin: 0; font-size: 14px; font-weight: 600; }
+.panel-h span { font-size: 12px; color: var(--faint); }
+.chart { padding: 8px 18px 14px; }
+.chart svg { width: 100%; height: 180px; display: block; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); padding: 0 18px 14px; }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.stack { display: flex; height: 10px; border-radius: 99px; overflow: hidden; margin: 14px 18px 12px; gap: 2px; }
+.rows { display: grid; padding: 0 18px 12px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.row:first-child { border-top: 0; }
+.row .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.row b { margin-left: auto; font-weight: 600; }
+.row small { color: var(--faint); width: 36px; text-align: right; }
+.left-total { margin: 4px 18px 16px; padding: 12px 14px; border-radius: 10px; background: var(--good-soft); display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.left-total b { color: var(--good); font-size: 17px; }
+
+/* Login mock */
+.login { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 560px; }
+.login-art { background: var(--fg); color: var(--bg); padding: 32px; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; position: relative; overflow: hidden; }
+.login-art .logo { background: var(--accent); color: #fff; }
+.login-art h4 { font-size: 28px; line-height: 1.15; margin: 0; font-weight: 700; letter-spacing: -.02em; max-width: 14ch; }
+.login-art p { opacity: .7; font-size: 14px; max-width: 34ch; margin-top: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.tiles div { border: 1px solid rgba(127,127,127,.35); border-radius: 12px; padding: 12px; font-size: 12px; }
+.tiles b { display: block; font-size: 17px; margin-top: 2px; }
+.login-form { background: var(--surface); padding: 32px clamp(20px, 5vw, 56px); display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.lang { display: flex; gap: 4px; align-self: flex-end; font-size: 12px; }
+.lang span { padding: 4px 8px; border-radius: 6px; color: var(--muted); }
+.lang span.on { background: var(--surface-2); color: var(--fg); font-weight: 600; }
+.login-form h4 { margin: 0; font-size: 22px; font-weight: 700; }
+.login-form > p { color: var(--muted); font-size: 13px; margin-top: -8px; }
+.google { height: 44px; border-radius: 10px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; background: var(--surface); }
+.or { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.field { display: grid; gap: 6px; font-size: 13px; font-weight: 500; }
+.field div { height: 42px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); padding: 0 12px; display: flex; align-items: center; color: var(--faint); font-weight: 400; }
+.field .row2 { display: flex; justify-content: space-between; }
+.field a { color: var(--accent); font-weight: 500; text-decoration: none; }
+.submit { height: 44px; border-radius: 10px; background: var(--accent); color: var(--accent-fg); font-weight: 600; display: grid; place-items: center; }
+.access { border-radius: 12px; background: var(--accent-soft); padding: 12px 14px; font-size: 13px; display: grid; gap: 2px; }
+.access b { color: var(--accent); }
+.access span { color: var(--muted); }
+
+/* Team mock */
+.pending { border-radius: 12px; border: 1px solid var(--line); background: var(--warn-soft); padding: 12px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pending .who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 220px; }
+.pending small { color: var(--muted); display: block; font-size: 12px; }
+.pending .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.select { height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
+th { text-align: left; font-weight: 500; color: var(--faint); font-size: 12px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+td { padding: 12px 18px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+.person { display: flex; align-items: center; gap: 10px; }
+.person small { display: block; color: var(--faint); font-size: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+.pill.owner { background: var(--accent-soft); color: var(--accent); }
+.pill.staff { background: var(--surface-2); color: var(--muted); }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.chips span { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
+.more { color: var(--faint); letter-spacing: 2px; }
+
+/* Settings mock */
+.settings { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 22px; align-items: start; }
+.tabs { display: grid; gap: 2px; }
+.tabs span { padding: 8px 10px; border-radius: 8px; color: var(--muted); font-weight: 500; }
+.tabs span.on { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
+.form { display: grid; }
+.set-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 20px; padding: 18px; border-top: 1px solid var(--line); }
+.set-row:first-child { border-top: 0; }
+.set-row h6 { margin: 0; font-size: 14px; font-weight: 600; }
+.set-row p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.toggles { display: grid; gap: 8px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.sw-on, .sw-off { width: 34px; height: 20px; border-radius: 99px; position: relative; flex: none; }
+.sw-on { background: var(--accent); } .sw-off { background: var(--line); }
+.sw-on::after, .sw-off::after { content: ""; position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.sw-on::after { right: 2px; } .sw-off::after { left: 2px; }
+.savebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--surface-2); border-radius: 0 0 14px 14px; font-size: 13px; color: var(--muted); }
+
+/* Findings */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filters button { font: inherit; font-size: 13px; font-weight: 500; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 99px; padding: 5px 12px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.filters button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pages { display: grid; gap: 10px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+summary::-webkit-details-marker { display: none; }
+summary h3 { font-size: 15px; }
+summary .route { color: var(--faint); font-size: 12px; }
+summary .tally { margin-left: auto; display: flex; gap: 6px; }
+summary .chev { transition: transform .15s; color: var(--faint); flex: none; }
+details[open] summary .chev { transform: rotate(90deg); }
+.issues { list-style: none; margin: 0; padding: 0 18px 14px; display: grid; gap: 0; }
+.issues li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.issues li p + p { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.sev { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; height: fit-content; text-align: center; }
+.sev.bug { background: var(--bad-soft); color: var(--bad); }
+.sev.ux { background: var(--warn-soft); color: var(--warn); }
+.sev.look { background: var(--surface-2); color: var(--muted); }
+.issues li.hide { display: none; }
+
+/* Plan */
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 8px; align-content: start; }
+.step .n { font-size: 12px; font-weight: 700; color: var(--accent); }
+.step p { color: var(--muted); font-size: 14px; }
+.step ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 3px; }
+.tokens { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.tok { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); font-size: 12px; }
+.tok div { height: 44px; }
+.tok p { padding: 8px 10px; color: var(--muted); }
+.tok b { color: var(--fg); display: block; }
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi:nth-child(3) { border-left: 0; }
+  .kpi:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .login { grid-template-columns: minmax(0, 1fr); }
+  .login-art { display: none; }
+  .settings { grid-template-columns: minmax(0, 1fr); }
+  .tabs { display: flex; overflow-x: auto; }
+  .set-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .main { padding: 16px; }
+}
+@media (max-width: 480px) {
+  .issues li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .sev { justify-self: start; }
+  .kpi strong { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="prose">
+    <p class="eyebrow">Design review · 30 September 2026</p>
+    <h1 style="margin-top:10px">Game Club Finance redesign</h1>
+    <p class="lede">I went through all 12 screens of the live app (signed in as owner, Main Game Club, September 2026 data), plus the login page and the popups. Below: what the new look should be, mockups of the four screens you called out, and every issue I found, page by page.</p>
+  </header>
+
+  <div class="verdict">
+    <div><b class="num">12</b><span>screens reviewed, plus login and popups</span></div>
+    <div><b class="num" id="count-bug">5</b><span>layout bugs that break the page</span></div>
+    <div><b class="num" id="count-ux">0</b><span>usability problems</span></div>
+    <div><b class="num" id="count-look">0</b><span>visual issues that make it look dated</span></div>
+  </div>
+
+  <section>
+    <div class="head">
+      <p class="eyebrow">Direction</p>
+      <h2>Quiet surfaces, loud numbers</h2>
+      <p>The current UI gives every block a card, a tinted background, a coloured icon chip and a sentence of explanation, so nothing stands out. The new look removes most of that. It uses one accent colour, a light sidebar, and large tabular numbers with the currency set small. Colour is kept for meaning: green for money in, red for money out, amber for things that need action. It also adds dark mode. All of this goes into the shared PresentationFoundation components and <code>tailwind.config.ts</code>, so most pages improve without being rewritten.</p>
+    </div>
+    <div class="tokens">
+      <div class="tok"><div style="background:var(--accent)"></div><p><b>Accent</b>One cobalt blue for actions and the current page</p></div>
+      <div class="tok"><div style="background:var(--good)"></div><p><b>Money in</b>Income, profit, money left</p></div>
+      <div class="tok"><div style="background:var(--bad)"></div><p><b>Money out</b>Expenses, debts, drops</p></div>
+      <div class="tok"><div style="background:var(--warn)"></div><p><b>Needs action</b>Pending approvals, low stock</p></div>
+      <div class="tok"><div style="background:var(--surface-2);border-bottom:1px solid var(--line)"></div><p><b>Neutral</b>Slate greys with a slight blue tint</p></div>
+      <div class="tok"><div style="background:var(--surface);display:grid;place-items:center;font-weight:700;font-size:20px;color:var(--fg)" class="num">68 314 000</div><p><b>Onest</b>Cyrillic-first font with tabular figures</p></div>
+    </div>
+  </section>
+
+  <!-- Dashboard mock -->
+  <section>
+    <div class="head">
+      <p class="eyebrow">Mockup 1 · Главная</p>
+      <h2>Dashboard: four numbers first, then detail</h2>
+      <p>The sidebar is grouped by task (daily work, money, management) and shows the club name once. Four KPIs share one strip, and every number fits on one line. Explanations move into tooltips. The payment split becomes a single stacked bar.</p>
+    </div>
+    <div class="screen">
+      <div class="screen-bar"><i></i><i></i><i></i><span>gameclub · Главная</span></div>
+      <div class="app">
+        <aside class="side">
+          <div class="club"><span class="logo">MG</span><div><b>Main Game Club</b><small>Владелец</small></div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></div>
+          <nav class="nav">
+            <a class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Главная</a>
+          </nav>
+          <nav class="nav">
+            <div class="nav-label">Каждый день</div>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>Касса дня</a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg>Закрытие склада</a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 7H6"/></svg>Закупка</a>
+          </nav>
+          <nav class="nav">
+            <div class="nav-label">Деньги</div>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M8 17V10M13 17V6M18 17v-4"/></svg>Отчёты</a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2s1.3 1.8 3 2 3 .9 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/></svg>Прибыль владельца</a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Долги</a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Зарплаты</a>
+          </nav>
+          <nav class="nav">
+            <div class="nav-label">Управление</div>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>Товары</a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/></svg>Команда<span class="count">2</span></a>
+            <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5.9z"/></svg>Настройки</a>
+          </nav>
+          <div class="me"><span class="avatar">HG</span><div>hoggish@gmail.com<small>Владелец · RU</small></div></div>
+        </aside>
+        <div class="main">
+          <div class="topline">
+            <div><h4>Главная</h4><p>1–30 сентября 2026</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <div class="seg"><span>Сегодня</span><span>Неделя</span><span class="on">Месяц</span><span>Период</span></div>
+            </div>
+          </div>
+          <div class="panel kpis">
+            <div class="kpi"><label><span class="dot" style="background:var(--accent)"></span>Доход клуба</label><strong class="num">68 314 000<small>сум</small></strong><span class="delta down">↓ 8% <em>к августу</em></span></div>
+            <div class="kpi"><label><span class="dot" style="background:var(--warn)"></span>Продажи бара</label><strong class="num">21 296 500<small>сум</small></strong><span class="delta up">↑ 7% <em>к августу</em></span></div>
+            <div class="kpi"><label><span class="dot" style="background:var(--bad)"></span>Расходы</label><strong class="num">24 917 000<small>сум</small></strong><span class="delta"><em>Зарплата 58%</em></span></div>
+            <div class="kpi"><label><span class="dot" style="background:var(--good)"></span>Чистая прибыль</label><strong class="num" style="color:var(--good)">51 471 095<small>сум</small></strong><span class="delta"><em>Долги: 444 000 сум</em></span></div>
+          </div>
+          <div class="grid2">
+            <div class="panel">
+              <div class="panel-h"><h5>Доход по дням</h5><span>форма графика условная</span></div>
+              <div class="chart"><svg id="bars" viewBox="0 0 600 180" preserveAspectRatio="none" role="img" aria-label="Пример дневного графика доходов и расходов"></svg></div>
+              <div class="legend"><span><i style="background:var(--accent)"></i>Доход</span><span><i style="background:var(--bad);opacity:.55"></i>Расходы</span></div>
+            </div>
+            <div class="panel">
+              <div class="panel-h"><h5>Как платили</h5><span class="num">68 314 000</span></div>
+              <div class="stack"><span style="flex:73;background:var(--accent)"></span><span style="flex:11;background:var(--good)"></span><span style="flex:16;background:var(--warn)"></span></div>
+              <div class="rows">
+                <div class="row"><span class="sw" style="background:var(--accent)"></span>Наличные<b class="num">49 740 000</b><small class="num">73%</small></div>
+                <div class="row"><span class="sw" style="background:var(--good)"></span>Терминал<b class="num">7 411 000</b><small class="num">11%</small></div>
+                <div class="row"><span class="sw" style="background:var(--warn)"></span>Карта<b class="num">11 163 000</b><small class="num">16%</small></div>
+              </div>
+              <div class="left-total"><span>Осталось после расходов</span><b class="num">45 648 000</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">KPI figures and the payment split are your September totals as shown on the live dashboard. The daily bars are illustrative.</p>
+  </section>
+
+  <!-- Login mock -->
+  <section>
+    <div class="head">
+      <p class="eyebrow">Mockup 2 · Вход</p>
+      <h2>Login with a clear way in for new staff</h2>
+      <p>Right now a new employee has no way to know that signing in with Google creates an access request for the owner to approve. The new login page puts Google first and adds a “Нет доступа?” box that explains this in one sentence. It also adds password recovery and moves the language switcher out of the card header.</p>
+    </div>
+    <div class="screen">
+      <div class="screen-bar"><i></i><i></i><i></i><span>gameclub · Вход</span></div>
+      <div class="login">
+        <div class="login-art">
+          <div style="display:flex;align-items:center;gap:10px"><span class="logo">GC</span><b>GameClub Finance</b></div>
+          <div>
+            <h4>Касса, склад и прибыль клуба в одном месте</h4>
+            <p>Закрывайте день за пару минут. Владелец сразу видит, сколько денег осталось.</p>
+          </div>
+          <div class="tiles">
+            <div>Клубов<b class="num">2</b></div>
+            <div>Языки<b>RU · UZ · EN</b></div>
+          </div>
+        </div>
+        <div class="login-form">
+          <div class="lang"><span class="on">RU</span><span>UZ</span><span>EN</span></div>
+          <h4>Вход</h4>
+          <p>Войдите, чтобы открыть кассу своего клуба.</p>
+          <div class="google"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>Продолжить с Google</div>
+          <div class="or">или по почте</div>
+          <div class="field">Email<div>you@club.uz</div></div>
+          <div class="field"><span class="row2">Пароль <a>Забыли пароль?</a></span><div>••••••••</div></div>
+          <div class="submit">Войти</div>
+          <div class="access"><b>Нет доступа?</b><span>Войдите через Google. Владелец клуба получит запрос и откроет вам нужные разделы.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team mock -->
+  <section>
+    <div class="head">
+      <p class="eyebrow">Mockup 3 · Команда</p>
+      <h2>Team: requests on top, one row per person</h2>
+      <p>Pending requests appear as a single amber strip where the owner picks the club and role and approves in one click. The sidebar shows a count badge, so requests get noticed. Members become a plain table with a role pill and club chips. The page-access details open in a side panel, so the list stays short. The only header button that remains is “Пригласить”.</p>
+    </div>
+    <div class="screen">
+      <div class="screen-bar"><i></i><i></i><i></i><span>gameclub · Команда</span></div>
+      <div class="main" style="background:var(--bg)">
+        <div class="topline">
+          <div><h4>Команда</h4><p>Кто может открывать кассу, склад и отчёты</p></div>
+          <span class="btn primary">+ Пригласить</span>
+        </div>
+        <div class="pending">
+          <div class="who"><span class="avatar" style="background:var(--surface);color:var(--warn)">АК</span><div><b>Азиз Каримов</b><small>aziz.k@gmail.com · запрос сегодня, 14:20</small></div></div>
+          <div class="acts"><span class="select">Main Game Club ▾</span><span class="select">Кассир ▾</span><span class="btn good">Одобрить</span><span class="btn ghost">Отклонить</span></div>
+        </div>
+        <div class="panel table-wrap">
+          <table>
+            <thead><tr><th>Участник</th><th>Роль</th><th>Клубы</th><th>Доступ</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><div class="person"><span class="avatar">HG</span><div>hoggish@gmail.com<small>это вы</small></div></div></td><td><span class="pill owner">Владелец</span></td><td><div class="chips"><span>Main</span><span>Pixel</span></div></td><td><span class="pill good">Всё</span></td><td class="more">···</td></tr>
+              <tr><td><div class="person"><span class="avatar">ДР</span><div>Дилшод Рахимов<small>dilshod@…</small></div></div></td><td><span class="pill staff">Кассир</span></td><td><div class="chips"><span>Main</span></div></td><td style="color:var(--muted)">Касса, Склад, Долги</td><td class="more">···</td></tr>
+              <tr><td><div class="person"><span class="avatar">СН</span><div>Сардор Нуриев<small>sardor@…</small></div></div></td><td><span class="pill staff">Бармен</span></td><td><div class="chips"><span>Pixel</span></div></td><td style="color:var(--muted)">Склад, Закупка</td><td class="more">···</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Names other than yours are placeholders.</p>
+  </section>
+
+  <!-- Settings mock -->
+  <section>
+    <div class="head">
+      <p class="eyebrow">Mockup 4 · Настройки</p>
+      <h2>Settings: tabs on the left, one save bar</h2>
+      <p>Today the page has two “Сохранить” buttons that stay disabled until something changes, a second language switcher, and a developer-only “Состояние базы данных” card. In the new version, sections are tabs (Клуб, Оплата, Клубы, Профиль). Each setting is a row with the label on the left and the control on the right. A single save bar appears only when something changed. The database check moves behind a “Для разработчика” tab.</p>
+    </div>
+    <div class="screen">
+      <div class="screen-bar"><i></i><i></i><i></i><span>gameclub · Настройки</span></div>
+      <div class="main" style="background:var(--bg)">
+        <div class="topline"><div><h4>Настройки</h4><p>Main Game Club</p></div></div>
+        <div class="settings">
+          <div class="tabs"><span class="on">Клуб</span><span>Оплата</span><span>Клубы</span><span>Профиль и язык</span><span>Для разработчика</span></div>
+          <div class="panel form">
+            <div class="set-row"><div><h6>Название</h6><p>Видно команде и в отчётах Telegram.</p></div><div class="field"><div style="color:var(--fg)">Main Game Club</div></div></div>
+            <div class="set-row"><div><h6>Начало рабочего дня</h6><p>Смена до этого часа засчитывается в прошлый день.</p></div><div class="field"><div style="color:var(--fg);justify-content:space-between">06:00 <span style="color:var(--faint)">▾</span></div></div></div>
+            <div class="set-row"><div><h6>Способы оплаты</h6><p>Касса дня покажет только включённые. Старые записи не меняются.</p></div>
+              <div class="toggles">
+                <div class="toggle">Наличные<span class="sw-on"></span></div>
+                <div class="toggle">Терминал<span class="sw-on"></span></div>
+                <div class="toggle">Карта<span class="sw-on"></span></div>
+                <div class="toggle">PlayStation<span class="sw-off"></span></div>
+              </div></div>
+            <div class="savebar"><span>1 изменение не сохранено</span><div style="display:flex;gap:8px"><span class="btn ghost">Отменить</span><span class="btn primary">Сохранить</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Findings -->
+  <section>
+    <div class="head">
+      <p class="eyebrow">Findings</p>
+      <h2>Every issue, page by page</h2>
+      <p>“Bug” means the page is visibly broken. “UX” means it slows people down or confuses them. “Look” means it works but looks dated.</p>
+    </div>
+    <div class="filters" role="group" aria-label="Filter by type">
+      <button type="button" data-f="all" aria-pressed="true">All</button>
+      <button type="button" data-f="bug" aria-pressed="false">Bugs</button>
+      <button type="button" data-f="ux" aria-pressed="false">UX</button>
+      <button type="button" data-f="look" aria-pressed="false">Look</button>
+    </div>
+    <div class="pages" id="pages"></div>
+  </section>
+
+  <!-- Plan -->
+  <section>
+    <div class="head">
+      <p class="eyebrow">Plan</p>
+      <h2>How I'd roll it out</h2>
+      <p>Every page already uses the PresentationFoundation components, so steps 1 and 2 change most of the app at once. Business logic, Supabase queries and the translation files keep their structure. Any new copy goes into <code>en</code>, <code>ru</code> and <code>uz</code> together.</p>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="n">Step 1</span><h3>Tokens and foundation</h3><p>New palette, the Onest font, dark mode, and restyled Button, Card, MetricCard, Field, Modal, DataTable and SegmentedControl.</p><ul><li>Fixes the washed-out disabled buttons</li><li>Keeps number and currency on one line</li><li>Uses one label for the currency: сум</li></ul></div>
+      <div class="step"><span class="n">Step 2</span><h3>App shell</h3><p>Light, grouped sidebar with one club switcher and a badge for pending requests. Language moves to the profile menu. One PageHeader pattern and one content width on every page.</p></div>
+      <div class="step"><span class="n">Step 3</span><h3>Login, Команда, Настройки</h3><p>The screens you flagged, built as in the mockups, including the access-request explanation, the approve strip and the tabbed settings.</p></div>
+      <div class="step"><span class="n">Step 4</span><h3>Remaining pages</h3><p>Dashboard, Касса дня, Закрытие склада, Закупка, Отчёты, Прибыль владельца, Долги, Товары, Зарплаты, each checked at desktop and phone width.</p></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const findings = [
+  { page: "Весь интерфейс", route: "shell + foundation", items: [
+    ["look", "The dark navy sidebar and blue gradients look about ten years old.", "Use a light sidebar with a 1px border, and keep the accent colour for the current page and main actions only."],
+    ["ux", "The club name appears twice at the top of the sidebar: “Main Game Club Finance”, then a “Main Game Club” switcher.", "Keep only the switcher."],
+    ["ux", "The language switcher appears in the sidebar and again on Настройки.", "Keep it in one place: the profile menu."],
+    ["look", "The currency label changes between UZS, сум and СУМ, sometimes on the same page (Касса дня, Закупка, Долги).", "Use one label everywhere, set smaller and lighter than the number."],
+    ["look", "Every metric card has a coloured icon chip, a tinted section background and a sentence of explanation. That's 6+ accent colours on the dashboard alone.", "Move explanations into an ⓘ tooltip. Keep colour for meaning only."],
+    ["ux", "Page widths differ: Долги is a narrow centred column, while other pages are full width.", "Use one max width for all pages."],
+    ["look", "The headers don't match. Закупка has an icon next to the title and the other pages don't.", "Use one PageHeader layout: title, subtitle, and actions on the right."],
+    ["ux", "Secondary buttons like “Сбросить” and disabled primary buttons look alike, so it's hard to tell what's clickable.", "Give disabled buttons a distinct style and make secondary buttons clearly outlined."],
+    ["look", "There's no dark mode, though the club works evenings and nights.", "Add a dark theme that follows the system setting."]
+  ]},
+  { page: "Вход", route: "/login", items: [
+    ["ux", "There's no register or request-access option, and nothing tells new staff that signing in with Google sends a request the owner must approve.", "Add a “Нет доступа?” note under the form."],
+    ["ux", "There's no “Забыли пароль?” link for email users.", "Add a reset flow using Supabase resetPasswordForEmail."],
+    ["look", "The small white card on a full-screen blue gradient with a tiny “или” divider looks like a template.", "Use a split layout with the brand panel on the left and the form on the right. Show only the form on phones."],
+    ["look", "The RU/UZ/EN pills are squeezed into the card header next to the logo.", "Move them to the top-right corner of the page."]
+  ]},
+  { page: "Главная", route: "/", items: [
+    ["bug", "KPI numbers wrap mid-number at desktop width (“2 355 / 655”), and the currency sits on a separate line under each value.", "Keep the number and currency on one line, and shrink the text before letting it wrap."],
+    ["ux", "10 KPI cards in two tinted sections come before the first chart, with no clear “how did we do” summary.", "Show four headline numbers in one strip and put the rest under Отчёты."],
+    ["ux", "PlayStation shows 0 UZS and “Нет сопоставимых данных” with the same weight as real income.", "Hide or collapse zero sources."],
+    ["look", "The Расходы по категориям donut uses about 12 similar reds and oranges, so the slices are hard to tell apart.", "Show the top 5 categories plus “Другое” as a bar list."],
+    ["look", "The Динамика дохода chart sits alone in its row with an empty half next to it.", "Pair it with the payment split, or make it full width."],
+    ["look", "The income vs expenses chart packs 60 thin bars into 280px.", "Make it wider and draw expenses as a line or muted bars."]
+  ]},
+  { page: "Касса дня", route: "/daily-cash", items: [
+    ["ux", "Each payment method shows its amount twice: in the tile header (“0 UZS”) and in the input below it.", "Keep only the input, with the method name as its label."],
+    ["ux", "The calculated Продажи бара, Прибыль бара and Чистая прибыль boxes look like inputs.", "Style them as a read-only summary row under the total."],
+    ["look", "A blue info banner saying the page is only for club income takes a full row on every visit.", "Say it once in the subtitle."],
+    ["look", "“Сбросить” looks disabled next to the primary button.", "Make it an outline button, or put reset in a menu."]
+  ]},
+  { page: "Закрытие склада", route: "/closing-stock", items: [
+    ["bug", "The page title collapses into a narrow column at 1280px (“Закрыт / ие / склада”) because the date picker and three buttons share its row.", "Put the actions on their own row below the title, or let them wrap."],
+    ["bug", "The products table is wider than the screen, so Корректировка and later columns are cut off with no visible scroll hint.", "Fix the first columns in place, scroll the rest, and show a fade at the edge."],
+    ["ux", "The top buttons show as disabled while data loads, with no explanation.", "Show a spinner or skeleton inside the buttons, or hide them until the data is ready."],
+    ["look", "Six KPI tiles, mostly “0 шт” and “0 сум (оценка)”, push the table below the fold.", "Use a compact summary strip."]
+  ]},
+  { page: "Закупка товаров", route: "/stock-purchase", items: [
+    ["ux", "A permanent “Как это работает” box and an empty “Информация о товаре” panel sit between the form and the recent purchases.", "Show product info inline once a product is selected. Move the help into a tooltip."],
+    ["look", "The header has an icon the other pages don't.", "Use the shared PageHeader."]
+  ]},
+  { page: "Отчёты", route: "/reports", items: [
+    ["ux", "The main button on a reporting page is “Зарегистрировать расход”, a data-entry action.", "Make it a secondary action, or move expense entry next to Касса дня."],
+    ["look", "Four blank white boxes show under “Остаток по способу оплаты” while it loads.", "Use a skeleton that matches the final layout."]
+  ]},
+  { page: "Прибыль владельца", route: "/money-taken", items: [
+    ["ux", "The same three-card block repeats for Игровой клуб and Бар, and a card for the total sits above them. It's hard to find the one number that matters: how much you can take out.", "Show one headline number with a breakdown table below it."],
+    ["look", "Blue- and amber-tinted section backgrounds are nested inside a grey page.", "Use flat sections separated by headings."]
+  ]},
+  { page: "Долги", route: "/debts", items: [
+    ["ux", "Every debtor row has two buttons, “Добавить долг” and “Добавить платёж”, so the list is a wall of buttons.", "Make the row open a side panel with a primary “Принять оплату” button."],
+    ["look", "The page uses a narrow centred column, unlike the rest of the app.", "Use the shared page width."]
+  ]},
+  { page: "Товары", route: "/products", items: [
+    ["look", "The plain table works, but the header row, category and stock level have no visual hierarchy.", "Add stock-level pills (low stock in amber) and category chips."]
+  ]},
+  { page: "Зарплаты", route: "/salaries", items: [
+    ["bug", "The selected tab in the Выплата / Премия / Штраф control is white text on pale blue and looks disabled.", "Use the new segmented control with a raised white active state."],
+    ["look", "“Как рассчитываются зарплата и KPI” uses the browser's default ▸ disclosure marker.", "Use the shared disclosure component."],
+    ["ux", "The overview cards, the entry form and the history are all on one long page.", "Split into tabs: Сотрудники, Операции, История."]
+  ]},
+  { page: "Команда", route: "/team", items: [
+    ["ux", "There's no invite button. The only way to add someone is to wait for them to sign in and appear as pending, and the owner only notices by opening this page.", "Add a “Пригласить” button and a pending-count badge in the sidebar."],
+    ["ux", "Approving a request shows the full page-access matrix inline for each person, so the list gets very long.", "Approve in one row (club and role). Edit detailed access in a side panel."],
+    ["look", "The only header action is a “Обновить” button.", "Refresh automatically after each change and remove the button."]
+  ]},
+  { page: "Настройки", route: "/settings", items: [
+    ["ux", "There are two separate save buttons (working day, payment methods) that stay disabled until something changes.", "Show one save bar that appears only when there are unsaved changes."],
+    ["ux", "“Состояние базы данных” is a developer tool shown to every owner.", "Move it behind a developer tab."],
+    ["bug", "The working-day selector shows 00:00, then jumps to 06:00 once the club loads.", "Show a skeleton until the real value arrives."],
+    ["look", "The left column stacks a clubs list and a profile card that loads slowly, next to a tall right panel.", "Use tabs as in the mockup."]
+  ]}
+];
+
+const pagesEl = document.getElementById('pages');
+const label = { bug: 'Bug', ux: 'UX', look: 'Look' };
+const totals = { bug: 0, ux: 0, look: 0 };
+findings.forEach((group, i) => {
+  const counts = { bug: 0, ux: 0, look: 0 };
+  group.items.forEach(([s]) => { counts[s]++; totals[s]++; });
+  const d = document.createElement('details');
+  if (i < 3) d.open = true;
+  const tally = Object.entries(counts).filter(([, n]) => n).map(([s, n]) => `<span class="sev ${s}">${n} ${label[s]}</span>`).join('');
+  d.innerHTML = `<summary><svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg><div><h3>${group.page}</h3><span class="route">${group.route}</span></div><span class="tally">${tally}</span></summary>
+    <ul class="issues">${group.items.map(([s, what, fix]) => `<li data-s="${s}"><span class="sev ${s}">${label[s]}</span><div><p>${what}</p><p>${fix}</p></div></li>`).join('')}</ul>`;
+  pagesEl.appendChild(d);
+});
+document.getElementById('count-bug').textContent = totals.bug;
+document.getElementById('count-ux').textContent = totals.ux;
+document.getElementById('count-look').textContent = totals.look;
+
+document.querySelectorAll('.filters button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const f = btn.dataset.f;
+    document.querySelectorAll('.filters button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    document.querySelectorAll('.issues li').forEach(li => li.classList.toggle('hide', f !== 'all' && li.dataset.s !== f));
+    document.querySelectorAll('#pages details').forEach(d => {
+      const any = [...d.querySelectorAll('.issues li')].some(li => !li.classList.contains('hide'));
+      d.hidden = !any;
+      if (f !== 'all') d.open = true;
+    });
+  });
+});
+
+// Illustrative daily bars (shape only, not real daily data)
+(function () {
+  const svg = document.getElementById('bars');
+  const ns = 'http://www.w3.org/2000/svg';
+  const n = 30, w = 600, h = 170, gap = 20;
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  for (let g = 0; g < 4; g++) {
+    const y = h - (g * h) / 4;
+    const l = document.createElementNS(ns, 'line');
+    l.setAttribute('x1', 0); l.setAttribute('x2', w); l.setAttribute('y1', y); l.setAttribute('y2', y);
+    l.setAttribute('stroke', 'var(--line)'); l.setAttribute('stroke-width', 1);
+    svg.appendChild(l);
+  }
+  const slot = w / n;
+  for (let i = 0; i < n; i++) {
+    const inc = 0.35 + rnd() * 0.55, exp = 0.08 + rnd() * 0.3;
+    const x = i * slot + 3;
+    const bw = (slot - 6) / 2;
+    [[inc, 'var(--accent)', 1, 0], [exp, 'var(--bad)', .55, bw + 1]].forEach(([v, c, o, dx]) => {
+      const r = document.createElementNS(ns, 'rect');
+      const bh = v * (h - gap);
+      r.setAttribute('x', x + dx); r.setAttribute('y', h - bh); r.setAttribute('width', bw); r.setAttribute('height', bh);
+      r.setAttribute('rx', 2); r.setAttribute('fill', c); r.setAttribute('fill-opacity', o);
+      svg.appendChild(r);
+    });
+  }
+})();
+</script>

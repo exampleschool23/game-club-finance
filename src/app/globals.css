@@ -6,7 +6,36 @@
   * {
     box-sizing: border-box;
   }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
   body {
-    @apply overflow-x-hidden bg-slate-100 text-gray-900;
+    @apply overflow-x-hidden bg-gray-50 text-gray-900;
+    /* Finance app: digits line up in every column and metric. */
+    font-variant-numeric: tabular-nums;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  ::selection {
+    @apply bg-primary-100 text-primary-900;
+  }
+}
+
+@layer utilities {
+  /* Thin scrollbars for horizontally scrolling tables and chip rows. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme(colors.gray.300) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gray-300;
   }
 }

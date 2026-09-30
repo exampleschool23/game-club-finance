@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { useSignOut } from './useSignOut';
+import { usePendingTeamCount } from './usePendingTeamCount';
 import {
   LayoutDashboard,
   Wallet,
@@ -15,8 +16,7 @@ import {
   LogOut,
   X,
   Gamepad2,
-  Building2,
-  ChevronDown,
+  ChevronsUpDown,
   Archive,
   Settings,
   Shield,
@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
 import { canAccessFeature, featureForPath, type FeatureKey } from '@/lib/permissions';
-import { Avatar, IconButton, LanguageSwitcher } from '@/components/PresentationFoundation';
+import { Avatar, IconButton, LanguageSwitcher, initialsOf } from '@/components/PresentationFoundation';
 import { isTopModal, trapFocus, useModalLayer } from '@/components/PresentationFoundation/Modal';
 
 interface SidebarClubOption {
@@ -47,17 +47,27 @@ interface SidebarProps {
   onNavigate?: (href: string) => void;
 }
 
+interface NavItem {
+  href: string;
+  icon: React.ElementType;
+  label: string;
+  feature: FeatureKey;
+  badge?: number;
+}
+
 function NavLink({
   href,
   icon: Icon,
   label,
   active,
+  badge,
   onNavigate,
 }: {
   href: string;
   icon: React.ElementType;
   label: string;
   active: boolean;
+  badge?: number;
   onNavigate?: (href: string) => void;
 }) {
   const [prefetchOnIntent, setPrefetchOnIntent] = useState(false);
@@ -89,14 +99,19 @@ function NavLink({
       onTouchStart={() => setPrefetchOnIntent(true)}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400',
+        'flex min-h-10 items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
         active
-          ? 'bg-primary-600 text-white shadow-sm'
-          : 'text-slate-300 hover:bg-white/10 hover:text-white',
+          ? 'bg-primary-50 font-semibold text-primary-700'
+          : 'font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-950',
       )}
     >
-      <Icon size={18} className={active ? 'text-white' : 'text-slate-400'} aria-hidden="true" />
-      <span>{label}</span>
+      <Icon size={17} strokeWidth={active ? 2.25 : 2} className={active ? 'text-primary-600' : 'text-gray-400'} aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge ? (
+        <span className="rounded-full bg-warning-50 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-warning-700">
+          {badge}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -122,108 +137,139 @@ export function Sidebar({
   // Highlight the section, not just the exact path: /salaries/employees/…,
   // /daily-report and the money-details pages all belong to a nav item.
   const activeFeature = featureForPath(pathname);
+  // Re-count after any navigation (approving on /team changes it).
+  const pendingCount = usePendingTeamCount(role === 'owner', `${selectedClubId}:${currentPathname}`);
 
-  const links = [
-    { href: '/', icon: LayoutDashboard, label: t('dashboard'), feature: 'dashboard' as FeatureKey },
-    { href: '/daily-cash', icon: Wallet, label: t('dailyCash'), feature: 'daily_cash' as FeatureKey },
-    { href: '/closing-stock', icon: Archive, label: t('closingStock'), feature: 'closing_stock' as FeatureKey },
-    { href: '/stock-purchase', icon: ShoppingCart, label: t('stockPurchase'), feature: 'stock_purchase' as FeatureKey },
-    { href: '/reports', icon: BarChart3, label: t('reports'), feature: 'reports' as FeatureKey },
-    { href: '/money-taken', icon: CircleDollarSign, label: t('moneyTaken'), feature: 'owner_profit' as FeatureKey },
-    { href: '/debts', icon: Users, label: t('debts'), feature: 'debts' as FeatureKey },
-    { href: '/products', icon: Package, label: t('products'), feature: 'inventory' as FeatureKey },
-    { href: '/salaries', icon: HandCoins, label: t('salaries'), feature: 'salaries' as FeatureKey },
-    { href: '/team', icon: Shield, label: t('team'), feature: 'team' as FeatureKey },
-    { href: '/settings', icon: Settings, label: t('settings'), feature: 'settings' as FeatureKey },
-  ].filter((link) => (
-    link.href === '/reports'
-      ? canAccessFeature(role, featureAccess, 'reports') || canAccessFeature(role, featureAccess, 'expenses')
-      : link.feature === 'salaries' || canAccessFeature(role, featureAccess, link.feature)
-  ));
+  function allowed(feature: FeatureKey) {
+    if (feature === 'reports') return canAccessFeature(role, featureAccess, 'reports') || canAccessFeature(role, featureAccess, 'expenses');
+    return feature === 'salaries' || canAccessFeature(role, featureAccess, feature);
+  }
 
-  function isActive(link: (typeof links)[number]) {
-    if (link.href === '/reports') return activeFeature === 'reports' || activeFeature === 'expenses';
-    return activeFeature === link.feature;
+  // Grouped by when the owner reaches for them: every shift, money questions,
+  // and occasional management.
+  const allGroups: Array<{ label?: string; items: NavItem[] }> = [
+    {
+      items: [{ href: '/', icon: LayoutDashboard, label: t('dashboard'), feature: 'dashboard' }],
+    },
+    {
+      label: t('groupDaily'),
+      items: [
+        { href: '/daily-cash', icon: Wallet, label: t('dailyCash'), feature: 'daily_cash' },
+        { href: '/closing-stock', icon: Archive, label: t('closingStock'), feature: 'closing_stock' },
+        { href: '/stock-purchase', icon: ShoppingCart, label: t('stockPurchase'), feature: 'stock_purchase' },
+      ],
+    },
+    {
+      label: t('groupMoney'),
+      items: [
+        { href: '/reports', icon: BarChart3, label: t('reports'), feature: 'reports' },
+        { href: '/money-taken', icon: CircleDollarSign, label: t('moneyTaken'), feature: 'owner_profit' },
+        { href: '/debts', icon: Users, label: t('debts'), feature: 'debts' },
+        { href: '/salaries', icon: HandCoins, label: t('salaries'), feature: 'salaries' },
+      ],
+    },
+    {
+      label: t('groupManage'),
+      items: [
+        { href: '/products', icon: Package, label: t('products'), feature: 'inventory' },
+        { href: '/team', icon: Shield, label: t('team'), feature: 'team', badge: pendingCount },
+        { href: '/settings', icon: Settings, label: t('settings'), feature: 'settings' },
+      ],
+    },
+  ];
+  const groups = allGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => allowed(item.feature)) }))
+    .filter((group) => group.items.length > 0);
+
+  function isActive(item: NavItem) {
+    if (item.href === '/reports') return activeFeature === 'reports' || activeFeature === 'expenses';
+    return activeFeature === item.feature;
   }
 
   const content = (
-    <div className="flex h-full flex-col bg-sidebar">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-white/15 bg-primary-600 shadow-sm shadow-primary-900/30">
-            <Gamepad2 size={23} className="text-white" aria-hidden="true" />
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+        {memberships.length > 0 ? (
+          <label className="relative flex min-h-12 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-2.5 transition hover:border-gray-300 focus-within:ring-2 focus-within:ring-primary-500">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-[11px] font-bold text-white" aria-hidden="true">
+              {selectedClub ? initialsOf(selectedClub.name) : <Gamepad2 size={16} />}
+            </span>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-sm font-semibold text-gray-950">{selectedClub?.name ?? t('appName')}</span>
+              <span className="block truncate text-[11px] text-gray-500">{tTeam(`roles.${role}`)}</span>
+            </span>
+            <select
+              className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+              value={selectedClubId}
+              onChange={(event) => onSelectClub?.(event.target.value)}
+              aria-label={t('club')}
+            >
+              {memberships.map((membership) => (
+                <option key={membership.club.id} value={membership.club.id}>
+                  {membership.club.name}
+                </option>
+              ))}
+            </select>
+            <ChevronsUpDown size={15} className="pointer-events-none shrink-0 text-gray-400" aria-hidden="true" />
+          </label>
+        ) : (
+          <div className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 px-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-white" aria-hidden="true">
+              <Gamepad2 size={16} />
+            </span>
+            <span className="truncate text-sm font-semibold text-gray-950">{t('appName')}</span>
           </div>
-          <div className="min-w-0 leading-tight">
-            <p className="truncate text-[15px] font-extrabold text-white">
-              {selectedClub?.name ?? t('appName')}
-            </p>
-            <p className="truncate text-[13px] font-bold text-primary-100">{t('appSubtitle')}</p>
-          </div>
-        </div>
+        )}
         {onClose && (
           <IconButton
             variant="ghost"
             label={t('closeNavigation')}
             icon={<X size={20} />}
             onClick={onClose}
-            className="text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+            className="lg:hidden"
           />
         )}
       </div>
 
-      {memberships.length > 0 && (
-        <div className="border-b border-white/10 px-3 py-3">
-          <label className="relative flex h-11 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-semibold text-white focus-within:ring-2 focus-within:ring-primary-400">
-            <Building2 size={17} className="shrink-0 text-primary-100" aria-hidden="true" />
-            <select
-              className="h-full min-w-0 flex-1 cursor-pointer appearance-none bg-transparent pr-7 text-sm font-semibold text-white outline-none"
-              value={selectedClubId}
-              onChange={(event) => onSelectClub?.(event.target.value)}
-              aria-label={t('club')}
-            >
-              {memberships.map((membership) => (
-                <option key={membership.club.id} value={membership.club.id} className="text-gray-900">
-                  {membership.club.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="pointer-events-none absolute right-3 text-slate-300" aria-hidden="true" />
-          </label>
-        </div>
-      )}
-
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label={t('mainNavigation')}>
-        {links.map((link) => (
-          <NavLink
-            key={link.href}
-            href={link.href}
-            icon={link.icon}
-            label={link.label}
-            active={isActive(link)}
-            onNavigate={onNavigate}
-          />
+      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-2" aria-label={t('mainNavigation')}>
+        {groups.map((group, index) => (
+          <div key={group.label ?? index} className="space-y-0.5">
+            {group.label && (
+              <p className="px-2.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{group.label}</p>
+            )}
+            {group.items.map((item) => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                badge={item.badge}
+                active={isActive(item)}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
         ))}
       </nav>
 
-      <div className="space-y-3 border-t border-white/10 px-3 py-4">
-        <div className="px-1">
-          <LanguageSwitcher variant="dark" />
-        </div>
-
-        <div className="flex items-center gap-3 rounded-xl px-3 py-2">
-          <Avatar name={fullName} size="sm" className="bg-primary-600 text-white" />
-          <div className="min-w-0 flex-1 text-left">
-            <p className="truncate text-sm font-medium text-white">{fullName}</p>
-            <p className="text-xs text-slate-400">{tTeam(`roles.${role}`)}</p>
+      <div className="space-y-2 border-t border-gray-100 px-3 py-3">
+        <div className="flex items-center gap-2.5 px-1">
+          <Avatar name={fullName} size="sm" />
+          <div className="min-w-0 flex-1 text-left leading-tight">
+            <p className="truncate text-[13px] font-semibold text-gray-950">{fullName}</p>
+            <p className="truncate text-[11px] text-gray-500">{tTeam(`roles.${role}`)}</p>
           </div>
           <IconButton
             variant="ghost"
+            size="sm"
             label={t('signOut')}
-            icon={<LogOut size={17} />}
+            icon={<LogOut size={16} />}
             onClick={signOut}
             loading={signingOut}
-            className="text-slate-400 hover:bg-white/10 hover:text-white"
           />
+        </div>
+        <div className="px-1">
+          <LanguageSwitcher className="w-full [&>button]:flex-1" />
         </div>
       </div>
     </div>
@@ -231,7 +277,7 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 lg:flex">{content}</aside>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-gray-200 lg:flex">{content}</aside>
 
       {mobileOpen && (
         <MobileDrawer label={t('mainNavigation')} onClose={onClose}>
@@ -281,7 +327,7 @@ function MobileDrawer({ label, onClose, children }: { label: string; onClose?: (
 
   return (
     <div className="fixed inset-0 z-40 lg:hidden">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-gray-950/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
       <aside
         ref={panelRef}
         id="mobile-nav"
@@ -289,7 +335,7 @@ function MobileDrawer({ label, onClose, children }: { label: string; onClose?: (
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="absolute bottom-0 left-0 top-0 z-50 w-[min(18rem,86vw)] outline-none"
+        className="absolute bottom-0 left-0 top-0 z-50 w-[min(18rem,86vw)] shadow-pop outline-none"
       >
         {children}
       </aside>

@@ -73,7 +73,7 @@ export function SegmentedControl<T extends string>({
       className={cn(
         isChips
           ? 'flex flex-wrap gap-2'
-          : cn('grid gap-2', variant === 'soft' && 'rounded-xl bg-gray-100 p-1.5'),
+          : cn('grid', variant === 'soft' ? 'gap-1 rounded-xl bg-gray-100 p-1' : 'gap-2'),
         className,
       )}
       style={!isChips && columns !== 'auto' ? { gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` } : undefined}
@@ -94,18 +94,19 @@ export function SegmentedControl<T extends string>({
             disabled={disabled || option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              'inline-flex items-center justify-center gap-1.5 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50',
+              'inline-flex items-center justify-center gap-1.5 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50',
               isChips
-                ? cn('whitespace-nowrap rounded-full border px-3 py-1.5 text-sm', selected
-                  ? 'border-primary-600 bg-primary-600 text-white'
-                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50')
+                ? cn('whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px]', selected
+                  ? 'border-gray-950 bg-gray-950 text-white'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900')
                 : variant === 'soft'
-                  ? cn('rounded-lg px-3', height, selected
-                    ? 'bg-white text-primary-700 shadow-sm ring-1 ring-gray-200'
-                    : 'text-gray-500 hover:text-gray-800')
-                  : cn('rounded-lg border px-2', height, selected
-                    ? 'border-primary-600 bg-primary-600 text-white shadow-sm'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:text-primary-700'),
+                  // Raised white pill: the selected tab is the only one with a surface.
+                  ? cn('rounded-[10px] px-3', height, selected
+                    ? 'bg-white font-semibold text-gray-950 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900')
+                  : cn('rounded-xl border px-2', height, selected
+                    ? 'border-primary-600 bg-primary-600 font-semibold text-white shadow-sm'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'),
             )}
           >
             {option.icon}

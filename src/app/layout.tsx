@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Onest } from 'next/font/google';
 import './globals.css';
 import { getLocale, getMessages } from 'next-intl/server';
 import { AppIntlProvider } from '@/components/i18n/AppIntlProvider';
 
-const inter = Inter({ subsets: ['latin', 'cyrillic'] });
+// Cyrillic-first geometric sans; the variable font covers every weight used.
+const onest = Onest({ subsets: ['latin', 'cyrillic'], variable: '--font-sans', display: 'swap' });
 const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
   : null;
@@ -19,7 +20,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Lets env(safe-area-inset-*) pad the top bar, sheets and toasts on notched phones.
   viewportFit: 'cover',
-  themeColor: '#1e2d40',
+  themeColor: '#ffffff',
 };
 
 export default async function RootLayout({
@@ -37,7 +38,7 @@ export default async function RootLayout({
           <link rel="preconnect" href={supabaseOrigin} crossOrigin="anonymous" />
         </head>
       ) : null}
-      <body className={inter.className}>
+      <body className={`${onest.variable} font-sans`}>
         <AppIntlProvider initialLocale={locale} initialMessages={messages}>
           {children}
         </AppIntlProvider>

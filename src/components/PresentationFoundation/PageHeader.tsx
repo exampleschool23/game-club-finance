@@ -11,7 +11,7 @@ export interface PageHeaderProps {
   description?: ReactNode;
   /** Actions rendered on the right (or full width on phones). */
   action?: ReactNode;
-  /** Icon shown in a tinted square before the title. */
+  /** Accepted for compatibility; the header no longer draws an icon tile so every page opens the same way. */
   icon?: ReactNode;
   /** Small chip below the description, for a date range or status. */
   meta?: ReactNode;
@@ -22,42 +22,35 @@ export interface PageHeaderProps {
 }
 
 /** Page title block. Every page starts with one of these. */
-export function PageHeader({ title, description, action, icon, meta, back, backLabel, className }: PageHeaderProps) {
+export function PageHeader({ title, description, action, meta, back, backLabel, className }: PageHeaderProps) {
   const router = useRouter();
   const backClassName =
-    'mb-3 inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500';
+    'mb-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500';
 
   return (
-    <div className={cn('mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between', className)}>
-      <div className="min-w-0">
+    // Wraps instead of squeezing: the title keeps at least ~16rem and the
+    // actions drop to their own row when they don't fit beside it.
+    <div className={cn('mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3', className)}>
+      <div className="min-w-0 flex-1 basis-64">
         {back && (
           back === true ? (
             <button type="button" onClick={() => router.back()} className={backClassName}>
-              <ArrowLeft size={16} />
+              <ArrowLeft size={15} />
               {backLabel}
             </button>
           ) : (
             <Link href={back} className={backClassName}>
-              <ArrowLeft size={16} />
+              <ArrowLeft size={15} />
               {backLabel}
             </Link>
           )
         )}
-        <div className="flex min-w-0 items-center gap-4">
-          {icon && (
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600 sm:h-14 sm:w-14">
-              {icon}
-            </span>
-          )}
-          <div className="min-w-0">
-            <h1 className="break-words text-2xl font-bold tracking-normal text-gray-950 sm:text-3xl">{title}</h1>
-            {description && <p className="mt-1 text-sm text-gray-600">{description}</p>}
-          </div>
-        </div>
+        <h1 className="break-words text-2xl font-bold tracking-tight text-gray-950">{title}</h1>
+        {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
         {meta && <div className="mt-3">{meta}</div>}
       </div>
       {action && (
-        <div className="flex w-full flex-shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
           {action}
         </div>
       )}

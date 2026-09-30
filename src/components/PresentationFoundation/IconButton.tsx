@@ -8,7 +8,7 @@ type IconButtonVariant = 'outline' | 'ghost' | 'soft' | 'danger';
 type IconButtonSize = 'sm' | 'md';
 
 const variantClasses: Record<IconButtonVariant, string> = {
-  outline: 'border border-gray-200 bg-white text-gray-700 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700',
+  outline: 'border border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 hover:bg-gray-50 hover:text-gray-950',
   ghost: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900',
   soft: 'bg-primary-50 text-primary-700 hover:bg-primary-100',
   danger: 'text-gray-400 hover:bg-danger-50 hover:text-danger-600 focus-visible:ring-danger-500',
@@ -40,7 +40,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       title={label}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40',
+        'inline-flex shrink-0 items-center justify-center rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40',
         variantClasses[variant],
         sizeClasses[size],
         className,

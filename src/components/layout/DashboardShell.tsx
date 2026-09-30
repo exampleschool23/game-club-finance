@@ -100,15 +100,15 @@ function PendingApproval({ fullName }: { fullName: string }) {
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-xl items-center justify-center">
-      <Card tone="warning" padding="lg" className="w-full bg-white text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-warning-50 text-warning-600">
+      <Card padding="lg" className="w-full text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-warning-50 text-warning-600">
           <Clock3 size={28} aria-hidden="true" />
         </div>
-        <h1 className="mt-5 text-2xl font-bold text-gray-950">{t('title')}</h1>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight text-gray-950">{t('title')}</h1>
         <p className="mt-3 text-sm leading-6 text-gray-600">
           {t('description', { name: fullName || t('fallbackName') })}
         </p>
-        <div className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-800">
+        <div className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-primary-50 px-4 py-3 text-sm font-medium text-primary-800">
           <ShieldCheck size={17} aria-hidden="true" />
           {t('ownerOnly')}
         </div>
@@ -361,7 +361,7 @@ export function DashboardShell({
 
   return (
       <ClubContext.Provider value={clubContextValue}>
-      <div className="min-h-dvh overflow-x-hidden bg-slate-100">
+      <div className="min-h-dvh overflow-x-hidden bg-gray-50">
         <a
           href="#main-content"
           className="sr-only z-[100] rounded-lg bg-white px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
@@ -370,7 +370,7 @@ export function DashboardShell({
         </a>
         {navigationPending && (
           <div
-            className="pointer-events-none fixed inset-x-0 top-0 z-[60] h-1 overflow-hidden bg-primary-100"
+            className="pointer-events-none fixed inset-x-0 top-0 z-[60] h-0.5 overflow-hidden bg-primary-100"
             role="status"
             aria-label={tc('loading')}
           >
@@ -391,29 +391,26 @@ export function DashboardShell({
         />
 
         <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
-          <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/95 px-4 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur lg:hidden">
+          <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur lg:hidden">
             <IconButton
+              variant="ghost"
               label={tn('openNavigation')}
               icon={<Menu size={20} />}
               onClick={() => setSidebarOpen(true)}
               aria-expanded={sidebarOpen}
               aria-controls="mobile-nav"
               aria-haspopup="dialog"
-              className="shadow-sm"
             />
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-600 text-white">
-                <Gamepad2 size={20} aria-hidden="true" />
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-950 text-white">
+                <Gamepad2 size={16} aria-hidden="true" />
               </div>
-              <div className="min-w-0 leading-tight">
-                <p className="truncate text-sm font-extrabold text-gray-950">{selectedClub?.name ?? tn('appName')}</p>
-                <p className="truncate text-xs font-bold text-primary-700">{tn('appSubtitle')}</p>
-              </div>
+              <p className="truncate text-sm font-semibold text-gray-950">{selectedClub?.name ?? tn('appName')}</p>
             </div>
           </div>
 
           <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto outline-none">
-            <div className="mx-auto w-full max-w-[1680px] px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 sm:px-5 md:px-6 lg:py-6 xl:px-8 2xl:px-10">
+            <div className="mx-auto w-full max-w-[1400px] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[4.5rem] sm:px-6 lg:px-8 lg:py-8">
               {shellError ? (
                 <InlineAlert
                   variant="danger"

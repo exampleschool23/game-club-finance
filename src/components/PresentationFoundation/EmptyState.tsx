@@ -20,12 +20,12 @@ export function EmptyState({ icon: Icon, title, description, action, compact = f
       className={cn(
         'flex flex-col items-center justify-center text-center',
         compact ? 'px-4 py-8' : 'px-4 py-16',
-        bordered && 'rounded-xl border border-dashed border-gray-200 bg-white',
+        bordered && 'rounded-2xl border border-dashed border-gray-300 bg-white',
         className,
       )}
     >
       {Icon && (
-        <div className={cn('mb-3 rounded-full bg-gray-100 text-gray-400', compact ? 'p-3' : 'p-4')}>
+        <div className={cn('mb-3 rounded-2xl bg-gray-100 text-gray-400', compact ? 'p-3' : 'p-4')}>
           <Icon size={compact ? 22 : 30} />
         </div>
       )}

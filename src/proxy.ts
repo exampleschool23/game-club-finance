@@ -17,7 +17,10 @@ function redirectToLogin(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
+  const isLoginPage = request.nextUrl.pathname.startsWith('/login');
+  // Password reset is requested while signed out; /update-password (the
+  // second step) needs the session the recovery link creates, so it stays protected.
+  const isAuthPage = isLoginPage || request.nextUrl.pathname.startsWith('/forgot-password');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isProtectedPage = !isAuthPage && !isAuthCallback;
   const hasAuthCookie = hasSupabaseAuthCookie(request);
@@ -69,7 +72,7 @@ export async function proxy(request: NextRequest) {
     return redirectToLogin(request);
   }
 
-  if (user && isAuthPage) {
+  if (user && isLoginPage) {
     const next = safeRedirectPath(request.nextUrl.searchParams.get('next')) ?? '/';
     return NextResponse.redirect(new URL(next, request.url));
   }

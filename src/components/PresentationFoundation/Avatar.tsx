@@ -32,7 +32,7 @@ export function Avatar({ name, size = 'md', tone = 'primary', className }: Avata
       aria-hidden="true"
       className={cn(
         'inline-flex shrink-0 select-none items-center justify-center rounded-full font-bold',
-        tone === 'primary' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600',
+        tone === 'primary' ? 'bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-100' : 'bg-gray-100 text-gray-600',
         sizeClasses[size],
         className,
       )}

@@ -5,10 +5,10 @@ import { cn } from '@/lib/utils';
 export type InlineAlertVariant = 'info' | 'success' | 'warning' | 'danger';
 
 const variantStyles: Record<InlineAlertVariant, { box: string; icon: string; Icon: typeof Info }> = {
-  info: { box: 'border-primary-200 bg-primary-50 text-primary-900', icon: 'text-primary-600', Icon: Info },
-  success: { box: 'border-success-100 bg-success-50 text-success-600', icon: 'text-success-600', Icon: CheckCircle2 },
-  warning: { box: 'border-warning-500/30 bg-warning-50 text-amber-800', icon: 'text-warning-600', Icon: TriangleAlert },
-  danger: { box: 'border-danger-500/30 bg-danger-50 text-danger-600', icon: 'text-danger-600', Icon: AlertCircle },
+  info: { box: 'border-primary-100 bg-primary-50/70 text-primary-900', icon: 'text-primary-600', Icon: Info },
+  success: { box: 'border-success-100 bg-success-50/70 text-success-700', icon: 'text-success-600', Icon: CheckCircle2 },
+  warning: { box: 'border-warning-100 bg-warning-50/70 text-warning-700', icon: 'text-warning-600', Icon: TriangleAlert },
+  danger: { box: 'border-danger-100 bg-danger-50/70 text-danger-700', icon: 'text-danger-600', Icon: AlertCircle },
 };
 
 export interface InlineAlertProps {
@@ -30,11 +30,11 @@ export function InlineAlert({ variant = 'info', title, children, action, hideIco
   const role = variant === 'danger' || variant === 'warning' ? 'alert' : 'status';
 
   return (
-    <div role={role} className={cn('flex gap-3 rounded-lg border px-4 py-3 text-sm', box, className)}>
-      {!hideIcon && <Icon size={18} className={cn('mt-0.5 shrink-0', icon)} aria-hidden="true" />}
+    <div role={role} className={cn('flex gap-3 rounded-xl border px-4 py-3 text-sm', box, className)}>
+      {!hideIcon && <Icon size={17} className={cn('mt-0.5 shrink-0', icon)} aria-hidden="true" />}
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
-        {children && <div className={cn(title ? 'mt-0.5 text-[13px] leading-5 opacity-90' : 'font-semibold')}>{children}</div>}
+        {children && <div className={cn(title ? 'mt-0.5 text-[13px] leading-5 opacity-90' : 'font-medium')}>{children}</div>}
       </div>
       {action && <div className="shrink-0 self-center">{action}</div>}
     </div>

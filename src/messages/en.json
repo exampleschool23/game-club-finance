@@ -23,7 +23,10 @@
     "salaries": "Salaries",
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "groupDaily": "Every day",
+    "groupMoney": "Money",
+    "groupManage": "Manage"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -751,7 +754,29 @@
     "or": "or",
     "loginWithGoogle": "Continue with Google",
     "oauthError": "Sign-in with Google did not complete. Please try again.",
-    "networkError": "Could not reach the server. Check your connection and try again."
+    "networkError": "Could not reach the server. Check your connection and try again.",
+    "heroTitle": "Cash, stock and profit of your club in one place",
+    "heroSubtitle": "Close the day in a couple of minutes. The owner immediately sees how much money is left.",
+    "subtitle": "Sign in to open your club’s cash desk.",
+    "orWithEmail": "or with email",
+    "forgotPassword": "Forgot password?",
+    "noAccessTitle": "No access yet?",
+    "noAccessHelp": "Continue with Google. The club owner will get your request and open the sections you need.",
+    "resetTitle": "Reset password",
+    "resetHelp": "Enter the email you sign in with. We will send a link to set a new password.",
+    "sendResetLink": "Send link",
+    "resetSent": "Check your inbox: the link to set a new password has been sent to {email}.",
+    "resetError": "Could not send the link. Check the email and try again.",
+    "backToLogin": "Back to sign in",
+    "newPasswordTitle": "New password",
+    "newPasswordHelp": "Choose a password of at least 8 characters.",
+    "newPassword": "New password",
+    "confirmPassword": "Repeat password",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "passwordMismatch": "Passwords do not match.",
+    "savePassword": "Save password",
+    "passwordUpdated": "Password saved. You are signed in.",
+    "passwordUpdateError": "Could not save the password. Open the link from the email again."
   },
   "moneyTaken": {
     "earnedBeforeWithdrawals": "Earned before withdrawals",

@@ -11,14 +11,16 @@ const paddingClasses: Record<CardPadding, string> = {
   lg: 'p-5 sm:p-6',
 };
 
+// Tinted tones stay quiet: a pale fill and a matching hairline, never a
+// coloured block. Colour carries meaning; it should not be a section label.
 const toneClasses: Record<CardTone, string> = {
-  default: 'border-gray-200 bg-white shadow-sm',
-  primary: 'border-primary-100 bg-white shadow-sm',
-  info: 'border-blue-100 bg-blue-50 shadow-sm',
-  success: 'border-success-100 bg-success-50/70',
-  warning: 'border-warning-500/30 bg-warning-50',
-  orange: 'border-orange-100 bg-orange-50 shadow-sm',
-  muted: 'border-gray-100 bg-gray-50',
+  default: 'border-gray-200 bg-white shadow-card',
+  primary: 'border-primary-200 bg-white shadow-card',
+  info: 'border-primary-100 bg-primary-50/50',
+  success: 'border-success-100 bg-success-50/50',
+  warning: 'border-warning-100 bg-warning-50/50',
+  orange: 'border-orange-100 bg-orange-50/50',
+  muted: 'border-gray-200 bg-gray-50',
 };
 
 export interface CardProps extends HTMLAttributes<HTMLElement> {
@@ -30,7 +32,7 @@ export interface CardProps extends HTMLAttributes<HTMLElement> {
   children: ReactNode;
 }
 
-/** The single surface primitive: white rounded panel with border and shadow. */
+/** The single surface primitive: white rounded panel with a hairline border. */
 export function Card({
   as: Component = 'div',
   padding = 'md',
@@ -43,7 +45,7 @@ export function Card({
   return (
     <Component
       className={cn(
-        'min-w-0 rounded-xl border',
+        'min-w-0 rounded-2xl border',
         toneClasses[tone],
         dashed && 'border-dashed shadow-none',
         paddingClasses[padding],
@@ -70,9 +72,9 @@ export interface SectionHeadingProps {
 }
 
 const headingSize = {
-  sm: 'text-sm font-bold text-gray-950',
-  md: 'text-base font-bold text-gray-950',
-  lg: 'text-lg font-bold text-gray-950 sm:text-xl',
+  sm: 'text-sm font-semibold text-gray-950',
+  md: 'text-base font-semibold text-gray-950',
+  lg: 'text-lg font-bold tracking-tight text-gray-950 sm:text-xl',
 };
 
 /** Title + description row used at the top of cards and page sections. */
@@ -93,7 +95,7 @@ export function SectionHeading({
         {icon && (
           <span
             className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600',
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600',
               iconClassName,
             )}
           >

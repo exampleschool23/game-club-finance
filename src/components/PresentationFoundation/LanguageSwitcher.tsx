@@ -10,36 +10,45 @@ const LANGUAGES = [
 ];
 
 interface LanguageSwitcherProps {
+  /** `dark` is kept for callers on dark surfaces; both render the same soft track. */
   variant?: 'light' | 'dark';
+  className?: string;
 }
 
-export function LanguageSwitcher({ variant = 'light' }: LanguageSwitcherProps) {
+/** Compact three-way language toggle: grey track, raised white pill for the current language. */
+export function LanguageSwitcher({ variant = 'light', className }: LanguageSwitcherProps) {
   const { locale, setLocale } = useAppLocale();
+  const dark = variant === 'dark';
 
   return (
-    <div role="group" aria-label="Language / Язык / Til" className="flex gap-1">
-      {LANGUAGES.map((lang) => (
-        <button
-          key={lang.code}
-          type="button"
-          lang={lang.code}
-          aria-label={lang.name}
-          aria-pressed={locale === lang.code}
-          onClick={() => {
-            if (isAppLocale(lang.code) && lang.code !== locale) setLocale(lang.code);
-          }}
-          className={cn(
-            'min-h-9 min-w-10 rounded-lg px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60',
-            locale === lang.code
-              ? 'bg-primary-600 text-white'
-              : variant === 'dark'
-                ? 'text-slate-300 hover:bg-white/10 hover:text-white'
-                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
-          )}
-        >
-          {lang.label}
-        </button>
-      ))}
+    <div
+      role="group"
+      aria-label="Language / Язык / Til"
+      className={cn('inline-flex gap-0.5 rounded-lg p-0.5', dark ? 'bg-white/10' : 'bg-gray-100', className)}
+    >
+      {LANGUAGES.map((lang) => {
+        const selected = locale === lang.code;
+        return (
+          <button
+            key={lang.code}
+            type="button"
+            lang={lang.code}
+            aria-label={lang.name}
+            aria-pressed={selected}
+            onClick={() => {
+              if (isAppLocale(lang.code) && lang.code !== locale) setLocale(lang.code);
+            }}
+            className={cn(
+              'min-h-8 min-w-9 rounded-[7px] px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+              selected
+                ? dark ? 'bg-white text-gray-950 shadow-sm' : 'bg-white text-gray-950 shadow-sm'
+                : dark ? 'text-white/70 hover:text-white' : 'text-gray-500 hover:text-gray-900',
+            )}
+          >
+            {lang.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -59,23 +59,24 @@ export function DataTable<T>({
       tabIndex={label ? 0 : undefined}
       className={cn(
         'max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-        !bare && 'rounded-xl border border-gray-200 bg-white shadow-sm',
+        !bare && 'rounded-2xl border border-gray-200 bg-white shadow-card',
         stickyHeader ? 'max-h-[calc(100dvh-12rem)] overflow-auto' : 'overflow-x-auto',
+        'scrollbar-thin',
         className,
       )}
     >
       <table className="w-full text-sm" style={{ minWidth: typeof minWidth === 'number' ? `${minWidth}px` : minWidth }}>
         <thead>
-          <tr className="border-b border-gray-100 bg-gray-50">
+          <tr className="border-b border-gray-200 bg-white">
             {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
                 className={cn(
                   cellPadding,
-                  'text-xs font-semibold uppercase tracking-wide text-gray-500',
+                  'text-xs font-medium text-gray-500',
                   alignClass[column.align ?? 'left'],
-                  stickyHeader && 'sticky top-0 z-20 border-b border-gray-100 bg-gray-50',
+                  stickyHeader && 'sticky top-0 z-20 border-b border-gray-200 bg-white',
                   column.className,
                 )}
               >
@@ -84,7 +85,7 @@ export function DataTable<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50 bg-white">
+        <tbody className="divide-y divide-gray-100 bg-white">
           {data.length === 0 && emptyState ? (
             <tr>
               <td colSpan={columns.length} className="p-0">{emptyState}</td>
@@ -102,12 +103,12 @@ export function DataTable<T>({
                   }
                 } : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
-                className={cn('transition-colors hover:bg-gray-50', onRowClick && 'cursor-pointer focus-visible:bg-primary-50 focus-visible:outline-none', rowClassName?.(row, index))}
+                className={cn('transition-colors hover:bg-gray-50/80', onRowClick && 'cursor-pointer focus-visible:bg-primary-50 focus-visible:outline-none', rowClassName?.(row, index))}
               >
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={cn(cellPadding, 'text-gray-700', alignClass[column.align ?? 'left'], column.className, column.cellClassName)}
+                    className={cn(cellPadding, 'text-gray-800', alignClass[column.align ?? 'left'], column.className, column.cellClassName)}
                   >
                     {column.render
                       ? column.render(row, index)

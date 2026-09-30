@@ -23,7 +23,10 @@
     "salaries": "Ish haqi",
     "openNavigation": "Menyuni ochish",
     "closeNavigation": "Menyuni yopish",
-    "signOut": "Chiqish"
+    "signOut": "Chiqish",
+    "groupDaily": "Har kuni",
+    "groupMoney": "Pul",
+    "groupManage": "Boshqaruv"
   },
   "dashboard": {
     "title": "Boshqaruv paneli",
@@ -751,7 +754,29 @@
     "or": "yoki",
     "loginWithGoogle": "Google orqali kirish",
     "oauthError": "Google orqali kirish yakunlanmadi. Qayta urinib ko‘ring.",
-    "networkError": "Serverga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring."
+    "networkError": "Serverga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.",
+    "heroTitle": "Klub kassasi, ombori va foydasi bir joyda",
+    "heroSubtitle": "Kunni bir necha daqiqada yoping. Egasi qancha pul qolganini darhol ko‘radi.",
+    "subtitle": "Klubingiz kassasini ochish uchun kiring.",
+    "orWithEmail": "yoki email orqali",
+    "forgotPassword": "Parolni unutdingizmi?",
+    "noAccessTitle": "Hali ruxsat yo‘qmi?",
+    "noAccessHelp": "Google orqali kiring. Klub egasi so‘rovingizni oladi va kerakli bo‘limlarni ochib beradi.",
+    "resetTitle": "Parolni tiklash",
+    "resetHelp": "Kirishda ishlatadigan emailni kiriting. Yangi parol uchun havola yuboramiz.",
+    "sendResetLink": "Havola yuborish",
+    "resetSent": "Pochtangizni tekshiring: yangi parol havolasi {email} manziliga yuborildi.",
+    "resetError": "Havolani yuborib bo‘lmadi. Emailni tekshirib, qayta urinib ko‘ring.",
+    "backToLogin": "Kirishga qaytish",
+    "newPasswordTitle": "Yangi parol",
+    "newPasswordHelp": "Kamida 8 belgidan iborat parol o‘ylab toping.",
+    "newPassword": "Yangi parol",
+    "confirmPassword": "Parolni takrorlang",
+    "passwordTooShort": "Parol kamida 8 belgidan iborat bo‘lishi kerak.",
+    "passwordMismatch": "Parollar mos kelmadi.",
+    "savePassword": "Parolni saqlash",
+    "passwordUpdated": "Parol saqlandi. Siz tizimga kirdingiz.",
+    "passwordUpdateError": "Parolni saqlab bo‘lmadi. Xatdagi havolani qayta oching."
   },
   "moneyTaken": {
     "earnedBeforeWithdrawals": "Pul yechishdan oldingi daromad",
