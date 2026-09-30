@@ -33,7 +33,6 @@ function buildRows(
   stockRows: StockRow[],
   purchaseRows: PurchaseRow[],
   expenseRows: ExpenseRow[],
-  labels: { sales: string; purchases: string; expenses: string },
 ): MoneyDetailRow[] {
   const rowsByDate = new Map<string, MoneyDetailRow>();
   const rowFor = (date: string) => {
@@ -41,7 +40,7 @@ function buildRows(
     if (existing) return existing;
     const row: MoneyDetailRow = {
       date,
-      collected: [{ label: labels.sales, amount: 0 }],
+      collected: [{ key: 'barSales', amount: 0 }],
       collectedTotal: 0,
       deductions: [],
       deductionsTotal: 0,
@@ -61,9 +60,9 @@ function buildRows(
     const amount = Number(purchaseRow.quantity ?? 0) * Number(purchaseRow.cost_price ?? 0);
     const product = Array.isArray(purchaseRow.products) ? purchaseRow.products[0] : purchaseRow.products;
     row.deductions.push({
-      kind: labels.purchases,
-      tone: 'orange',
-      label: `${product?.name ?? purchaseRow.comment ?? '—'} × ${Number(purchaseRow.quantity ?? 0)}`,
+      kind: 'purchase',
+      name: product?.name ?? purchaseRow.comment ?? null,
+      quantity: Number(purchaseRow.quantity ?? 0),
       amount,
     });
   }
@@ -71,9 +70,9 @@ function buildRows(
     if (expenseRow.payment_source !== 'bar') continue;
     const row = rowFor(expenseRow.date);
     row.deductions.push({
-      kind: labels.expenses,
-      tone: 'danger',
-      label: expenseRow.comment ? `${expenseRow.category}: ${expenseRow.comment}` : expenseRow.category,
+      kind: 'expense',
+      category: expenseRow.category,
+      comment: expenseRow.comment,
       amount: Number(expenseRow.amount ?? 0),
     });
   }
@@ -89,12 +88,9 @@ function buildRows(
 
 export default function BarMoneyDetailsPage({ requestedFrom, requestedTo }: { requestedFrom?: string; requestedTo?: string }) {
   const t = useTranslations('dashboard');
-  const salesLabel = t('barSales');
-  const purchasesLabel = t('stockPurchases');
-  const expensesLabel = t('expenses');
 
+  // Rows carry keys, not translated text, so switching language never refetches.
   const loadRows = useCallback(async (clubId: string, from: string, to: string) => {
-    const labels = { sales: salesLabel, purchases: purchasesLabel, expenses: expensesLabel };
     const supabase = createClient();
     const snapshotResult = await fetchFinanceReportSnapshot(supabase, clubId, from, to, ['stock_totals', 'purchases', 'expenses']);
     if (snapshotResult.error) throw new Error(snapshotResult.error.message);
@@ -104,7 +100,6 @@ export default function BarMoneyDetailsPage({ requestedFrom, requestedTo }: { re
         snapshotResult.data.stockTotalRows,
         snapshotResult.data.purchaseRows.map((row) => ({ ...row, products: row.product_name ? { name: row.product_name } : null })),
         snapshotResult.data.expenseRows,
-        labels,
       );
     }
 
@@ -128,8 +123,8 @@ export default function BarMoneyDetailsPage({ requestedFrom, requestedTo }: { re
     ]);
     const firstError = [stockRes.error, purchaseRes.error, expenseRes.error].find(Boolean);
     if (firstError) throw new Error(firstError.message);
-    return buildRows(stockRes.data ?? [], purchaseRes.data ?? [], expenseRes.data ?? [], labels);
-  }, [expensesLabel, purchasesLabel, salesLabel]);
+    return buildRows(stockRes.data ?? [], purchaseRes.data ?? [], expenseRes.data ?? []);
+  }, []);
 
   return (
     <MoneyDetailsPage

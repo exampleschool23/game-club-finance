@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { ShoppingCart, Trash2 } from 'lucide-react';
+import { Search, ShoppingCart, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -14,7 +14,7 @@ import {
   StatTile,
   Stepper,
 } from '@/components/PresentationFoundation';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, formatNumber } from '@/lib/formatters';
 import {
   calculateBulkStockOrderSummary,
   getBulkStockAvailableQuantity,
@@ -29,7 +29,8 @@ interface BulkStockUpdateModalProps {
   rows: ClosingStockRowData[];
   saving: boolean;
   onClose: () => void;
-  onSave: (items: BulkStockOrderItem[], summary: BulkStockOrderSummary) => Promise<boolean>;
+  /** Resolves to an error message to show in the dialog, or `null` on success. */
+  onSave: (items: BulkStockOrderItem[], summary: BulkStockOrderSummary) => Promise<string | null>;
 }
 
 export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: BulkStockUpdateModalProps) {
@@ -38,12 +39,22 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
   const [query, setQuery] = useState('');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  // Product order is fixed when the dialog opens so rows never jump while a
+  // quantity is being typed.
+  const [frozenOrder, setFrozenOrder] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setQuery('');
     setQuantities({});
     setError('');
+    setFrozenOrder([...rows]
+      .sort((a, b) => (a.product.sort_order ?? Number.MAX_SAFE_INTEGER)
+        - (b.product.sort_order ?? Number.MAX_SAFE_INTEGER)
+        || a.product.name.localeCompare(b.product.name))
+      .map((row) => row.product.id));
+    // Only snapshot the order when the dialog opens, not on each row refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const items = useMemo<BulkStockOrderItem[]>(() => rows.flatMap((row) => {
@@ -64,21 +75,17 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
 
   const visibleRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const position = new Map(frozenOrder.map((id, index) => [id, index]));
     return rows
       .filter((row) => {
         if (!needle) return true;
         return row.product.name.toLowerCase().includes(needle)
           || String(row.product.category ?? '').toLowerCase().includes(needle);
       })
-      .sort((a, b) => {
-        const aSelected = Number(quantities[a.product.id] ?? 0) > 0;
-        const bSelected = Number(quantities[b.product.id] ?? 0) > 0;
-        if (aSelected !== bSelected) return aSelected ? -1 : 1;
-        return (a.product.sort_order ?? Number.MAX_SAFE_INTEGER)
-          - (b.product.sort_order ?? Number.MAX_SAFE_INTEGER)
-          || a.product.name.localeCompare(b.product.name);
-      });
-  }, [quantities, query, rows]);
+      .sort((a, b) => (position.get(a.product.id) ?? Number.MAX_SAFE_INTEGER)
+        - (position.get(b.product.id) ?? Number.MAX_SAFE_INTEGER)
+        || a.product.name.localeCompare(b.product.name));
+  }, [frozenOrder, query, rows]);
 
   function updateQuantity(row: ClosingStockRowData, value: string) {
     if (!isWholeNumberInput(value)) return;
@@ -108,15 +115,19 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
       if (row) {
         setError(t('bulkInsufficientStock', {
           product: row.product.name,
-          available: getBulkStockAvailableQuantity(row) ?? 0,
+          available: formatNumber(getBulkStockAvailableQuantity(row) ?? 0),
         }));
       }
       return;
     }
 
     setError('');
-    const didSave = await onSave(items, summary);
-    if (didSave) onClose();
+    const saveError = await onSave(items, summary);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    onClose();
   }
 
   return (
@@ -130,7 +141,7 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
       footer={(
         <div className="flex w-full flex-col gap-3">
           <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-3">
-            <StatTile variant="flat" size="sm" label={t('bulkTotalItems')} value={summary.totalQuantity} unit={t('pcs')} />
+            <StatTile variant="flat" size="sm" label={t('bulkTotalItems')} value={formatNumber(summary.totalQuantity)} unit={t('pcs')} />
             <StatTile variant="flat" size="sm" align="center" className="text-right" label={t('bulkOrderTotal')} value={formatCurrency(summary.totalPrice)} unit={tc('currency')} tone="primary" />
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -160,11 +171,19 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
       <form id="bulk-stock-form" onSubmit={handleSubmit} className="space-y-4">
         <InlineAlert variant="info" title={t('bulkDescriptionTitle')}>{t('bulkDescription')}</InlineAlert>
 
-        <SearchInput value={query} onChange={setQuery} placeholder={t('bulkSearchPlaceholder')} clearLabel={tc('cancel')} />
+        <SearchInput value={query} onChange={setQuery} placeholder={t('bulkSearchPlaceholder')} />
 
         <div className="max-h-[42dvh] space-y-2 overflow-y-auto pr-1 sm:max-h-[46vh]">
           {visibleRows.length === 0 ? (
-            <EmptyState compact bordered title={tc('noData')} />
+            <EmptyState
+              compact
+              bordered
+              icon={Search}
+              title={query.trim() ? t('bulkNoResults', { query: query.trim() }) : tc('noData')}
+              action={query.trim() ? (
+                <Button variant="outline" size="sm" onClick={() => setQuery('')}>{tc('clearSearch')}</Button>
+              ) : undefined}
+            />
           ) : visibleRows.map((row) => {
             const quantity = Number(quantities[row.product.id] ?? 0);
             const available = getBulkStockAvailableQuantity(row);
@@ -185,7 +204,7 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
                         <Badge variant="purple" size="sm">{t('bulkMadeToOrder')}</Badge>
                       ) : (
                         <span className={isOutOfStock ? 'font-semibold text-danger-600' : ''}>
-                          {t('bulkAvailable', { count: available })}
+                          {t('bulkAvailable', { count: formatNumber(available) })}
                         </span>
                       )}
                     </div>
@@ -209,8 +228,8 @@ export function BulkStockUpdateModal({ open, rows, saving, onClose, onSave }: Bu
                   <div className="mt-2 flex items-center justify-between border-t border-primary-100 pt-2 text-xs">
                     <span className={hasStockError ? 'font-semibold text-danger-600' : 'text-gray-500'}>
                       {hasStockError
-                        ? t('bulkInsufficientStock', { product: row.product.name, available: available ?? 0 })
-                        : t('bulkLine', { quantity })}
+                        ? t('bulkInsufficientStock', { product: row.product.name, available: formatNumber(available ?? 0) })
+                        : t('bulkLine', { quantity: formatNumber(quantity) })}
                     </span>
                     <span className="font-bold text-primary-700"><Money amount={quantity * row.product.sale_price} /></span>
                   </div>

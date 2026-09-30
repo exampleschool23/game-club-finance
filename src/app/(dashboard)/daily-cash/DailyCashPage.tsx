@@ -11,6 +11,7 @@ import {
   Gamepad2,
   MonitorSmartphone,
   RefreshCcw,
+  RotateCw,
   Save,
   Trash2,
   TrendingUp,
@@ -44,7 +45,7 @@ import {
 } from '@/components/PresentationFoundation';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { todayIso } from '@/lib/utils';
-import { formatCurrency, formatCurrencyInput, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
+import { formatCurrency, formatCurrencyInput, formatDateOnly, formatDateTime, parseCurrencyInput } from '@/lib/formatters';
 import type { DailyCashEntry } from '@/types';
 
 interface CashFormData {
@@ -145,15 +146,22 @@ export default function DailyCashPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [financeSummary, setFinanceSummary] = useState<DailyCashSummary | null>(null);
   const canSeeNetProfit = canReadFinancialTotals(currentRole, featureAccess);
   const loadSequence = useRef(0);
   const cancelLoads = useCallback(() => { loadSequence.current++; }, []);
   const isOwner = currentRole === 'owner';
+  // Guards against double submit (state updates land a render later) and lets
+  // an in-flight save notice that the user switched clubs meanwhile.
+  const mutationPending = useRef(false);
+  const currentClubId = useRef(selectedClubId);
 
   useEffect(() => {
+    currentClubId.current = selectedClubId;
     setForm(emptyForm(businessToday));
+    setError('');
   }, [businessToday, selectedClubId]);
 
   const fetchExisting = useCallback(
@@ -170,6 +178,7 @@ export default function DailyCashPage() {
       const supabase = createClient();
       if (!silent) setLoading(true);
       setError('');
+      setLoadFailed(false);
 
       try {
         const [cashRes, summary] = await Promise.all([
@@ -186,7 +195,7 @@ export default function DailyCashPage() {
         const { data, error: fetchError } = cashRes;
 
         if (fetchError) {
-          setError(fetchError.message);
+          setLoadFailed(true);
           setEntry(null);
           setForm(emptyForm(date));
           setFinanceSummary(null);
@@ -213,9 +222,10 @@ export default function DailyCashPage() {
         }
 
         setLoading(false);
-      } catch (loadError) {
+      } catch {
         if (requestId !== loadSequence.current) return;
-        setError(loadError instanceof Error ? loadError.message : String(loadError));
+        setLoadFailed(true);
+        setEntry(null);
         setFinanceSummary(null);
         setLoading(false);
       }
@@ -259,13 +269,14 @@ export default function DailyCashPage() {
   const locked = Boolean(entry && !editable);
   const deadline = entry ? getEditDeadline(entry.created_at) : null;
   const remainingMs = deadline ? deadline.getTime() - now.getTime() : 0;
-  const disabled = loading || saving || locked;
+  const disabled = loading || saving || locked || loadFailed;
   const isDirty = entry ? JSON.stringify(entryToForm(entry)) !== JSON.stringify(form) : Boolean(
     form.cash_income || form.terminal_income || form.card_income || form.playstation_income || form.comment,
   );
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
+    if (mutationPending.current || saving || loadFailed) return;
 
     if (locked) {
       setError(t('entryLocked'));
@@ -282,73 +293,111 @@ export default function DailyCashPage() {
       return;
     }
 
+    const clubId = selectedClubId;
+    const date = form.date;
+    mutationPending.current = true;
     setSaving(true);
     setError('');
 
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const payload = {
-      date: form.date,
-      club_id: selectedClubId,
-      cash_income: values.cashIncome,
-      terminal_income: values.terminalIncome,
-      card_income: values.cardIncome,
-      playstation_income: values.playstationIncome,
-      comment: form.comment.trim() ? form.comment.trim() : null,
-      updated_at: new Date().toISOString(),
-    };
+      const payload = {
+        date,
+        club_id: clubId,
+        cash_income: values.cashIncome,
+        terminal_income: values.terminalIncome,
+        card_income: values.cardIncome,
+        playstation_income: values.playstationIncome,
+        comment: form.comment.trim() ? form.comment.trim() : null,
+        updated_at: new Date().toISOString(),
+      };
 
-    const result = entry
-      ? await supabase.from('daily_cash_entries').update(payload).eq('id', entry.id).eq('club_id', selectedClubId)
-      : await supabase.from('daily_cash_entries').insert({
-          ...payload,
-          created_by: session?.user?.id ?? null,
-        });
+      const result = entry
+        ? await supabase.from('daily_cash_entries').update(payload).eq('id', entry.id).eq('club_id', clubId).select('id')
+        : await supabase.from('daily_cash_entries').insert({
+            ...payload,
+            created_by: session?.user?.id ?? null,
+          });
 
-    setSaving(false);
+      // The user switched clubs while saving: the write went to the club it was
+      // made for; do not paint its result over the newly selected club.
+      if (currentClubId.current !== clubId) return;
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
+      if (result.error) {
+        setError(result.error.code === '23505' ? t('duplicateEntryError') : t('saveError'));
+        return;
+      }
+      if (entry && (result.data ?? []).length === 0) {
+        // RLS filtered the update out (edit window closed or no permission).
+        setError(t('entryLocked'));
+        await fetchExisting(date, { silent: true });
+        return;
+      }
+
+      showToast(entry ? t('entryUpdated') : t('entrySaved'));
+      await fetchExisting(date, { silent: true });
+    } catch {
+      if (currentClubId.current === clubId) setError(t('saveError'));
+    } finally {
+      mutationPending.current = false;
+      setSaving(false);
     }
-
-    showToast(entry ? t('entryUpdated') : t('entrySaved'));
-    await fetchExisting(form.date, { silent: true });
   }
 
   async function handleDelete() {
-    if (!entry || !isOwner || !selectedClubId) return;
+    if (!entry || !isOwner || !selectedClubId || mutationPending.current) return;
+    const clubId = selectedClubId;
+    const target = entry;
     const confirmed = await confirm({
       title: tc('delete'),
-      description: t('deleteConfirm'),
+      description: t('deleteConfirmDetailed', {
+        date: formatDateOnly(target.date, locale),
+        amount: `${formatCurrency(calculateGameClubIncome({
+          cashIncome: target.cash_income,
+          terminalIncome: target.terminal_income,
+          cardIncome: target.card_income,
+          playstationIncome: target.playstation_income ?? 0,
+        }))} ${tc('currency')}`,
+      }),
       confirmLabel: tc('delete'),
     });
-    if (!confirmed) return;
+    // The dialog can stay open across a club switch; never act on a stale entry.
+    if (!confirmed || currentClubId.current !== clubId || mutationPending.current) return;
 
-    const supabase = createClient();
+    mutationPending.current = true;
     setSaving(true);
     setError('');
 
-    const { error: deleteError } = await supabase
-      .from('daily_cash_entries')
-      .delete()
-      .eq('club_id', selectedClubId)
-      .eq('id', entry.id);
+    try {
+      const supabase = createClient();
+      const { data: deletedRows, error: deleteError } = await supabase
+        .from('daily_cash_entries')
+        .delete()
+        .eq('club_id', clubId)
+        .eq('id', target.id)
+        .select('id');
 
-    setSaving(false);
+      if (currentClubId.current !== clubId) return;
 
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
+      if (deleteError || (deletedRows ?? []).length === 0) {
+        setError(t('deleteError'));
+        return;
+      }
+
+      showToast(t('entryDeleted'));
+      setEntry(null);
+      setForm(emptyForm(target.date));
+      await fetchExisting(target.date, { silent: true });
+    } catch {
+      if (currentClubId.current === clubId) setError(t('deleteError'));
+    } finally {
+      mutationPending.current = false;
+      setSaving(false);
     }
-
-    showToast(t('entryDeleted'));
-    setEntry(null);
-    setForm(emptyForm(form.date));
-    await fetchExisting(form.date, { silent: true });
   }
 
   function handleReset() {
@@ -379,10 +428,10 @@ export default function DailyCashPage() {
   }
 
   const paymentCards: Array<{ key: 'cash_income' | 'terminal_income' | 'card_income' | 'playstation_income'; label: string; icon: ElementType; bg: string; color: string; visible: boolean }> = [
-    { key: 'cash_income', label: t('cash'), icon: Banknote, bg: 'bg-green-100', color: 'text-green-600', visible: enabledPaymentMethods.includes('cash') },
-    { key: 'terminal_income', label: t('terminal'), icon: MonitorSmartphone, bg: 'bg-blue-100', color: 'text-blue-600', visible: enabledPaymentMethods.includes('terminal') },
-    { key: 'card_income', label: t('card'), icon: CreditCard, bg: 'bg-purple-100', color: 'text-purple-600', visible: enabledPaymentMethods.includes('card') },
-    { key: 'playstation_income', label: t('playstation'), icon: Gamepad2, bg: 'bg-amber-100', color: 'text-amber-600', visible: true },
+    { key: 'cash_income', label: t('cash'), icon: Banknote, bg: 'bg-success-50', color: 'text-success-600', visible: enabledPaymentMethods.includes('cash') },
+    { key: 'terminal_income', label: t('terminal'), icon: MonitorSmartphone, bg: 'bg-primary-50', color: 'text-primary-600', visible: enabledPaymentMethods.includes('terminal') },
+    { key: 'card_income', label: t('card'), icon: CreditCard, bg: 'bg-purple-50', color: 'text-purple-600', visible: enabledPaymentMethods.includes('card') },
+    { key: 'playstation_income', label: t('playstation'), icon: Gamepad2, bg: 'bg-warning-50', color: 'text-warning-600', visible: true },
   ];
 
   const savedBreakdown = entry
@@ -398,7 +447,20 @@ export default function DailyCashPage() {
     <div className="space-y-4">
       {header}
 
-      <Card as="form" onSubmit={handleSave}>
+      {loadFailed && (
+        <InlineAlert
+          variant="danger"
+          action={(
+            <Button size="sm" variant="outline" onClick={() => void fetchExisting(form.date)} icon={<RotateCw size={15} aria-hidden="true" />}>
+              {tc('retry')}
+            </Button>
+          )}
+        >
+          {t('loadError')}
+        </InlineAlert>
+      )}
+
+      <Card as="form" onSubmit={handleSave} aria-busy={saving || undefined}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <Field label={t('date')} className="w-full sm:max-w-[300px]">
             <DatePicker
@@ -414,7 +476,7 @@ export default function DailyCashPage() {
               {isOwner ? t('ownerAccessEdit') : (
                 <>
                   {t('editUntil', { time: formatDateTime(deadline, locale) })}
-                  <span className="ml-1 rounded-full bg-green-100 px-2 py-0.5 tabular-nums">{formatRemaining(remainingMs)}</span>
+                  <span className="ml-1 rounded-full bg-white/70 px-2 py-0.5 tabular-nums">{formatRemaining(remainingMs)}</span>
                 </>
               )}
             </Badge>
@@ -447,15 +509,15 @@ export default function DailyCashPage() {
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-success-500/30 bg-success-50 px-4 py-3" aria-live="polite">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">{t('totalGameClubIncome')}</p>
-            <p className="mt-1 break-words text-2xl font-bold tabular-nums text-green-600">
+            <p className="mt-1 break-words text-2xl font-bold tabular-nums text-success-600">
               <Money amount={total} />
             </p>
           </div>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-100">
-            <TrendingUp size={19} className="text-green-600" aria-hidden="true" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/70">
+            <TrendingUp size={19} className="text-success-600" aria-hidden="true" />
           </span>
         </div>
 
@@ -482,7 +544,7 @@ export default function DailyCashPage() {
         {error && <InlineAlert variant="danger" className="mt-4">{error}</InlineAlert>}
 
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.2fr]">
-          <Button variant="outline" size="lg" disabled={saving || !isDirty} onClick={handleReset} icon={<RefreshCcw size={18} aria-hidden="true" />}>
+          <Button variant="outline" size="lg" disabled={saving || loadFailed || !isDirty} onClick={handleReset} icon={<RefreshCcw size={18} aria-hidden="true" />}>
             {t('reset')}
           </Button>
           <Button type="submit" size="lg" disabled={disabled} loading={saving} loadingLabel={tc('saving')} icon={<Save size={18} aria-hidden="true" />}>

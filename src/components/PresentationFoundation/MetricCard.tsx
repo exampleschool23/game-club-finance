@@ -1,5 +1,6 @@
 import type { ElementType, ReactNode } from 'react';
 import { ArrowDown, ArrowUp, type LucideIcon } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatters';
 import { Skeleton } from './Skeleton';
@@ -47,13 +48,14 @@ export function MetricCard({
   loading = false,
   className,
 }: MetricCardProps) {
+  const tc = useTranslations('common');
   return (
     <div className={cn('min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5', className)}>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="min-w-0">
           <p className="break-words text-sm font-medium text-gray-500">{label}</p>
           {loading ? (
-            <div className="mt-2 space-y-2" role="status" aria-label="Loading">
+            <div className="mt-2 space-y-2" role="status" aria-label={tc('loading')}>
               <Skeleton className="h-7 w-36 max-w-full" />
               <Skeleton className="h-3 w-20 bg-gray-100" />
             </div>
@@ -105,12 +107,14 @@ export function AmountCard({
   icon: Icon,
   iconBgClassName,
   iconClassName,
-  currency = 'UZS',
+  currency: currencyProp,
   comparison,
   subMetric,
   helper,
   loading = false,
 }: AmountCardProps) {
+  const tc = useTranslations('common');
+  const currency = currencyProp ?? tc('currency');
   const isPositive = typeof comparison?.value === 'number' && comparison.value >= 0;
 
   return (
@@ -122,7 +126,7 @@ export function AmountCard({
         <div className="min-w-0">
           <p className="break-words text-sm font-semibold text-gray-600">{label}</p>
           {loading ? (
-            <div className="mt-2 space-y-2" role="status" aria-label="Loading">
+            <div className="mt-2 space-y-2" role="status" aria-label={tc('loading')}>
               <Skeleton className="h-7 w-32 max-w-full" />
               <Skeleton className="h-3 w-12 bg-gray-100" />
             </div>

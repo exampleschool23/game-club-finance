@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Button,
   Card,
   DataTable,
   DatePicker,
@@ -28,7 +29,7 @@ import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { fetchFinanceReportSnapshot } from '@/lib/supabase/financeReportSnapshot';
 import { fetchAllRows } from '@/lib/supabase/pagination';
-import { FileText, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
+import { FileText, RefreshCcw, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
 import type { DailyCashEntry, DailyStockCount, Expense, StockPurchase } from '@/types';
 
 interface ProductRow extends DailyStockCount {
@@ -53,7 +54,8 @@ export default function DailyReportPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [debtIncome, setDebtIncome] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const requestSequence = useRef(0);
 
   const fetchData = useCallback(async (selectedDate: string) => {
@@ -70,7 +72,7 @@ export default function DailyReportPage() {
     }
 
     setLoading(true);
-    setLoadError('');
+    setLoadError(false);
     const supabase = createClient();
 
     const snapshotResult = await fetchFinanceReportSnapshot(
@@ -89,7 +91,7 @@ export default function DailyReportPage() {
       setStockPurchases([]);
       setExpenses([]);
       setDebtIncome(0);
-      setLoadError(snapshotResult.error.message);
+      setLoadError(true);
       setLoading(false);
       return;
     }
@@ -168,7 +170,7 @@ export default function DailyReportPage() {
       setStockPurchases([]);
       setExpenses([]);
       setDebtIncome(0);
-      setLoadError(firstError.message);
+      setLoadError(true);
       setLoading(false);
       return;
     }
@@ -188,22 +190,22 @@ export default function DailyReportPage() {
       (sum, debt) => sum + Number(debt.amount ?? 0),
       0,
     ));
-    setLoadError('');
+    setLoadError(false);
     setLoading(false);
   }, [selectedClubId]);
 
   useEffect(() => {
-    fetchData(date).catch((fetchError) => {
+    fetchData(date).catch(() => {
       setCashEntry(null);
       setStockCounts([]);
       setStockPurchases([]);
       setExpenses([]);
       setDebtIncome(0);
-      setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      setLoadError(true);
       setLoading(false);
     });
     return () => { requestSequence.current += 1; };
-  }, [date, fetchData]);
+  }, [date, fetchData, reloadToken]);
 
   useEffect(() => {
     setDate(businessToday);
@@ -263,14 +265,32 @@ export default function DailyReportPage() {
         )}
       />
 
-      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
+      {loadError && (
+        <InlineAlert
+          variant="danger"
+          className="mb-4"
+          action={(
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => setReloadToken((token) => token + 1)}
+              icon={<RefreshCcw size={15} aria-hidden="true" />}
+            >
+              {tc('retry')}
+            </Button>
+          )}
+        >
+          {t('loadError')}
+        </InlineAlert>
+      )}
 
       {loading ? (
         <div className="space-y-6">
           <MetricGridSkeleton count={10} className="xl:grid-cols-5" />
           <TableSkeleton rows={4} columns={5} />
         </div>
-      ) : !hasData ? (
+      ) : loadError ? null : !hasData ? (
         <Card><EmptyState icon={FileText} title={t('noData')} /></Card>
       ) : (
         <div className="space-y-6">
@@ -301,11 +321,12 @@ export default function DailyReportPage() {
               <DataTable
                 bare
                 className="mt-3"
+                label={t('stockSummary')}
                 minWidth={680}
                 keyExtractor={(row) => row.id}
                 data={stockCounts}
                 columns={[
-                  { key: 'product', header: t('product'), render: (row) => <span className="font-medium text-gray-900">{row.products?.name ?? row.product_id}</span> },
+                  { key: 'product', header: t('product'), className: 'sticky left-0 z-10 bg-gray-50', cellClassName: 'bg-white', render: (row) => <span className="font-medium text-gray-900">{row.products?.name ?? row.product_id}</span> },
                   { key: 'sold', header: t('sold'), align: 'right', render: (row) => formatNumber(row.sold_quantity) },
                   { key: 'income', header: t('barSales'), align: 'right', render: (row) => <span className="text-success-600">{formatCurrency(row.bar_income)}</span> },
                   { key: 'cost', header: t('costOfGoodsSold'), align: 'right', render: (row) => <span className="text-danger-500">{formatCurrency(row.bar_cost)}</span> },

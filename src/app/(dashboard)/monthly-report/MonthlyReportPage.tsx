@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Button,
   Card,
   DataTable,
   EmptyState,
@@ -26,7 +27,7 @@ import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { fetchFinanceReportSnapshot } from '@/lib/supabase/financeReportSnapshot';
 import { fetchAllRows } from '@/lib/supabase/pagination';
-import { BarChart2 } from 'lucide-react';
+import { BarChart2, RefreshCcw } from 'lucide-react';
 
 interface DayRow {
   date: string;
@@ -105,7 +106,8 @@ export default function MonthlyReportPage() {
   const [month, setMonth] = useState(() => businessYearMonth);
   const [rows, setRows] = useState<DayRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const requestSequence = useRef(0);
 
   const fetchData = useCallback(async (selectedMonth: string) => {
@@ -118,7 +120,7 @@ export default function MonthlyReportPage() {
     }
 
     setLoading(true);
-    setLoadError('');
+    setLoadError(false);
     const supabase = createClient();
     const { from, to } = monthRange(selectedMonth);
 
@@ -134,7 +136,7 @@ export default function MonthlyReportPage() {
 
     if (snapshotResult.error) {
       setRows([]);
-      setLoadError(snapshotResult.error.message);
+      setLoadError(true);
       setLoading(false);
       return;
     }
@@ -201,7 +203,7 @@ export default function MonthlyReportPage() {
         .find((result) => result.error)?.error;
       if (firstError) {
         setRows([]);
-        setLoadError(firstError.message);
+        setLoadError(true);
         setLoading(false);
         return;
       }
@@ -262,18 +264,18 @@ export default function MonthlyReportPage() {
     });
 
     setRows(dayRows);
-    setLoadError('');
+    setLoadError(false);
     setLoading(false);
   }, [selectedClubId]);
 
   useEffect(() => {
-    fetchData(month).catch((fetchError) => {
+    fetchData(month).catch(() => {
       setRows([]);
-      setLoadError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      setLoadError(true);
       setLoading(false);
     });
     return () => { requestSequence.current += 1; };
-  }, [month, fetchData]);
+  }, [month, fetchData, reloadToken]);
 
   useEffect(() => {
     setMonth(businessYearMonth);
@@ -322,14 +324,32 @@ export default function MonthlyReportPage() {
         )}
       />
 
-      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
+      {loadError && (
+        <InlineAlert
+          variant="danger"
+          className="mb-4"
+          action={(
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => setReloadToken((token) => token + 1)}
+              icon={<RefreshCcw size={15} aria-hidden="true" />}
+            >
+              {tc('retry')}
+            </Button>
+          )}
+        >
+          {t('loadError')}
+        </InlineAlert>
+      )}
 
       {loading ? (
         <div className="space-y-4">
           <MetricGridSkeleton count={7} className="lg:grid-cols-4" />
           <TableSkeleton rows={8} columns={11} />
         </div>
-      ) : rows.length === 0 ? (
+      ) : loadError ? null : rows.length === 0 ? (
         <Card><EmptyState icon={BarChart2} title={t('noData')} /></Card>
       ) : (
         <div className="space-y-4">
@@ -342,11 +362,12 @@ export default function MonthlyReportPage() {
 
           <DataTable
             stickyHeader
+            label={t('title')}
             minWidth={1460}
             keyExtractor={(row) => row.date}
             data={rows}
             columns={[
-              { key: 'date', header: t('date'), className: 'sticky left-0 z-10 bg-white', render: (row) => <span className="font-medium text-gray-700">{formatDate(row.date, locale)}</span> },
+              { key: 'date', header: t('date'), className: 'sticky left-0 z-[25] bg-gray-50', cellClassName: 'z-10 bg-white', render: (row) => <span className="font-medium text-gray-700">{formatDate(row.date, locale)}</span> },
               { key: 'manualIncome', header: t('gameClubIncome'), align: 'right', render: (row) => formatCurrency(row.manualIncome) },
               { key: 'barSales', header: t('barSales'), align: 'right', render: (row) => formatCurrency(row.barSales) },
               { key: 'debtIncome', header: t('debtIncome'), align: 'right', render: (row) => <span className="text-warning-600">{formatCurrency(row.debtIncome)}</span> },

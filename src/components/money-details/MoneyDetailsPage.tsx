@@ -2,9 +2,9 @@
 
 // Shared breakdown page for /bar-money-details and /game-club-money-details.
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CalendarDays, ChevronDown, CircleMinus, CirclePlus, Equal } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CalendarDays, ChevronDown, CircleMinus, CirclePlus, Equal, RefreshCcw } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { useClub } from '@/components/layout/DashboardShell';
@@ -18,22 +18,34 @@ import {
   InlineAlert,
   Money,
   PageHeader,
+  StatTile,
 } from '@/components/PresentationFoundation';
-import { formatCurrency, formatDateShort } from '@/lib/formatters';
+import { formatCurrency, formatDateShort, formatNumber } from '@/lib/formatters';
 import { cn, todayIso } from '@/lib/utils';
 
-export interface MoneyDetailLine {
-  label: string;
-  amount: number;
-  /** Category chip shown above the label (e.g. "Stock purchases"). */
-  kind?: string;
-  tone?: 'orange' | 'danger';
-}
+/** Collected-money buckets; translated at render time so language changes never refetch. */
+export type MoneyDetailCollectedKey = 'barSales' | 'cash' | 'terminal' | 'card' | 'playstation' | 'debtPayments';
+
+export type MoneyDetailLine =
+  | {
+      kind: 'purchase';
+      /** Product name, or the purchase comment when the product is gone. */
+      name: string | null;
+      quantity: number;
+      amount: number;
+    }
+  | {
+      kind: 'expense';
+      /** Stored expense category: a known category key or custom text. */
+      category: string;
+      comment: string | null;
+      amount: number;
+    };
 
 export interface MoneyDetailRow {
   date: string;
   /** Positive contributions, shown on the left. */
-  collected: Array<{ label: string; amount: number }>;
+  collected: Array<{ key: MoneyDetailCollectedKey; amount: number }>;
   collectedTotal: number;
   deductions: MoneyDetailLine[];
   deductionsTotal: number;
@@ -71,9 +83,10 @@ export function inRangeQuery<T extends { gte: (column: string, value: string) =>
 }
 
 export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, loadRows, labels }: MoneyDetailsPageProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const t = useTranslations('dashboard');
+  const tc = useTranslations('common');
+  const te = useTranslations('expenses');
   const { locale } = useAppLocale();
   const { selectedClubId, businessDayStartHour } = useClub();
   const fallbackDate = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
@@ -86,10 +99,9 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
   const [rows, setRows] = useState<MoneyDetailRow[]>([]);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const accent = variant === 'bar'
-    ? { text: 'text-orange-700', result: 'bg-orange-300 text-orange-950' }
-    : { text: 'text-emerald-700', result: 'bg-emerald-400 text-emerald-950' };
+  const [error, setError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const resultLabelClassName = variant === 'bar' ? 'text-orange-700' : 'text-success-600';
 
   useEffect(() => {
     setRange(requested);
@@ -98,36 +110,40 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
   const fetchDetails = useCallback(async (isCurrent: () => boolean) => {
     if (!selectedClubId) {
       setRows([]);
+      setError(false);
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    setError('');
+    setError(false);
     try {
       const next = await loadRows(selectedClubId, range.from, range.to);
       if (!isCurrent()) return;
       setRows(next);
-    } catch (loadError) {
+    } catch {
       if (!isCurrent()) return;
-      setError(loadError instanceof Error && loadError.message ? loadError.message : t('loadError'));
+      setError(true);
       setRows([]);
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [loadRows, range.from, range.to, selectedClubId, t]);
+  }, [loadRows, range.from, range.to, selectedClubId]);
 
   useEffect(() => {
     let cancelled = false;
     void fetchDetails(() => !cancelled);
     return () => { cancelled = true; };
-  }, [fetchDetails]);
+  }, [fetchDetails, reloadToken]);
 
   function updateRange(next: { from: string; to: string }) {
     setRange(next);
+    // Keep the URL shareable without a server round-trip (same as the dashboard).
     const params = new URLSearchParams({ from: next.from, to: next.to });
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
+
+  const backHref = `/?${new URLSearchParams({ from: range.from, to: range.to }).toString()}`;
 
   const totals = rows.reduce(
     (sum, row) => ({
@@ -152,19 +168,32 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
     setExpandedDates(allRowsExpanded ? new Set() : new Set(rows.map((row) => row.date)));
   }
 
-  const summaryTile = (icon: ReactNode, label: string, amount: number, hint?: string) => (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
-      {icon}
-      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-1 break-words text-base font-bold tabular-nums sm:text-xl">{formatCurrency(amount)}</p>
-      {hint && <p className="mt-1 text-xs font-semibold text-gray-600">{hint}</p>}
-    </div>
-  );
+  function collectedLabel(key: MoneyDetailCollectedKey): string {
+    switch (key) {
+      case 'barSales': return t('barSales');
+      case 'cash': return t('cash');
+      case 'terminal': return t('terminal');
+      case 'card': return t('card');
+      case 'playstation': return t('playstation');
+      case 'debtPayments': return t('debtPaymentsCollected');
+    }
+  }
+
+  function expenseCategoryLabel(category: string): string {
+    const key = `categories.${category}`;
+    return te.has(key) ? te(key as Parameters<typeof te>[0]) : category.replace(/_/g, ' ');
+  }
+
+  function deductionLabel(line: MoneyDetailLine): string {
+    if (line.kind === 'purchase') return `${line.name ?? '—'} × ${formatNumber(line.quantity)}`;
+    const category = expenseCategoryLabel(line.category);
+    return line.comment ? `${category}: ${line.comment}` : category;
+  }
 
   return (
     <div className="space-y-4">
       <PageHeader
-        back="/"
+        back={backHref}
         backLabel={t('backToDashboard')}
         title={labels.title}
         description={labels.description}
@@ -181,18 +210,35 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
         )}
       />
 
-      {error ? <InlineAlert variant="danger">{error}</InlineAlert> : null}
+      {error ? (
+        <InlineAlert
+          variant="danger"
+          action={(
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => setReloadToken((token) => token + 1)}
+              icon={<RefreshCcw size={15} aria-hidden="true" />}
+            >
+              {tc('retry')}
+            </Button>
+          )}
+        >
+          {t('loadError')}
+        </InlineAlert>
+      ) : null}
 
       {loading ? (
         <DetailListSkeleton />
-      ) : rows.length === 0 ? (
+      ) : error ? null : rows.length === 0 ? (
         <Card><EmptyState icon={CalendarDays} title={labels.emptyLabel} /></Card>
       ) : (
         <>
           <Card as="section" padding="none" className="overflow-hidden rounded-2xl text-gray-950">
             <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center">
               <div>
-                <p className={cn('text-sm font-bold', accent.text)}>{labels.resultLabel}</p>
+                <p className={cn('text-sm font-bold', resultLabelClassName)}>{labels.resultLabel}</p>
                 <p className={cn('mt-2 break-words text-3xl font-bold tracking-tight tabular-nums sm:text-4xl', totals.moneyLeft < 0 ? 'text-danger-600' : 'text-gray-950')}>
                   <Money amount={totals.moneyLeft} currencyClassName="text-lg text-gray-500" />
                 </p>
@@ -203,13 +249,39 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
               </div>
 
               <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3">
-                {summaryTile(<CirclePlus size={18} className="text-emerald-600" aria-hidden="true" />, labels.collectedLabel, totals.collected)}
+                <StatTile
+                  variant="soft"
+                  className="border border-gray-200"
+                  icon={CirclePlus}
+                  iconClassName="bg-success-50 text-success-600"
+                  label={labels.collectedLabel}
+                  value={formatCurrency(totals.collected)}
+                  unit={tc('currency')}
+                />
                 <CircleMinus size={20} className="self-center text-gray-400" aria-hidden="true" />
-                {summaryTile(<CircleMinus size={18} className="text-danger-600" aria-hidden="true" />, labels.deductionsLabel, totals.deductions, labels.deductionsHint)}
-                <div className={cn('col-span-3 flex items-center gap-2 rounded-xl px-4 py-3', accent.result)}>
+                <StatTile
+                  variant="soft"
+                  className="border border-gray-200"
+                  icon={CircleMinus}
+                  iconClassName="bg-danger-50 text-danger-600"
+                  label={labels.deductionsHint ? (
+                    <>
+                      {labels.deductionsLabel}
+                      <span className="mt-0.5 block font-medium text-gray-500">{labels.deductionsHint}</span>
+                    </>
+                  ) : labels.deductionsLabel}
+                  value={formatCurrency(totals.deductions)}
+                  unit={tc('currency')}
+                />
+                <div
+                  className={cn(
+                    'col-span-3 flex items-center gap-2 rounded-xl px-4 py-3',
+                    totals.moneyLeft < 0 ? 'bg-danger-50 text-danger-600' : 'bg-success-50 text-success-600',
+                  )}
+                >
                   <Equal size={19} className="shrink-0" aria-hidden="true" />
                   <span className="text-sm font-bold">{t('moneyLeftForPeriod')}</span>
-                  <span className="ml-auto break-words text-right text-base font-bold tabular-nums sm:text-lg">{formatCurrency(totals.moneyLeft)}</span>
+                  <Money amount={totals.moneyLeft} className="ml-auto break-words text-right text-base font-bold sm:text-lg" />
                 </div>
               </div>
             </div>
@@ -241,9 +313,9 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
                   </div>
                   <div className="flex items-center justify-between gap-3 sm:justify-end">
                     <span className="text-xs font-bold text-gray-500">{t('moneyLeftForDay')}</span>
-                    <span className={cn('rounded-lg px-3 py-1.5 text-sm font-bold tabular-nums', row.moneyLeft < 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700')}>
+                    <Badge variant={row.moneyLeft < 0 ? 'danger' : 'success'} className="rounded-lg px-3 py-1.5 text-sm font-bold tabular-nums">
                       <Money amount={row.moneyLeft} />
-                    </span>
+                    </Badge>
                   </div>
                 </summary>
 
@@ -251,19 +323,21 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
                   <section className="p-4 sm:p-5 lg:border-r lg:border-gray-200">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <h3 className="text-sm font-bold text-gray-950">{labels.collectedLabel}</h3>
-                      <span className="text-sm font-bold tabular-nums text-emerald-700">+ {formatCurrency(row.collectedTotal)}</span>
+                      <Money amount={row.collectedTotal} showPlus className="text-sm font-bold text-success-600" />
                     </div>
                     {row.collected.length === 1 ? (
-                      <div className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 p-4">
-                        <span className="text-sm font-bold text-emerald-800">{row.collected[0].label}</span>
-                        <span className="text-base font-bold tabular-nums text-gray-950">+ {formatCurrency(row.collected[0].amount)}</span>
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-success-50 p-4">
+                        <span className="text-sm font-bold text-success-600">{collectedLabel(row.collected[0].key)}</span>
+                        <Money amount={row.collected[0].amount} showPlus className="text-base font-bold text-gray-950" />
                       </div>
                     ) : (
                       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {row.collected.map((item) => (
-                          <div key={item.label} className="rounded-lg bg-emerald-50 p-3">
-                            <dt className="text-xs font-semibold text-emerald-800">{item.label}</dt>
-                            <dd className="mt-1 break-words text-sm font-bold tabular-nums text-gray-950">{formatCurrency(item.amount)}</dd>
+                          <div key={item.key} className="rounded-lg bg-success-50 p-3">
+                            <dt className="text-xs font-semibold text-success-600">{collectedLabel(item.key)}</dt>
+                            <dd className="mt-1 break-words text-sm font-bold text-gray-950">
+                              <Money amount={item.amount} />
+                            </dd>
                           </div>
                         ))}
                       </dl>
@@ -273,32 +347,35 @@ export default function MoneyDetailsPage({ variant, requestedFrom, requestedTo, 
                   <section className="border-t border-gray-200 p-4 sm:p-5 lg:border-t-0">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <h3 className="text-sm font-bold text-gray-950">{labels.deductionsLabel}</h3>
-                      <span className="text-sm font-bold tabular-nums text-danger-600">− {formatCurrency(row.deductionsTotal)}</span>
+                      <span className="text-sm font-bold text-danger-600">− <Money amount={row.deductionsTotal} /></span>
                     </div>
                     {row.deductions.length ? (
                       <div className="space-y-2">
-                        {row.deductions.map((line, index) => (
-                          <div
-                            key={`${line.label}-${index}`}
-                            className={cn(
-                              'flex items-start justify-between gap-4 rounded-lg border px-3 py-2.5',
-                              line.tone === 'orange' ? 'border-orange-100 bg-orange-50/70' : 'border-red-100 bg-red-50/60',
-                            )}
-                          >
-                            <div className="min-w-0">
-                              {line.kind && (
-                                <span className={cn('block text-[11px] font-bold uppercase tracking-wide', line.tone === 'orange' ? 'text-orange-700' : 'text-red-700')}>
-                                  {line.kind}
-                                </span>
+                        {row.deductions.map((line, index) => {
+                          const isPurchase = line.kind === 'purchase';
+                          return (
+                            <div
+                              key={`${line.kind}-${index}`}
+                              className={cn(
+                                'flex items-start justify-between gap-4 rounded-lg border px-3 py-2.5',
+                                isPurchase ? 'border-orange-100 bg-orange-50/70' : 'border-danger-50 bg-danger-50/60',
                               )}
-                              <span className="mt-0.5 block text-sm font-semibold leading-5 text-gray-700">{line.label}</span>
+                            >
+                              <div className="min-w-0">
+                                {variant === 'bar' && (
+                                  <span className={cn('block text-[11px] font-bold uppercase tracking-wide', isPurchase ? 'text-orange-700' : 'text-danger-600')}>
+                                    {isPurchase ? t('stockPurchases') : t('expenses')}
+                                  </span>
+                                )}
+                                <span className="mt-0.5 block break-words text-sm font-semibold leading-5 text-gray-700">{deductionLabel(line)}</span>
+                              </div>
+                              <span className="shrink-0 text-sm font-bold text-danger-600">− <Money amount={line.amount} /></span>
                             </div>
-                            <span className="shrink-0 text-sm font-bold tabular-nums text-danger-600">− {formatCurrency(line.amount)}</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
-                      <EmptyState compact bordered title="—" className="py-5" />
+                      <EmptyState compact bordered title={t('noDeductionsForDay')} className="py-5" />
                     )}
                   </section>
                 </div>

@@ -32,6 +32,8 @@ function monthLabel(month: string, locale: string): string {
 
 export function MonthlyAverageIncomeChart({ data, locale }: MonthlyAverageIncomeChartProps) {
   const t = useTranslations('dashboard');
+  const tc = useTranslations('common');
+  const currency = tc('currency');
   const chartData = data.map((point) => ({
     ...point,
     label: monthLabel(point.month, locale),
@@ -58,7 +60,7 @@ export function MonthlyAverageIncomeChart({ data, locale }: MonthlyAverageIncome
 
       <div className="mt-5 h-80 sm:h-96">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 12, right: 8, bottom: 8, left: 4 }}>
+          <BarChart accessibilityLayer data={chartData} margin={{ top: 12, right: 8, bottom: 8, left: 4 }}>
             <CartesianGrid stroke="#e5e7eb" vertical={false} />
             <XAxis
               dataKey="label"
@@ -68,9 +70,9 @@ export function MonthlyAverageIncomeChart({ data, locale }: MonthlyAverageIncome
               textAnchor="end"
               height={58}
             />
-            <YAxis tickFormatter={formatAxis} tick={{ fontSize: 12, fill: '#64748b' }} width={48} />
+            <YAxis tickFormatter={(value: number) => formatAxis(value, locale)} tick={{ fontSize: 12, fill: '#64748b' }} width={48} />
             <Tooltip
-              formatter={(value) => [`${formatCurrency(Number(value))} UZS`, t('averageDailyIncome')]}
+              formatter={(value) => [`${formatCurrency(Number(value))} ${currency}`, t('averageDailyIncome')]}
               labelStyle={{ fontWeight: 700 }}
             />
             <Bar dataKey="value" name={t('averageDailyIncome')} radius={[7, 7, 0, 0]} maxBarSize={88}>

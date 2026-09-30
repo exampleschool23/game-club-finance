@@ -8,8 +8,10 @@ import { createClient } from '@/lib/supabase/client';
 import { fetchStockOpeningBalances, fetchStockPurchasesForDate } from '@/lib/supabase/stockOpeningBalances';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Avatar,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardHeader,
   DatePicker,
@@ -24,16 +26,20 @@ import {
   SegmentedControl,
   Stepper,
   TableSkeleton,
+  useConfirm,
   useToast,
 } from '@/components/PresentationFoundation';
+import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { BulkStockUpdateModal } from './BulkStockUpdateModal';
 import { calendarTodayIso, todayIso } from '@/lib/utils';
-import { formatCurrency, formatUnitCurrency } from '@/lib/formatters';
+import { formatCurrency, formatDateOnly, formatNumber, formatUnitCurrency } from '@/lib/formatters';
 import {
   calculateClosingStockFromSold,
-  calculateDirectSalesSummary,
   calculateStockCountSummary,
+  summarizeStockRow,
+  summarizeStockRows,
 } from '@/lib/calculations/stock';
+import { classifyStockWriteError, type StockWriteErrorLike } from '@/lib/stockWriteErrors';
 import {
   applyBulkStockOrder,
   applyClosingStockDraft,
@@ -42,6 +48,7 @@ import {
   buildClosingStockUpserts,
   calculatePurchaseCostsByProduct,
   clearClosingStockDraft,
+  closingStockRowTotalsInput,
   isSignedWholeNumberInput,
   isWholeNumberInput,
   normalizeStockCount,
@@ -56,12 +63,16 @@ import {
   type StorageLike,
 } from '@/lib/closingStock';
 import {
+  AlertTriangle,
   Box,
+  CalendarX,
   Coins,
   FileBox,
   Info,
   Package,
+  RefreshCcw,
   Save,
+  Search,
   ShoppingCart,
   TrendingUp,
   Warehouse,
@@ -132,16 +143,6 @@ function applyBrowserDraft(
 }
 
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
-}
-
 function sortRowsByProductOrder(rows: RowData[]): RowData[] {
   return [...rows].sort((a, b) => {
     const trackingOrderA = a.product.tracks_inventory === false ? 0 : 1;
@@ -168,8 +169,11 @@ function isMissingDeletedColumn(error: { message?: string } | null | undefined) 
 }
 
 const stickyHeaderCellClass = 'sticky top-0 z-20 border-b border-gray-100 bg-gray-50 px-4 py-4';
+// The product column stays visible while the wide table scrolls horizontally.
+const stickyProductHeaderCellClass = 'sticky left-0 top-0 z-30 border-b border-r border-gray-100 bg-gray-50 px-4 py-4';
+const stickyProductCellClass = 'sticky left-0 z-10 border-r border-gray-100 bg-white px-4 py-4 group-hover:bg-gray-50';
+const CLOCK_REFRESH_MS = 60_000;
 const addedTodayHeaderCellClass = 'sticky top-0 z-20 border-b border-success-500/20 bg-success-50 px-4 py-4 text-success-600';
-const stepperLabels = { decrease: 'decreaseClosingStock', increase: 'increaseClosingStock' } as const;
 
 async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClient>, clubId: string) {
   const ordered = await supabase
@@ -205,22 +209,98 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
     .order('name', { ascending: true });
 }
 
+function withClosingStock(row: RowData, value: string): RowData {
+  return {
+    ...row,
+    closingStock: value,
+    soldQuantity: String(calculateStockCountSummary({
+      previousStock: parseNum(row.previousStock),
+      addedToday: parseNum(row.addedToday),
+      adjustmentQuantity: parseAdjustment(row.adjustmentQuantity),
+      closingStock: parseNum(value),
+      salePrice: row.product.sale_price,
+      costPrice: row.product.cost_price,
+    }).soldQuantity),
+  };
+}
+
+function withAdjustment(row: RowData, value: string): RowData {
+  const nextRow = { ...row, adjustmentQuantity: value };
+  nextRow.soldQuantity = String(calculateStockCountSummary({
+    previousStock: parseNum(nextRow.previousStock),
+    addedToday: parseNum(nextRow.addedToday),
+    adjustmentQuantity: parseAdjustment(value),
+    closingStock: parseNum(nextRow.closingStock),
+    salePrice: nextRow.product.sale_price,
+    costPrice: nextRow.product.cost_price,
+  }).soldQuantity);
+  return nextRow;
+}
+
+function withSoldQuantity(row: RowData, value: string): RowData {
+  if (row.product.tracks_inventory === false) {
+    return {
+      ...row,
+      soldQuantity: value,
+      previousStock: '0',
+      addedToday: '0',
+      closingStock: '0',
+    };
+  }
+  return {
+    ...row,
+    soldQuantity: value,
+    closingStock: String(calculateClosingStockFromSold(
+      parseNum(row.previousStock),
+      parseNum(row.addedToday),
+      parseNum(value),
+      parseAdjustment(row.adjustmentQuantity),
+    )),
+  };
+}
+
+function rowSummary(row: RowData) {
+  return summarizeStockRow(closingStockRowTotalsInput(row));
+}
+
+/** `null` date means "follow the club's current business day". */
+interface DateSelection {
+  clubId: string | null;
+  date: string | null;
+}
+
 export default function ClosingStockPage() {
   const t = useTranslations('closingStock');
   const tc = useTranslations('common');
+  const { locale } = useAppLocale();
   const { selectedClubId, selectedClub, role: currentRole, businessDayStartHour } = useClub();
-  const today = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
-  const [date, setDate] = useState(() => today);
+  const [clock, setClock] = useState(() => Date.now());
+  const today = useMemo(() => todayIso(new Date(clock), businessDayStartHour), [clock, businessDayStartHour]);
+  const [dateSelection, setDateSelection] = useState<DateSelection>({ clubId: selectedClubId, date: null });
+  // Switching clubs resets to that club's business day in the same render, so
+  // the page loads once for the new club instead of once per stale date.
+  const date = dateSelection.clubId === selectedClubId && dateSelection.date && dateSelection.date <= today
+    ? dateSelection.date
+    : today;
   const [rows, setRows] = useState<RowData[]>([]);
   const [purchaseCostsByProduct, setPurchaseCostsByProduct] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [invalidProductId, setInvalidProductId] = useState<string | null>(null);
+  const [hasSavedCounts, setHasSavedCounts] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const { showToast, toastElement } = useToast();
+  const { confirm, confirmDialog } = useConfirm();
   const requestSequence = useRef(0);
+  const silentReload = useRef(false);
+  const dirtyRef = useRef(false);
   const isHistoricalDate = date < today;
   const isOwner = currentRole === 'owner';
   const isAdmin = currentRole === 'admin';
@@ -230,7 +310,7 @@ export default function ClosingStockPage() {
   const usesClosingEntry = canEditStockCounts && !usesSoldEntry;
   const canSave = usesClosingEntry || usesSoldEntry;
   const isReadOnly = !canSave;
-  const isHistoricalReadOnly = isHistoricalDate && !isOwner;
+  const showsSavedSnapshotOnly = isHistoricalDate && !isOwner;
 
   const buildEditableRows = useCallback(
     (
@@ -251,21 +331,45 @@ export default function ClosingStockPage() {
     [],
   );
 
-  const loadData = useCallback(async (selectedDate: string) => {
+  const loadData = useCallback(async (selectedDate: string, silent: boolean) => {
     const requestId = ++requestSequence.current;
     const isCurrent = () => requestId === requestSequence.current;
+    const fail = () => {
+      setLoadError(t('loadFailed'));
+      if (!silent) setRows([]);
+      setLoading(false);
+      setRefreshing(false);
+    };
+    const finish = (nextRows: RowData[], savedCountsExist: boolean) => {
+      setRows(nextRows);
+      setHasSavedCounts(savedCountsExist);
+      setDirty(false);
+      setInvalidProductId(null);
+      setLoading(false);
+      setRefreshing(false);
+    };
+
     if (!selectedClubId) {
       setRows([]);
       setPurchaseCostsByProduct({});
+      setHasSavedCounts(false);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
-    setLoading(true);
-    setError('');
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+      setDirty(false);
+      setError('');
+    }
+    setLoadError('');
     const supabase = createClient();
     const readOnlyDate = selectedDate < today;
     const canUseDraft = currentRole === 'owner' || (currentRole === 'admin' && !readOnlyDate);
+    const draftMode = usesSoldEntry ? 'soldQuantity' : 'closingStock';
 
     if (readOnlyDate) {
       const countsWithOrder = await supabase
@@ -293,9 +397,7 @@ export default function ClosingStockPage() {
       }
 
       if (countsError) {
-        setError(countsError.message);
-        setRows([]);
-        setLoading(false);
+        fail();
         return;
       }
 
@@ -310,9 +412,7 @@ export default function ClosingStockPage() {
         if (!isCurrent()) return;
 
         if (productsRes.error || purchasesRes.error || previousClosingsRes.error) {
-          setError(productsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? 'Error');
-          setRows([]);
-          setLoading(false);
+          fail();
           return;
         }
 
@@ -325,14 +425,13 @@ export default function ClosingStockPage() {
             previousClosingsRes.data ?? {},
             false,
         );
-        setRows(canUseDraft ? applyBrowserDraft(
+        finish(canUseDraft ? applyBrowserDraft(
           selectedDate,
           selectedClubId,
           editableRows,
           businessDayStartHour,
-          usesSoldEntry ? 'soldQuantity' : 'closingStock',
-        ) : editableRows);
-        setLoading(false);
+          draftMode,
+        ) : editableRows, false);
         return;
       }
 
@@ -340,9 +439,7 @@ export default function ClosingStockPage() {
       if (!isCurrent()) return;
 
       if (purchasesRes.error) {
-        setError(purchasesRes.error.message);
-        setRows([]);
-        setLoading(false);
+        fail();
         return;
       }
 
@@ -353,7 +450,7 @@ export default function ClosingStockPage() {
           const product: Product = {
             id: relation?.id ?? count.product_id,
             club_id: relation?.club_id ?? selectedClubId,
-            name: relation?.name ?? 'Unknown product',
+            name: relation?.name ?? t('unknownProduct'),
             category: relation?.category ?? null,
             sale_price: Number(count.sale_price ?? 0),
             cost_price: Number(count.cost_price ?? 0),
@@ -376,8 +473,7 @@ export default function ClosingStockPage() {
         {},
         false,
       );
-      setRows(savedRows);
-      setLoading(false);
+      finish(savedRows, stockCountRows.length > 0);
       return;
     }
 
@@ -394,9 +490,7 @@ export default function ClosingStockPage() {
     if (!isCurrent()) return;
 
     if (productsRes.error || countsRes.error || purchasesRes.error || previousClosingsRes.error) {
-      setError(productsRes.error?.message ?? countsRes.error?.message ?? purchasesRes.error?.message ?? previousClosingsRes.error?.message ?? 'Error');
-      setRows([]);
-      setLoading(false);
+      fail();
       return;
     }
 
@@ -405,17 +499,16 @@ export default function ClosingStockPage() {
     const existingCounts = (countsRes.data ?? []) as ClosingStockExistingCount[];
     // Retain already-saved archived rows even on the current business day.
     const activeProducts = (productsRes.data ?? []) as Product[];
+    const activeIds = new Set(activeProducts.map((product) => product.id));
     const missingIds = existingCounts.map((count) => count.product_id)
-      .filter((id) => !activeProducts.some((product) => product.id === id));
+      .filter((id) => !activeIds.has(id));
     let savedProducts: Product[] = [];
     if (missingIds.length > 0) {
       const result = await supabase.from('products').select('*')
         .eq('club_id', selectedClubId).eq('is_deleted', true).in('id', missingIds);
       if (!isCurrent()) return;
       if (result.error) {
-        setError(result.error.message);
-        setRows([]);
-        setLoading(false);
+        fail();
         return;
       }
       savedProducts = (result.data ?? []) as Product[];
@@ -427,31 +520,62 @@ export default function ClosingStockPage() {
         previousClosingsRes.data ?? {},
         selectedDate === today,
     );
-    setRows(canUseDraft && existingCounts.length === 0 ? applyBrowserDraft(
+    finish(canUseDraft && existingCounts.length === 0 ? applyBrowserDraft(
       selectedDate,
       selectedClubId,
       editableRows,
       businessDayStartHour,
-      usesSoldEntry ? 'soldQuantity' : 'closingStock',
-    ) : editableRows);
-    setLoading(false);
-  }, [buildEditableRows, businessDayStartHour, currentRole, selectedClubId, today, usesSoldEntry]);
+      draftMode,
+    ) : editableRows, existingCounts.length > 0);
+  }, [buildEditableRows, businessDayStartHour, currentRole, selectedClubId, t, today, usesSoldEntry]);
+
+  // Keep "today" current while the page stays open (overnight tabs, sleep).
+  // Unsaved edits are never discarded by a day rollover; the clock catches up
+  // once they are saved or discarded.
+  useEffect(() => {
+    const refreshClock = () => {
+      if (document.visibilityState === 'hidden' || dirtyRef.current) return;
+      setClock(Date.now());
+    };
+    const timer = window.setInterval(refreshClock, CLOCK_REFRESH_MS);
+    document.addEventListener('visibilitychange', refreshClock);
+    window.addEventListener('focus', refreshClock);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshClock);
+      window.removeEventListener('focus', refreshClock);
+    };
+  }, []);
 
   useEffect(() => {
-    setDate(today);
-  }, [selectedClubId, today]);
+    dirtyRef.current = dirty;
+    if (!dirty) setClock(Date.now());
+  }, [dirty]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   useEffect(() => {
     setBulkUpdateOpen(false);
   }, [date, selectedClubId]);
 
   useEffect(() => {
-    loadData(date).catch((err) => {
-      setError(err instanceof Error ? err.message : String(err));
+    const silent = silentReload.current;
+    silentReload.current = false;
+    loadData(date, silent).catch(() => {
+      setLoadError(t('loadFailed'));
       setLoading(false);
+      setRefreshing(false);
     });
     return () => { requestSequence.current += 1; };
-  }, [date, loadData]);
+  }, [date, loadData, reloadKey, t]);
 
   useEffect(() => {
     if (!selectedCategory) return;
@@ -459,111 +583,58 @@ export default function ClosingStockPage() {
     if (!categoryExists) setSelectedCategory('');
   }, [rows, selectedCategory]);
 
-  function updateRow(index: number, field: 'previousStock' | 'addedToday' | 'closingStock', value: string) {
-    setRows((prev) => {
-      if (!isWholeNumberInput(value)) return prev;
-
-      const copy = [...prev];
-      const nextRow = { ...copy[index], [field]: value };
-      nextRow.soldQuantity = String(calculateStockCountSummary({
-        previousStock: parseNum(nextRow.previousStock),
-        addedToday: parseNum(nextRow.addedToday),
-        adjustmentQuantity: parseAdjustment(nextRow.adjustmentQuantity),
-        closingStock: parseNum(nextRow.closingStock),
-        salePrice: nextRow.product.sale_price,
-        costPrice: nextRow.product.cost_price,
-      }).soldQuantity);
-      copy[index] = nextRow;
-      return copy;
-    });
+  function reload({ silent = false } = {}) {
+    silentReload.current = silent;
+    setReloadKey((key) => key + 1);
   }
 
-  function updateAdjustment(index: number, value: string) {
-    setRows((prev) => {
-      if (!isSignedWholeNumberInput(value)) return prev;
-
-      const copy = [...prev];
-      const current = copy[index];
-      const nextRow = { ...current, adjustmentQuantity: value };
-      nextRow.soldQuantity = String(calculateStockCountSummary({
-        previousStock: parseNum(nextRow.previousStock),
-        addedToday: parseNum(nextRow.addedToday),
-        adjustmentQuantity: parseAdjustment(value),
-        closingStock: parseNum(nextRow.closingStock),
-        salePrice: nextRow.product.sale_price,
-        costPrice: nextRow.product.cost_price,
-      }).soldQuantity);
-      copy[index] = nextRow;
-      return copy;
-    });
-  }
-
-  function updateAdjustmentReason(index: number, value: string) {
-    setRows((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], adjustmentReason: value };
-      return copy;
-    });
-  }
-
-  function adjustClosingStock(index: number, amount: number) {
-    const currentValue = parseNum(rows[index]?.closingStock ?? '0');
-    updateRow(index, 'closingStock', String(Math.max(0, currentValue + amount)));
-  }
-
-  function updateSoldQuantity(index: number, value: string) {
-    setRows((prev) => {
-      if (!isWholeNumberInput(value)) return prev;
-
-      const copy = [...prev];
-      const current = copy[index];
-      if (current.product.tracks_inventory === false) {
-        copy[index] = {
-          ...current,
-          soldQuantity: value,
-          previousStock: '0',
-          addedToday: '0',
-          closingStock: '0',
-        };
-        return copy;
-      }
-      const closingStock = calculateClosingStockFromSold(
-        parseNum(current.previousStock),
-        parseNum(current.addedToday),
-        parseNum(value),
-        parseAdjustment(current.adjustmentQuantity),
-      );
-      copy[index] = {
-        ...current,
-        soldQuantity: value,
-        closingStock: String(closingStock),
-      };
-      return copy;
-    });
-  }
-
-  function adjustSoldQuantity(index: number, amount: number) {
-    const currentValue = parseNum(rows[index]?.soldQuantity ?? '0');
-    updateSoldQuantity(index, String(Math.max(0, currentValue + amount)));
-  }
-
-  function rowSummary(row: RowData) {
-    if (row.product.tracks_inventory === false) {
-      return calculateDirectSalesSummary(
-        parseNum(row.soldQuantity),
-        row.product.sale_price,
-        row.product.cost_price,
-      );
+  async function handleDateChange(value: string) {
+    if (value === date) return;
+    if (dirty) {
+      const discard = await confirm({
+        title: t('unsavedChangesTitle'),
+        description: t('unsavedChangesBody'),
+        confirmLabel: t('discardChanges'),
+        tone: 'danger',
+      });
+      if (!discard) return;
     }
+    setDateSelection({ clubId: selectedClubId, date: value === today ? null : value });
+    setError('');
+    setInvalidProductId(null);
+  }
 
-    return calculateStockCountSummary({
-      previousStock: parseNum(row.previousStock),
-      addedToday: parseNum(row.addedToday),
-      adjustmentQuantity: parseAdjustment(row.adjustmentQuantity),
-      closingStock: parseNum(row.closingStock),
-      salePrice: row.product.sale_price,
-      costPrice: row.product.cost_price,
-    });
+  function editRow(productId: string, transform: (row: RowData) => RowData) {
+    setRows((prev) => prev.map((row) => (row.product.id === productId ? transform(row) : row)));
+    setDirty(true);
+    if (invalidProductId === productId) setInvalidProductId(null);
+  }
+
+  function updateClosingStock(productId: string, value: string) {
+    if (!isWholeNumberInput(value)) return;
+    editRow(productId, (row) => withClosingStock(row, value));
+  }
+
+  function stepClosingStock(productId: string, amount: number) {
+    editRow(productId, (row) => withClosingStock(row, String(Math.max(0, parseNum(row.closingStock) + amount))));
+  }
+
+  function updateAdjustment(productId: string, value: string) {
+    if (!isSignedWholeNumberInput(value)) return;
+    editRow(productId, (row) => withAdjustment(row, value));
+  }
+
+  function updateAdjustmentReason(productId: string, value: string) {
+    editRow(productId, (row) => ({ ...row, adjustmentReason: value }));
+  }
+
+  function updateSoldQuantity(productId: string, value: string) {
+    if (!isWholeNumberInput(value)) return;
+    editRow(productId, (row) => withSoldQuantity(row, value));
+  }
+
+  function stepSoldQuantity(productId: string, amount: number) {
+    editRow(productId, (row) => withSoldQuantity(row, String(Math.max(0, parseNum(row.soldQuantity) + amount))));
   }
 
   const categoryOptions = useMemo(() => {
@@ -580,24 +651,21 @@ export default function ClosingStockPage() {
     });
   }, [query, rows, selectedCategory]);
 
-  const totals = useMemo(() => {
-    return filteredRows.reduce(
-      (acc, row) => {
-        const summary = rowSummary(row);
-        acc.sold += summary.soldQuantity;
-        acc.income += summary.barIncome;
-        acc.profit += summary.barProfit;
-        if (row.product.tracks_inventory !== false) {
-          acc.stockValue += parseNum(row.closingStock) * row.product.cost_price;
-          acc.previous += parseNum(row.previousStock);
-          acc.added += parseNum(row.addedToday);
-          acc.purchaseCost += purchaseCostsByProduct[row.product.id] ?? 0;
-        }
-        return acc;
-      },
-      { sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0, purchaseCost: 0 },
-    );
-  }, [filteredRows, purchaseCostsByProduct]);
+  const rowNumberById = useMemo(
+    () => new Map(rows.map((row, index) => [row.product.id, index + 1])),
+    [rows],
+  );
+
+  const bulkRows = useMemo(() => rows.filter((row) => !row.product.is_deleted), [rows]);
+
+  // KPIs describe the whole day; filters only narrow the table and its footer.
+  const totals = useMemo(() => summarizeStockRows(rows.map((row) => (
+    closingStockRowTotalsInput(row, purchaseCostsByProduct[row.product.id] ?? 0)
+  ))), [rows, purchaseCostsByProduct]);
+
+  const filteredTotals = useMemo(() => summarizeStockRows(filteredRows.map((row) => (
+    closingStockRowTotalsInput(row, purchaseCostsByProduct[row.product.id] ?? 0)
+  ))), [filteredRows, purchaseCostsByProduct]);
 
   function handleSaveDraft() {
     if (isReadOnly) {
@@ -617,15 +685,18 @@ export default function ClosingStockPage() {
       return;
     }
 
+    setDirty(false);
     showToast(t('draftSaved'));
   }
 
   function validationMessage(validationError: NonNullable<ReturnType<typeof validateClosingStockRows>>) {
     const validationMessages = {
+      closing_required: t('closingRequired', { product: validationError.productName }),
+      sold_required: t('soldRequired', { product: validationError.productName }),
       adjustment_reason_required: t('adjustmentReasonRequired', { product: validationError.productName }),
       closing_exceeds_available: t('closingExceedsAvailable', {
         product: validationError.productName,
-        available: validationError.availableStock,
+        available: formatNumber(validationError.availableStock),
       }),
       negative_available_stock: t('negativeAvailableStock', { product: validationError.productName }),
       sold_quantity_mismatch: t('soldQuantityMismatch', { product: validationError.productName }),
@@ -633,38 +704,45 @@ export default function ClosingStockPage() {
     return validationMessages[validationError.code];
   }
 
-  async function persistStockCounts(nextRows: RowData[], successMessage: string): Promise<boolean> {
-    if (isReadOnly) {
-      setError(t('readOnlyBody'));
-      return false;
+  function saveErrorMessage(saveError: StockWriteErrorLike) {
+    switch (classifyStockWriteError(saveError)) {
+      case 'permission': return t('errorPermission');
+      case 'adminPastDate': return t('errorAdminPastDate');
+      case 'adjustmentOwnerOnly': return t('errorAdjustmentOwnerOnly');
+      case 'futureDate': return t('errorFutureDate');
+      case 'productUnavailable': return t('errorProductUnavailable');
+      case 'laterCountInvalid': return t('errorLaterCountInvalid');
+      case 'invalid': return t('errorInvalid');
+      default: return t('saveFailed');
     }
+  }
+
+  async function persistStockCounts(
+    nextRows: RowData[],
+    successMessage: string,
+  ): Promise<{ ok: boolean; message: string | null }> {
+    if (isReadOnly) return { ok: false, message: t('readOnlyBody') };
 
     nextRows = nextRows.filter((row) => !row.product.is_deleted);
-    if (nextRows.length === 0) {
-      setError(tc('noData'));
-      return false;
-    }
-
-    if (!selectedClubId) {
-      setError(tc('error'));
-      return false;
-    }
+    if (nextRows.length === 0) return { ok: false, message: tc('noData') };
+    if (!selectedClubId) return { ok: false, message: tc('error') };
 
     const validationError = validateClosingStockRows(nextRows);
     if (validationError) {
-      setError(validationMessage(validationError));
-      return false;
+      setInvalidProductId(validationError.productId);
+      return { ok: false, message: validationMessage(validationError) };
     }
 
     setSaving(true);
     setError('');
     try {
       const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
+      // save_closing_stock_counts records auth.uid() itself and ignores
+      // created_by in the payload, so no session lookup is needed here.
       const { upserts } = buildClosingStockUpserts({
         date,
         rows: nextRows,
-        createdBy: session?.user?.id ?? null,
+        createdBy: null,
       });
 
       const { error: err } = await supabase.rpc('save_closing_stock_counts', {
@@ -673,85 +751,76 @@ export default function ClosingStockPage() {
         p_counts: upserts,
       });
 
-      if (err) {
-        setError(err.message);
-        return false;
-      }
+      if (err) return { ok: false, message: saveErrorMessage(err) };
 
       clearClosingStockDraft(getBrowserStorage(), date, selectedClubId);
-      await loadData(date);
+      setDirty(false);
       showToast(successMessage);
-      return true;
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : tc('error'));
-      return false;
+      reload({ silent: true });
+      return { ok: true, message: null };
+    } catch {
+      return { ok: false, message: t('saveFailed') };
     } finally {
       setSaving(false);
     }
   }
 
   async function handleSubmitStockCounts() {
-    await persistStockCounts(rows, t('success'));
+    const result = await persistStockCounts(rows, t('success'));
+    if (!result.ok) setError(result.message ?? tc('error'));
   }
 
   async function handleBulkStockSave(
     items: BulkStockOrderItem[],
     summary: BulkStockOrderSummary,
-  ): Promise<boolean> {
+  ): Promise<string | null> {
     let nextRows: RowData[];
     try {
       nextRows = applyBulkStockOrder(rows, items);
     } catch (bulkError) {
       if (bulkError instanceof BulkStockAvailabilityError) {
-        setError(t('bulkInsufficientStock', {
+        return t('bulkInsufficientStock', {
           product: bulkError.productName,
-          available: bulkError.availableQuantity,
-        }));
-      } else {
-        setError(bulkError instanceof Error ? bulkError.message : tc('error'));
+          available: formatNumber(bulkError.availableQuantity),
+        });
       }
-      return false;
+      return tc('error');
     }
 
-    return persistStockCounts(nextRows, t('bulkSuccess', {
-      items: summary.totalQuantity,
+    const result = await persistStockCounts(nextRows, t('bulkSuccess', {
+      items: formatNumber(summary.totalQuantity),
       total: formatCurrency(summary.totalPrice),
       currency: tc('currency'),
     }));
+    return result.ok ? null : result.message ?? tc('error');
   }
 
+  const pcs = (value: number) => `${formatNumber(value)} ${t('pcs')}`;
+  const money = (value: number) => `${formatCurrency(value)} ${tc('currency')}`;
   const kpis = [
-    { label: t('totalProducts'), value: `${rows.length} ${t('items')}`, icon: Box, iconClassName: 'bg-primary-50 text-primary-600', tone: 'primary' as const, helper: filteredRows.length !== rows.length ? `${filteredRows.length} / ${rows.length}` : undefined },
-    { label: t('stockPurchased'), value: `${totals.added} ${t('pcs')}`, icon: Package, iconClassName: 'bg-orange-50 text-orange-600', tone: 'default' as const, helper: `${formatCurrency(totals.purchaseCost)} ${tc('currency')}` },
-    { label: t('totalSold'), value: `${totals.sold} ${t('pcs')}`, icon: FileBox, iconClassName: 'bg-indigo-50 text-indigo-600', tone: 'default' as const },
-    { label: t('barIncomeEst'), value: `${formatCurrency(totals.income)} ${tc('currency')}`, icon: Coins, iconClassName: 'bg-success-50 text-success-600', tone: 'success' as const },
-    { label: t('barProfitEst'), value: `${formatCurrency(totals.profit)} ${tc('currency')}`, icon: TrendingUp, iconClassName: 'bg-success-50 text-success-600', tone: 'success' as const },
-    { label: t('stockValue'), value: `${formatCurrency(totals.stockValue)} ${tc('currency')}`, icon: Warehouse, iconClassName: 'bg-gray-100 text-gray-700', tone: 'default' as const },
+    { label: t('totalProducts'), value: t('itemsCount', { count: rows.length }), icon: Box, iconClassName: 'bg-primary-50 text-primary-600', tone: 'primary' as const },
+    { label: t('stockPurchased'), value: pcs(totals.added), icon: Package, iconClassName: 'bg-orange-50 text-orange-600', tone: 'default' as const, helper: money(totals.purchaseCost) },
+    { label: t('totalSold'), value: pcs(totals.sold), icon: FileBox, iconClassName: 'bg-indigo-50 text-indigo-600', tone: 'default' as const },
+    { label: t('barIncomeEst'), value: money(totals.income), icon: Coins, iconClassName: 'bg-success-50 text-success-600', tone: 'success' as const },
+    { label: t('barProfitEst'), value: money(totals.profit), icon: TrendingUp, iconClassName: 'bg-success-50 text-success-600', tone: 'success' as const },
+    { label: t('stockValue'), value: money(totals.stockValue), icon: Warehouse, iconClassName: 'bg-gray-100 text-gray-700', tone: 'default' as const },
   ];
   const categoryChipOptions = [{ value: '', label: tc('all') }, ...categoryOptions.map((category) => ({ value: category, label: category }))];
-  const stepper = (
-    index: number,
-    value: string,
-    onChange: (value: string) => void,
-    onStep: (delta: 1 | -1) => void,
-    labels: { decrease: string; increase: string; label: string },
-  ) => (
-    <Stepper
-      className="mx-auto flex w-fit"
-      label={labels.label}
-      decreaseLabel={labels.decrease}
-      increaseLabel={labels.increase}
-      value={value}
-      onChange={onChange}
-      onStep={onStep}
-    />
-  );
+  const hasFilters = Boolean(query.trim() || selectedCategory);
+  const saveDisabled = loading || refreshing || isReadOnly || Boolean(loadError) || rows.length === 0;
+  const draftDisabled = saving || loading || refreshing || isReadOnly || Boolean(loadError) || hasSavedCounts;
+  const bannerTitle = isReadOnly
+    ? (isHistoricalDate ? t('readOnlyTitle') : t('viewerReadOnlyTitle'))
+    : t('ownerHistoricalEditTitle');
+  const bannerBody = isReadOnly
+    ? (isHistoricalDate ? t('readOnlyBody') : t('viewerReadOnlyBody'))
+    : t('ownerHistoricalEditBody');
 
   return (
     <div className="space-y-5">
       <BulkStockUpdateModal
         open={bulkUpdateOpen}
-        rows={rows.filter((row) => !row.product.is_deleted)}
+        rows={bulkRows}
         saving={saving}
         onClose={() => setBulkUpdateOpen(false)}
         onSave={handleBulkStockSave}
@@ -759,18 +828,17 @@ export default function ClosingStockPage() {
 
       <PageHeader
         title={t('title')}
-        description={isHistoricalReadOnly ? t('readOnlyBody') : isHistoricalDate ? t('ownerHistoricalEditBody') : t('infoBody')}
+        description={isReadOnly ? undefined : t('infoBody')}
+        meta={dirty ? <Badge variant="warning" size="sm">{t('unsavedChanges')}</Badge> : undefined}
         action={(
           <>
             <DatePicker
-              ariaLabel={t('title')}
+              ariaLabel={t('date')}
               value={date}
               max={today}
+              disabled={saving}
               className="w-full sm:w-[240px]"
-              onChange={(value) => {
-                setDate(value);
-                setError('');
-              }}
+              onChange={(value) => { void handleDateChange(value); }}
             />
             <Button
               variant="outline"
@@ -779,15 +847,28 @@ export default function ClosingStockPage() {
                 setError('');
                 setBulkUpdateOpen(true);
               }}
-              disabled={saving || loading || isReadOnly || rows.length === 0}
+              disabled={saving || saveDisabled || bulkRows.length === 0}
               icon={<ShoppingCart size={17} aria-hidden="true" />}
             >
               {t('bulkUpdate')}
             </Button>
-            <Button variant="outline" onClick={handleSaveDraft} disabled={saving || loading || isReadOnly} icon={<Save size={16} aria-hidden="true" />}>
+            <Button
+              variant="outline"
+              onClick={handleSaveDraft}
+              disabled={draftDisabled}
+              title={hasSavedCounts && !isReadOnly ? t('draftDisabledSaved') : undefined}
+              icon={<Save size={16} aria-hidden="true" />}
+            >
               {t('saveDraft')}
             </Button>
-            <Button onClick={handleSubmitStockCounts} disabled={loading || isReadOnly} loading={saving} loadingLabel={tc('saving')} icon={<Package size={16} aria-hidden="true" />}>
+            <Button
+              className="hidden sm:inline-flex"
+              onClick={handleSubmitStockCounts}
+              disabled={saveDisabled}
+              loading={saving}
+              loadingLabel={tc('saving')}
+              icon={<Package size={16} aria-hidden="true" />}
+            >
               {t('submit')}
             </Button>
           </>
@@ -795,249 +876,316 @@ export default function ClosingStockPage() {
       />
 
       {(isHistoricalDate || isReadOnly) && (
-        <InlineAlert variant={isHistoricalReadOnly ? 'warning' : 'info'} title={isHistoricalReadOnly ? t('readOnlyTitle') : t('ownerHistoricalEditTitle')}>
-          {isHistoricalReadOnly ? t('readOnlyBody') : t('ownerHistoricalEditBody')}
+        <InlineAlert variant={isReadOnly && isHistoricalDate ? 'warning' : 'info'} title={bannerTitle}>
+          {bannerBody}
         </InlineAlert>
       )}
 
-      {loading ? (
-        <MetricGridSkeleton count={6} className="lg:grid-cols-3 2xl:grid-cols-6" />
-      ) : (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-          {kpis.map((kpi) => (
-            <MetricCard key={kpi.label} label={kpi.label} value={kpi.value} icon={kpi.icon} iconClassName={kpi.iconClassName} tone={kpi.tone} helper={kpi.helper} />
-          ))}
-        </section>
+      {hasSavedCounts && !isReadOnly && !loading && !loadError && (
+        <p className="text-sm text-gray-500">{t('draftDisabledSaved')}</p>
       )}
 
-      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
-
-      <div>
-        <Card as="section" padding="none" className="overflow-hidden">
-          <CardHeader>
-            <SectionHeading
-              size="lg"
-              title={t('products')}
-              action={(
-                <SearchInput
-                  className="w-full md:w-72"
-                  controlSize="sm"
-                  value={query}
-                  onChange={setQuery}
-                  placeholder={t('searchPlaceholder')}
-                  clearLabel={tc('cancel')}
-                />
-              )}
-            />
-          </CardHeader>
-
-          {categoryOptions.length > 0 && (
-            <div className="border-b border-gray-100 px-4 py-3 sm:px-5">
-              <SegmentedControl
-                variant="chips"
-                label={t('products')}
-                className="flex-nowrap overflow-x-auto pb-1"
-                options={categoryChipOptions}
-                value={selectedCategory}
-                onChange={setSelectedCategory}
-              />
-            </div>
+      {loadError && !loading ? (
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            title={loadError}
+            action={(
+              <Button variant="outline" onClick={() => reload()} icon={<RefreshCcw size={16} aria-hidden="true" />}>
+                {tc('retry')}
+              </Button>
+            )}
+          />
+        </Card>
+      ) : (
+        <>
+          {loading ? (
+            <MetricGridSkeleton count={6} className="lg:grid-cols-3 2xl:grid-cols-6" />
+          ) : (
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-busy={refreshing || undefined}>
+              {kpis.map((kpi) => (
+                <MetricCard key={kpi.label} label={kpi.label} value={kpi.value} icon={kpi.icon} iconClassName={kpi.iconClassName} tone={kpi.tone} helper={kpi.helper} />
+              ))}
+            </section>
           )}
 
-          {loading ? (
-            <TableSkeleton rows={8} columns={9} className="rounded-none border-0 shadow-none" />
-          ) : rows.length === 0 ? (
-            <EmptyState compact icon={Package} title={tc('noData')} />
-          ) : filteredRows.length === 0 ? (
-            <EmptyState
-              compact
-              icon={Package}
-              title={tc('noData')}
-              action={<Button variant="outline" size="sm" onClick={() => { setQuery(''); setSelectedCategory(''); }}>{tc('all')}</Button>}
-            />
-          ) : (
-            <div className="max-h-[calc(100vh-14rem)] overflow-auto">
-              <table className="w-full min-w-[1460px] text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    <th className={`${stickyHeaderCellClass} w-12 px-5 text-left`}>#</th>
-                    <th className={`${stickyHeaderCellClass} min-w-[250px] text-left`}>{t('product')}</th>
-                    <th className={`${stickyHeaderCellClass} text-right`}>{t('salePrice')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className={`${stickyHeaderCellClass} text-right`}>{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className={`${stickyHeaderCellClass} text-center`} title={t('openingStockHint')}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
-                    <th className={`${addedTodayHeaderCellClass} text-center`}>{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
-                    <th className={`${stickyHeaderCellClass} min-w-[190px] text-center`}>
-                      {t('adjustment')}
-                      <br />
-                      <span className="font-normal normal-case">({t('pcs')})</span>
-                    </th>
-                    <th className={`${stickyHeaderCellClass} text-center`}>
-                      {t('closingStock')}
-                      <br />
-                      <Badge variant="primary" size="sm" className="normal-case">
-                        {isReadOnly ? t('snapshot') : usesSoldEntry ? t('calculated') : t('youEnter')}
-                      </Badge>
-                    </th>
-                    <th className={`${stickyHeaderCellClass} text-center`}>
-                      {t('soldQty')}
-                      <br />
-                      <span className="font-normal normal-case">({t('pcs')})</span>
-                      {canSave && (usesSoldEntry || filteredRows.some((row) => row.product.tracks_inventory === false)) && (
-                        <>
-                          <br />
-                          <Badge variant="primary" size="sm" className="normal-case">{t('youEnter')}</Badge>
-                        </>
-                      )}
-                    </th>
-                    <th className={`${stickyHeaderCellClass} text-right`}>{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                    <th className={`${stickyHeaderCellClass} px-5 text-right`}>{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredRows.map((row) => {
-                    const rowReadOnly = !canSave || !!row.product.is_deleted;
-                    const originalIndex = rows.findIndex((candidate) => candidate.product.id === row.product.id);
-                    const summary = rowSummary(row);
-                    return (
-                      <tr key={row.product.id} className="hover:bg-gray-50/80">
-                        <td className="px-5 py-4 font-semibold text-gray-700">{originalIndex + 1}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-4">
-                            <div className="flex h-12 w-9 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs font-bold text-gray-500">
-                              {initials(row.product.name)}
+          {error && <InlineAlert variant="danger">{error}</InlineAlert>}
+
+          <Card as="section" padding="none" className="overflow-hidden">
+            <CardHeader>
+              <SectionHeading
+                size="lg"
+                title={t('products')}
+                action={(
+                  <SearchInput
+                    className="w-full md:w-72"
+                    controlSize="sm"
+                    value={query}
+                    onChange={setQuery}
+                    placeholder={t('searchPlaceholder')}
+                  />
+                )}
+              />
+            </CardHeader>
+
+            {categoryOptions.length > 0 && (
+              <div className="border-b border-gray-100 px-4 py-3 sm:px-5">
+                <SegmentedControl
+                  variant="chips"
+                  label={t('category')}
+                  className="flex-nowrap overflow-x-auto pb-1"
+                  options={categoryChipOptions}
+                  value={selectedCategory}
+                  onChange={setSelectedCategory}
+                />
+              </div>
+            )}
+
+            {loading ? (
+              <TableSkeleton rows={8} columns={9} className="rounded-none border-0 shadow-none" />
+            ) : rows.length === 0 ? (
+              showsSavedSnapshotOnly ? (
+                <EmptyState
+                  compact
+                  icon={CalendarX}
+                  title={t('noSnapshotTitle')}
+                  description={t('noSnapshotBody', { date: formatDateOnly(date, locale) })}
+                />
+              ) : (
+                <EmptyState
+                  compact
+                  icon={Package}
+                  title={t('noProductsTitle')}
+                  description={t('noProductsBody')}
+                  action={isOwner || isAdmin ? (
+                    <ButtonLink href="/products" variant="primary" size="sm">{t('viewProducts')}</ButtonLink>
+                  ) : undefined}
+                />
+              )
+            ) : filteredRows.length === 0 ? (
+              <EmptyState
+                compact
+                icon={Search}
+                title={tc('noData')}
+                action={hasFilters ? (
+                  <Button variant="outline" size="sm" onClick={() => { setQuery(''); setSelectedCategory(''); }}>{t('clearFilters')}</Button>
+                ) : undefined}
+              />
+            ) : (
+              <div className={`max-h-[calc(100vh-14rem)] overflow-auto transition-opacity ${refreshing ? 'opacity-70' : ''}`} aria-busy={refreshing || undefined}>
+                <table className="w-full min-w-[1400px] text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      <th className={`${stickyHeaderCellClass} w-12 px-5 text-left`}>#</th>
+                      <th className={`${stickyProductHeaderCellClass} min-w-[180px] text-left sm:min-w-[250px]`}>{t('product')}</th>
+                      <th className={`${stickyHeaderCellClass} text-right`}>{t('salePrice')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                      <th className={`${stickyHeaderCellClass} text-right`}>{t('costBasis')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                      <th className={`${stickyHeaderCellClass} text-center`} title={t('openingStockHint')}>{t('previousStock')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                      <th className={`${addedTodayHeaderCellClass} text-center`}>{t('addedToday')}<br /><span className="font-normal normal-case">({t('pcs')})</span></th>
+                      <th className={`${stickyHeaderCellClass} min-w-[190px] text-center`}>
+                        {t('adjustment')}
+                        <br />
+                        <span className="font-normal normal-case">({t('pcs')})</span>
+                      </th>
+                      <th className={`${stickyHeaderCellClass} text-center`}>
+                        {t('closingStock')}
+                        <br />
+                        <Badge variant="primary" size="sm" className="normal-case">
+                          {isReadOnly ? t('snapshot') : usesSoldEntry ? t('calculated') : t('youEnter')}
+                        </Badge>
+                      </th>
+                      <th className={`${stickyHeaderCellClass} text-center`}>
+                        {t('soldQty')}
+                        <br />
+                        <span className="font-normal normal-case">({t('pcs')})</span>
+                        {canSave && (usesSoldEntry || filteredRows.some((row) => row.product.tracks_inventory === false)) && (
+                          <>
+                            <br />
+                            <Badge variant="primary" size="sm" className="normal-case">{t('youEnter')}</Badge>
+                          </>
+                        )}
+                      </th>
+                      <th className={`${stickyHeaderCellClass} text-right`}>{t('barIncome')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                      <th className={`${stickyHeaderCellClass} px-5 text-right`}>{t('barProfit')}<br /><span className="font-normal normal-case">({tc('currency')})</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredRows.map((row) => {
+                      const productId = row.product.id;
+                      const rowReadOnly = !canSave || !!row.product.is_deleted;
+                      const inputsDisabled = saving || refreshing;
+                      const summary = rowSummary(row);
+                      const tracksInventory = row.product.tracks_inventory !== false;
+                      const rowFlagged = invalidProductId === productId;
+                      return (
+                        <tr key={productId} className="group hover:bg-gray-50">
+                          <td className="px-5 py-4 font-semibold text-gray-700">{rowNumberById.get(productId)}</td>
+                          <td className={stickyProductCellClass}>
+                            <div className="flex items-center gap-3 sm:gap-4">
+                              <Avatar name={row.product.name} tone="neutral" className="hidden sm:inline-flex" />
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-900">{row.product.name}</p>
+                                {!tracksInventory && (
+                                  <Badge variant="purple" size="sm" className="mt-1">{t('madeToOrder')}</Badge>
+                                )}
+                                <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatUnitCurrency(row.product.cost_price)} {tc('currency')}</p>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-gray-900">{row.product.name}</p>
-                              {row.product.tracks_inventory === false && (
-                                <Badge variant="purple" size="sm" className="mt-1">{t('madeToOrder')}</Badge>
-                              )}
-                              <p className="mt-1 text-xs text-gray-500">{t('costLabel')} {formatUnitCurrency(row.product.cost_price)} {tc('currency')}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-right font-semibold text-gray-900">{formatCurrency(row.product.sale_price)}</td>
-                        <td className="px-4 py-4 text-right">
-                          <p className="font-semibold text-gray-900">{formatUnitCurrency(row.product.cost_price)}</p>
-                          <p className="mt-1 text-xs text-gray-500">
-                            {row.product.tracks_inventory === false
-                              ? t('notIncludedInStockValue')
-                              : `${t('valueLabel')} ${formatCurrency(parseNum(row.closingStock) * row.product.cost_price)}`}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4 text-center font-medium text-gray-900">
-                          {row.product.tracks_inventory === false ? '—' : parseNum(row.previousStock)}
-                        </td>
-                        <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">
-                          {row.product.tracks_inventory === false ? '—' : (
-                            <div className="flex flex-col items-center gap-1">
-                              <span>{parseNum(row.addedToday)}</span>
-                              {row.hasPurchaseMismatch && (
-                                <Badge
-                                  variant="warning"
-                                  size="sm"
-                                  icon={<Info size={12} aria-hidden="true" />}
-                                  title={t('purchaseMismatch', {
-                                    purchased: row.purchaseQuantity ?? 0,
-                                    saved: parseNum(row.addedToday),
-                                  })}
-                                >
-                                  {t('purchasesBadge', { purchased: row.purchaseQuantity ?? 0 })}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          {row.product.tracks_inventory === false ? (
-                            <p className="text-center font-semibold text-gray-400">—</p>
-                          ) : isOwner && !rowReadOnly ? (
-                            <div className="mx-auto w-44 space-y-2">
-                              <Input
-                                type="text"
-                                inputMode="numeric"
-                                controlSize="sm"
-                                className="text-center font-semibold"
-                                value={row.adjustmentQuantity ?? '0'}
-                                aria-label={t('adjustment')}
-                                onKeyDown={preventNonSignedIntegerNumberInput}
-                                onWheel={(event) => event.currentTarget.blur()}
-                                onChange={(event) => updateAdjustment(originalIndex, event.target.value)}
-                              />
-                              {parseAdjustment(row.adjustmentQuantity) !== 0 && (
+                          </td>
+                          <td className="px-4 py-4 text-right font-semibold text-gray-900">{formatCurrency(row.product.sale_price)}</td>
+                          <td className="px-4 py-4 text-right">
+                            <p className="font-semibold text-gray-900">{formatUnitCurrency(row.product.cost_price)}</p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {!tracksInventory
+                                ? t('notIncludedInStockValue')
+                                : `${t('valueLabel')} ${formatCurrency(parseNum(row.closingStock) * row.product.cost_price)}`}
+                            </p>
+                          </td>
+                          <td className="px-4 py-4 text-center font-medium text-gray-900">
+                            {!tracksInventory ? '—' : formatNumber(parseNum(row.previousStock))}
+                          </td>
+                          <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">
+                            {!tracksInventory ? '—' : (
+                              <div className="flex flex-col items-center gap-1">
+                                <span>{formatNumber(parseNum(row.addedToday))}</span>
+                                {row.hasPurchaseMismatch && (
+                                  <Badge
+                                    variant="warning"
+                                    size="sm"
+                                    icon={<Info size={12} aria-hidden="true" />}
+                                    title={t('purchaseMismatch', {
+                                      purchased: formatNumber(row.purchaseQuantity ?? 0),
+                                      saved: formatNumber(parseNum(row.addedToday)),
+                                    })}
+                                  >
+                                    {t('purchasesBadge', { purchased: formatNumber(row.purchaseQuantity ?? 0) })}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            {!tracksInventory ? (
+                              <p className="text-center font-semibold text-gray-400">—</p>
+                            ) : isOwner && !rowReadOnly ? (
+                              <div className="mx-auto w-44 space-y-2">
                                 <Input
                                   type="text"
+                                  inputMode="numeric"
                                   controlSize="sm"
-                                  className="text-xs"
-                                  value={row.adjustmentReason ?? ''}
-                                  placeholder={t('adjustmentReason')}
-                                  aria-label={t('adjustmentReason')}
-                                  onChange={(event) => updateAdjustmentReason(originalIndex, event.target.value)}
+                                  className="text-center text-base font-semibold sm:text-sm"
+                                  value={row.adjustmentQuantity ?? '0'}
+                                  aria-label={`${t('adjustment')} · ${row.product.name}`}
+                                  disabled={inputsDisabled}
+                                  onKeyDown={preventNonSignedIntegerNumberInput}
+                                  onWheel={(event) => event.currentTarget.blur()}
+                                  onChange={(event) => updateAdjustment(productId, event.target.value)}
                                 />
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-center">
-                              <p className="font-semibold text-gray-900">{parseAdjustment(row.adjustmentQuantity)}</p>
-                              {row.adjustmentReason && (
-                                <p className="mt-1 text-xs text-gray-500">{row.adjustmentReason}</p>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          {row.product.tracks_inventory === false ? (
-                            <p className="text-center font-semibold text-gray-400">—</p>
-                          ) : rowReadOnly || usesSoldEntry ? (
-                            <p className="text-center font-semibold text-gray-900">{parseNum(row.closingStock)}</p>
-                          ) : (
-                            stepper(
-                              originalIndex,
-                              row.closingStock,
-                              (value) => updateRow(originalIndex, 'closingStock', value),
-                              (delta) => adjustClosingStock(originalIndex, delta),
-                              { label: `${t('closingStock')} · ${row.product.name}`, decrease: t(stepperLabels.decrease), increase: t(stepperLabels.increase) },
-                            )
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          {!rowReadOnly && (usesSoldEntry || row.product.tracks_inventory === false) ? (
-                            stepper(
-                              originalIndex,
-                              row.soldQuantity,
-                              (value) => updateSoldQuantity(originalIndex, value),
-                              (delta) => adjustSoldQuantity(originalIndex, delta),
-                              { label: `${t('soldQty')} · ${row.product.name}`, decrease: t('decreaseSoldQty'), increase: t('increaseSoldQty') },
-                            )
-                          ) : (
-                            <p className="text-center font-semibold text-gray-900">{summary.soldQuantity}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barIncome)}</td>
-                        <td className="px-5 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barProfit)}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="bg-white font-bold text-gray-900">
-                    <td className="px-5 py-4" />
-                    <td className="px-4 py-4">{t('totalRow', { count: filteredRows.length })}</td>
-                    <td className="px-4 py-4" />
-                    <td className="px-4 py-4 text-right">{formatCurrency(totals.stockValue)}</td>
-                    <td className="px-4 py-4 text-center">{totals.previous}</td>
-                    <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{totals.added}</td>
-                    <td className="px-4 py-4 text-center">—</td>
-                    <td className="px-4 py-4 text-center">—</td>
-                    <td className="px-4 py-4 text-center">{totals.sold}</td>
-                    <td className="px-4 py-4 text-right text-success-600">{formatCurrency(totals.income)}</td>
-                    <td className="px-5 py-4 text-right text-success-600">{formatCurrency(totals.profit)}</td>
-                  </tr>
-                </tbody>
-              </table>
+                                {parseAdjustment(row.adjustmentQuantity) !== 0 && (
+                                  <Input
+                                    type="text"
+                                    controlSize="sm"
+                                    className="text-base sm:text-xs"
+                                    value={row.adjustmentReason ?? ''}
+                                    placeholder={t('adjustmentReason')}
+                                    aria-label={`${t('adjustmentReason')} · ${row.product.name}`}
+                                    aria-invalid={(rowFlagged && !String(row.adjustmentReason ?? '').trim()) || undefined}
+                                    disabled={inputsDisabled}
+                                    onChange={(event) => updateAdjustmentReason(productId, event.target.value)}
+                                  />
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <p className="font-semibold text-gray-900">{formatNumber(parseAdjustment(row.adjustmentQuantity))}</p>
+                                {row.adjustmentReason && (
+                                  <p className="mt-1 text-xs text-gray-500">{row.adjustmentReason}</p>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            {!tracksInventory ? (
+                              <p className="text-center font-semibold text-gray-400">—</p>
+                            ) : rowReadOnly || usesSoldEntry ? (
+                              <p className="text-center font-semibold text-gray-900">{formatNumber(parseNum(row.closingStock))}</p>
+                            ) : (
+                              <Stepper
+                                className="mx-auto flex w-fit"
+                                label={`${t('closingStock')} · ${row.product.name}`}
+                                decreaseLabel={t('decreaseClosingStock')}
+                                increaseLabel={t('increaseClosingStock')}
+                                value={row.closingStock}
+                                disabled={inputsDisabled}
+                                invalid={row.closingStock.trim() === '' || rowFlagged}
+                                onChange={(value) => updateClosingStock(productId, value)}
+                                onStep={(delta) => stepClosingStock(productId, delta)}
+                              />
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            {!rowReadOnly && (usesSoldEntry || !tracksInventory) ? (
+                              <Stepper
+                                className="mx-auto flex w-fit"
+                                label={`${t('soldQty')} · ${row.product.name}`}
+                                decreaseLabel={t('decreaseSoldQty')}
+                                increaseLabel={t('increaseSoldQty')}
+                                value={row.soldQuantity}
+                                disabled={inputsDisabled}
+                                invalid={(tracksInventory && row.soldQuantity.trim() === '') || rowFlagged}
+                                onChange={(value) => updateSoldQuantity(productId, value)}
+                                onStep={(delta) => stepSoldQuantity(productId, delta)}
+                              />
+                            ) : (
+                              <p className="text-center font-semibold text-gray-900">{formatNumber(summary.soldQuantity)}</p>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barIncome)}</td>
+                          <td className="px-5 py-4 text-right font-semibold text-success-600">{formatCurrency(summary.barProfit)}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-white font-bold text-gray-900">
+                      <td className="px-5 py-4" />
+                      <td className={stickyProductCellClass}>{t('totalRow', { count: filteredRows.length })}</td>
+                      <td className="px-4 py-4" />
+                      <td className="px-4 py-4 text-right">
+                        <span className="block text-xs font-medium text-gray-500">{t('stockValue')}</span>
+                        {formatCurrency(filteredTotals.stockValue)}
+                      </td>
+                      <td className="px-4 py-4 text-center">{formatNumber(filteredTotals.previous)}</td>
+                      <td className="bg-success-50 px-4 py-4 text-center font-semibold text-success-600">{formatNumber(filteredTotals.added)}</td>
+                      <td className="px-4 py-4 text-center">—</td>
+                      <td className="px-4 py-4 text-center">—</td>
+                      <td className="px-4 py-4 text-center">{formatNumber(filteredTotals.sold)}</td>
+                      <td className="px-4 py-4 text-right text-success-600">{formatCurrency(filteredTotals.income)}</td>
+                      <td className="px-5 py-4 text-right text-success-600">{formatCurrency(filteredTotals.profit)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {canSave && rows.length > 0 && (
+            <div className="sticky bottom-0 z-30 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur sm:hidden">
+              <Button
+                fullWidth
+                onClick={handleSubmitStockCounts}
+                disabled={saveDisabled}
+                loading={saving}
+                loadingLabel={tc('saving')}
+                icon={<Package size={16} aria-hidden="true" />}
+              >
+                {t('submit')}
+              </Button>
             </div>
           )}
-        </Card>
-      </div>
+        </>
+      )}
 
       {toastElement}
+      {confirmDialog}
     </div>
   );
 }

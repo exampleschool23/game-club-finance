@@ -30,19 +30,10 @@ interface ExpenseRow {
   comment: string | null;
 }
 
-interface CollectedLabels {
-  cash: string;
-  terminal: string;
-  card: string;
-  playstation: string;
-  debtPayments: string;
-}
-
 function buildRows(
   cashRows: CashRow[],
   debtRows: DebtPaymentRow[],
   expenseRows: ExpenseRow[],
-  labels: CollectedLabels,
   enabledMethods: EntryPaymentMethod[],
 ): MoneyDetailRow[] {
   const sums = new Map<string, { cash: number; terminal: number; card: number; playstation: number; debtPayments: number; deductions: MoneyDetailRow['deductions'] }>();
@@ -67,9 +58,10 @@ function buildRows(
   for (const expenseRow of expenseRows) {
     if (expenseRow.payment_source === 'bar') continue;
     bucketFor(expenseRow.date).deductions.push({
-      label: expenseRow.comment ? `${expenseRow.category}: ${expenseRow.comment}` : expenseRow.category,
+      kind: 'expense',
+      category: expenseRow.category,
+      comment: expenseRow.comment,
       amount: Number(expenseRow.amount ?? 0),
-      tone: 'danger',
     });
   }
 
@@ -77,17 +69,17 @@ function buildRows(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, bucket]) => {
       const collected = [
-        { key: 'cash' as const, label: labels.cash, amount: bucket.cash },
-        { key: 'terminal' as const, label: labels.terminal, amount: bucket.terminal },
-        { key: 'card' as const, label: labels.card, amount: bucket.card },
-        { key: 'playstation' as const, label: labels.playstation, amount: bucket.playstation },
-        { key: 'debt' as const, label: labels.debtPayments, amount: bucket.debtPayments },
-      ].filter((item) => item.amount !== 0 || item.key === 'playstation' || item.key === 'debt' || enabledMethods.includes(item.key));
+        { key: 'cash' as const, amount: bucket.cash },
+        { key: 'terminal' as const, amount: bucket.terminal },
+        { key: 'card' as const, amount: bucket.card },
+        { key: 'playstation' as const, amount: bucket.playstation },
+        { key: 'debtPayments' as const, amount: bucket.debtPayments },
+      ].filter((item) => item.amount !== 0 || item.key === 'playstation' || item.key === 'debtPayments' || enabledMethods.includes(item.key));
       const collectedTotal = collected.reduce((sum, item) => sum + item.amount, 0);
       const deductionsTotal = bucket.deductions.reduce((sum, item) => sum + item.amount, 0);
       return {
         date,
-        collected: collected.map(({ label, amount }) => ({ label, amount })),
+        collected,
         collectedTotal,
         deductions: bucket.deductions,
         deductionsTotal,
@@ -99,20 +91,15 @@ function buildRows(
 export default function GameClubMoneyDetailsPage({ requestedFrom, requestedTo }: { requestedFrom?: string; requestedTo?: string }) {
   const t = useTranslations('dashboard');
   const { enabledPaymentMethods } = useClub();
-  const cash = t('cash');
-  const terminal = t('terminal');
-  const card = t('card');
-  const playstation = t('playstation');
-  const debtPayments = t('debtPaymentsCollected');
 
+  // Rows carry keys, not translated text, so switching language never refetches.
   const loadRows = useCallback(async (clubId: string, from: string, to: string) => {
-    const labels = { cash, terminal, card, playstation, debtPayments };
     const supabase = createClient();
     const snapshotResult = await fetchFinanceReportSnapshot(supabase, clubId, from, to, ['cash', 'debt_payments', 'expenses']);
     if (snapshotResult.error) throw new Error(snapshotResult.error.message);
 
     if (snapshotResult.data) {
-      return buildRows(snapshotResult.data.cashRows, snapshotResult.data.debtPaymentRows, snapshotResult.data.expenseRows, labels, enabledPaymentMethods);
+      return buildRows(snapshotResult.data.cashRows, snapshotResult.data.debtPaymentRows, snapshotResult.data.expenseRows, enabledPaymentMethods);
     }
 
     // Compatibility path while migration 049 is being deployed.
@@ -135,8 +122,8 @@ export default function GameClubMoneyDetailsPage({ requestedFrom, requestedTo }:
     ]);
     const firstError = [cashRes.error, debtRes.error, expenseRes.error].find(Boolean);
     if (firstError) throw new Error(firstError.message);
-    return buildRows(cashRes.data ?? [], debtRes.data ?? [], expenseRes.data ?? [], labels, enabledPaymentMethods);
-  }, [card, cash, debtPayments, enabledPaymentMethods, playstation, terminal]);
+    return buildRows(cashRes.data ?? [], debtRes.data ?? [], expenseRes.data ?? [], enabledPaymentMethods);
+  }, [enabledPaymentMethods]);
 
   return (
     <MoneyDetailsPage

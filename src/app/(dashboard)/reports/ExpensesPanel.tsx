@@ -59,6 +59,8 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
   const [error, setError] = useState('');
   const categoryLoadSequence = useRef(0);
   const customCategoryRef = useRef<HTMLInputElement>(null);
+  // Blocks a second submit before the `saving` state re-renders the button.
+  const submitPending = useRef(false);
   const [form, setForm] = useState({
     date: businessToday,
     amount: '',
@@ -77,6 +79,24 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
         ? current.payment_method
         : defaultPaymentMethod(enabledPaymentMethods),
     }));
+  }, [businessToday, enabledPaymentMethods]);
+
+  // A half-filled form belongs to the club it was started for: clear it when
+  // the user switches clubs so it cannot be saved into the new club.
+  const previousClubId = useRef(selectedClubId);
+  useEffect(() => {
+    if (previousClubId.current === selectedClubId) return;
+    previousClubId.current = selectedClubId;
+    setError('');
+    setForm({
+      date: businessToday,
+      amount: '',
+      category: 'other',
+      custom_category: '',
+      payment_method: defaultPaymentMethod(enabledPaymentMethods),
+      payment_source: 'game_club',
+      comment: '',
+    });
   }, [businessToday, enabledPaymentMethods, selectedClubId]);
 
   useEffect(() => {
@@ -125,6 +145,7 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitPending.current) return;
     const amount = parseCurrencyInput(form.amount);
     const category = form.category === CUSTOM_CATEGORY_VALUE
       ? normalizeCustomCategory(form.custom_category)
@@ -142,42 +163,60 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
       setError(tc('required'));
       return;
     }
-
-    setSaving(true);
-    setError('');
-
-    const response = await mutateFinanceRequest('/api/expenses', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        clubId: selectedClubId,
-        date: form.date,
-        amount,
-        category,
-        paymentMethod: form.payment_method,
-        paymentSource: form.payment_source,
-        comment: form.comment.trim() || null,
-      }),
-    });
-
-    if (!response.ok) {
-      const result = await response.json().catch(() => null) as { error?: string } | null;
-      setError(result?.error ?? tc('error'));
-      setSaving(false);
+    if (!enabledPaymentMethods.includes(form.payment_method)) {
+      setError(t('paymentMethodUnavailable'));
+      return;
+    }
+    if (form.date > businessToday) {
+      setError(t('futureDateError'));
       return;
     }
 
-    setForm({
-      date: businessToday,
-      amount: '',
-      category: 'other',
-      custom_category: '',
-      payment_method: defaultPaymentMethod(enabledPaymentMethods),
-      payment_source: 'game_club',
-      comment: '',
-    });
-    setSaving(false);
-    await onSaved?.();
+    submitPending.current = true;
+    setSaving(true);
+    setError('');
+
+    let saved = false;
+    try {
+      const response = await mutateFinanceRequest('/api/expenses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          clubId: selectedClubId,
+          date: form.date,
+          amount,
+          category,
+          paymentMethod: form.payment_method,
+          paymentSource: form.payment_source,
+          comment: form.comment.trim() || null,
+        }),
+      });
+
+      if (!response.ok) {
+        // The API returns raw database text; show a translated message instead.
+        setError(response.status === 401 || response.status === 403
+          ? tc('accessDeniedDescription')
+          : t('saveError'));
+        return;
+      }
+
+      saved = true;
+      setForm({
+        date: businessToday,
+        amount: '',
+        category: 'other',
+        custom_category: '',
+        payment_method: defaultPaymentMethod(enabledPaymentMethods),
+        payment_source: 'game_club',
+        comment: '',
+      });
+    } catch {
+      setError(t('saveError'));
+    } finally {
+      submitPending.current = false;
+      setSaving(false);
+    }
+    if (saved) await onSaved?.();
   }
 
   const methodIcon = (method: EntryPaymentMethod) =>
@@ -186,6 +225,7 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && <InlineAlert variant="danger">{error}</InlineAlert>}
+      {enabledPaymentMethods.length === 0 && <InlineAlert variant="warning">{t('paymentMethodUnavailable')}</InlineAlert>}
 
       <Field label={t('amount')} htmlFor="expense-amount" required>
         <CurrencyInput
@@ -269,7 +309,7 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
         />
       </Field>
 
-      <Button type="submit" size="lg" fullWidth loading={saving} loadingLabel={tc('saving')} icon={<Save size={18} aria-hidden="true" />}>
+      <Button type="submit" size="lg" fullWidth disabled={enabledPaymentMethods.length === 0} loading={saving} loadingLabel={tc('saving')} icon={<Save size={18} aria-hidden="true" />}>
         {t('submit')}
       </Button>
     </form>

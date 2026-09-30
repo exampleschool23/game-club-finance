@@ -265,3 +265,87 @@ export function calculateStockOpeningBalances(
   }
   return balances;
 }
+
+/** Threshold used when a product has no explicit low-stock threshold. */
+export const LOW_STOCK_DEFAULT = 5;
+
+export type StockLevel = 'out' | 'low' | 'ok';
+
+export function resolveLowStockThreshold(threshold: number | null | undefined): number {
+  return threshold === null || threshold === undefined || !Number.isFinite(Number(threshold))
+    ? LOW_STOCK_DEFAULT
+    : Number(threshold);
+}
+
+/** A tracked product with some stock left at or below its threshold. */
+export function isLowStock(currentStock: number, threshold: number | null | undefined): boolean {
+  return currentStock > 0 && currentStock <= resolveLowStockThreshold(threshold);
+}
+
+export function stockLevel(currentStock: number, threshold: number | null | undefined): StockLevel {
+  if (currentStock <= 0) return 'out';
+  return isLowStock(currentStock, threshold) ? 'low' : 'ok';
+}
+
+export interface StockTotalsRowInput {
+  tracksInventory: boolean;
+  previousStock: number;
+  addedToday: number;
+  adjustmentQuantity?: number;
+  closingStock: number;
+  /** Direct sold quantity; used only for made-to-order products. */
+  soldQuantity: number;
+  salePrice: number;
+  costPrice: number;
+  /** Cost of the selected date's purchase receipts for this product. */
+  purchaseCost?: number;
+}
+
+export interface StockTotals {
+  sold: number;
+  income: number;
+  profit: number;
+  stockValue: number;
+  previous: number;
+  added: number;
+  purchaseCost: number;
+}
+
+/** Per-row sold quantity, income, cost and profit using the canonical formulas. */
+export function summarizeStockRow(row: StockTotalsRowInput): StockCountResult {
+  if (!row.tracksInventory) {
+    return calculateDirectSalesSummary(row.soldQuantity, row.salePrice, row.costPrice);
+  }
+
+  return calculateStockCountSummary({
+    previousStock: row.previousStock,
+    addedToday: row.addedToday,
+    adjustmentQuantity: row.adjustmentQuantity,
+    closingStock: row.closingStock,
+    salePrice: row.salePrice,
+    costPrice: row.costPrice,
+  });
+}
+
+/**
+ * Closing-stock totals. Made-to-order products contribute sales but no stock
+ * quantities, stock value or purchase cost.
+ */
+export function summarizeStockRows(rows: StockTotalsRowInput[]): StockTotals {
+  return rows.reduce<StockTotals>(
+    (acc, row) => {
+      const summary = summarizeStockRow(row);
+      acc.sold += summary.soldQuantity;
+      acc.income += summary.barIncome;
+      acc.profit += summary.barProfit;
+      if (row.tracksInventory) {
+        acc.stockValue += row.closingStock * row.costPrice;
+        acc.previous += row.previousStock;
+        acc.added += row.addedToday;
+        acc.purchaseCost += row.purchaseCost ?? 0;
+      }
+      return acc;
+    },
+    { sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0, purchaseCost: 0 },
+  );
+}

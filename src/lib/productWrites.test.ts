@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildProductInsertPayload,
   buildProductUpdatePayload,
+  parseLowStockThreshold,
+  validateProductForm,
   type ProductWriteForm,
 } from './productWrites';
 
@@ -61,4 +63,26 @@ describe('product write payloads', () => {
 it('omits cost price from admin catalog updates and inserts even if a changed value is submitted', () => {
   expect(buildProductUpdatePayload(form, { isOwner: false })).not.toHaveProperty('cost_price');
   expect(buildProductInsertPayload(form, { isOwner: false })).not.toHaveProperty('cost_price');
+});
+
+describe('low stock threshold', () => {
+  it('preserves an explicit zero and defaults only a blank value', () => {
+    expect(buildProductUpdatePayload({ ...form, low_stock_threshold: '0' }, { isOwner: true }).low_stock_threshold).toBe(0);
+    expect(buildProductUpdatePayload({ ...form, low_stock_threshold: '' }, { isOwner: true }).low_stock_threshold).toBe(5);
+    expect(parseLowStockThreshold('12')).toBe(12);
+    expect(parseLowStockThreshold('abc')).toBe(5);
+  });
+});
+
+describe('validateProductForm', () => {
+  it('requires a name and a positive sale price for active products', () => {
+    expect(validateProductForm(form)).toBeNull();
+    expect(validateProductForm({ ...form, name: '  ' })).toBe('name_required');
+    expect(validateProductForm({ ...form, sale_price: '' })).toBe('sale_price_required');
+    expect(validateProductForm({ ...form, sale_price: '0' })).toBe('sale_price_required');
+  });
+
+  it('lets an inactive product keep a zero sale price', () => {
+    expect(validateProductForm({ ...form, sale_price: '', is_active: false })).toBeNull();
+  });
 });

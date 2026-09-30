@@ -15,6 +15,10 @@ import {
   validateStockAvailability,
   isWholePositiveStockQuantity,
   recalculateFutureStockCounts,
+  isLowStock,
+  LOW_STOCK_DEFAULT,
+  stockLevel,
+  summarizeStockRows,
 } from './stock';
 
 describe('calculateSoldQuantity', () => {
@@ -383,5 +387,60 @@ describe('opening stock between closings', () => {
     ];
     expect(calculateStockOpeningBalances([], receipts, '2026-09-14', true)).toEqual({});
     expect(calculateStockOpeningBalances([], receipts, '2026-09-14', false)).toEqual({ new: 6 });
+  });
+});
+
+describe('low stock', () => {
+  it('uses the default threshold only when none is set and keeps an explicit zero', () => {
+    expect(LOW_STOCK_DEFAULT).toBe(5);
+    expect(isLowStock(5, null)).toBe(true);
+    expect(isLowStock(6, undefined)).toBe(false);
+    expect(isLowStock(1, 0)).toBe(false);
+    expect(isLowStock(0, 10)).toBe(false);
+    expect(stockLevel(0, 10)).toBe('out');
+    expect(stockLevel(3, 10)).toBe('low');
+    expect(stockLevel(30, 10)).toBe('ok');
+  });
+});
+
+describe('summarizeStockRows', () => {
+  it('totals tracked and made-to-order rows with the canonical formulas', () => {
+    expect(summarizeStockRows([
+      {
+        tracksInventory: true,
+        previousStock: 10,
+        addedToday: 5,
+        adjustmentQuantity: -1,
+        closingStock: 4,
+        soldQuantity: 999,
+        salePrice: 100,
+        costPrice: 60,
+        purchaseCost: 300,
+      },
+      {
+        tracksInventory: false,
+        previousStock: 7,
+        addedToday: 7,
+        closingStock: 7,
+        soldQuantity: 3,
+        salePrice: 50,
+        costPrice: 20,
+        purchaseCost: 1_000,
+      },
+    ])).toEqual({
+      sold: 13,
+      income: 1_150,
+      profit: 490,
+      stockValue: 240,
+      previous: 10,
+      added: 5,
+      purchaseCost: 300,
+    });
+  });
+
+  it('returns zero totals for no rows', () => {
+    expect(summarizeStockRows([])).toEqual({
+      sold: 0, income: 0, profit: 0, stockValue: 0, previous: 0, added: 0, purchaseCost: 0,
+    });
   });
 });

@@ -25,9 +25,15 @@ import {
   useConfirm,
   useToast,
 } from '@/components/PresentationFoundation';
-import { formatCurrency, formatCurrencyInput, formatUnitCurrency } from '@/lib/formatters';
-import { buildProductInsertPayload, buildProductUpdatePayload, type ProductWriteForm } from '@/lib/productWrites';
-import { ArrowDown, ArrowUp, Check, ListOrdered, Lock, Package, Plus, Search, Trash2 } from 'lucide-react';
+import { formatCurrency, formatCurrencyInput, formatNumber, formatUnitCurrency } from '@/lib/formatters';
+import {
+  buildProductInsertPayload,
+  buildProductUpdatePayload,
+  validateProductForm,
+  type ProductWriteForm,
+} from '@/lib/productWrites';
+import { LOW_STOCK_DEFAULT, resolveLowStockThreshold, stockLevel } from '@/lib/calculations/stock';
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ListOrdered, Lock, Package, Plus, RefreshCcw, Search, Trash2 } from 'lucide-react';
 import type { Product } from '@/types';
 
 type ProductForm = ProductWriteForm;
@@ -39,7 +45,7 @@ const emptyForm = (): ProductForm => ({
   sale_price: '',
   cost_price: '',
   current_stock: '',
-  low_stock_threshold: '5',
+  low_stock_threshold: String(LOW_STOCK_DEFAULT),
   tracks_inventory: true,
   is_active: true,
 });
@@ -67,6 +73,7 @@ export default function ProductsPage() {
   const [deleting, setDeleting] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [formError, setFormError] = useState('');
+  const [salePriceError, setSalePriceError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [search, setSearch] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
@@ -130,18 +137,26 @@ export default function ProductsPage() {
       .eq('club_id', selectedClubId)
       .order('name', { ascending: true });
 
-    if (fallback.error) return finish([], fallback.error.message);
+    if (fallback.error) return finish(silent ? null : [], t('loadFailed'));
     finish((fallback.data ?? []) as Product[]);
-  }, [selectedClubId]);
+  }, [selectedClubId, t]);
 
   useEffect(() => {
-    loadProducts().catch((loadError) => {
+    loadProducts().catch(() => {
       setProducts([]);
-      setLoadError(loadError instanceof Error ? loadError.message : String(loadError));
+      setLoadError(t('loadFailed'));
       setLoading(false);
     });
     return () => { requestSequence.current += 1; };
-  }, [loadProducts]);
+  }, [loadProducts, t]);
+
+  // An open editor belongs to the previous club's product; never save it
+  // against the newly selected club.
+  useEffect(() => {
+    setModalOpen(false);
+    setEditingId(null);
+    setReordering(false);
+  }, [selectedClubId]);
 
   const categoryOptions = useMemo(() => {
     return Array.from(new Set(products.map((product) => productCategory(product.category)).filter(Boolean)))
@@ -157,8 +172,8 @@ export default function ProductsPage() {
       if (stockFilter === 'inactive') return !product.is_active;
       if (stockFilter === 'all') return true;
       if (!product.is_active || product.tracks_inventory === false) return false;
-      if (stockFilter === 'out') return product.current_stock <= 0;
-      return product.current_stock > 0 && product.current_stock <= (product.low_stock_threshold ?? 5);
+      const level = stockLevel(product.current_stock, product.low_stock_threshold);
+      return stockFilter === 'out' ? level === 'out' : level === 'low';
     });
   }, [products, selectedCategory, search, stockFilter, reordering]);
   useEffect(() => {
@@ -172,11 +187,12 @@ export default function ProductsPage() {
     setEditingId(null);
     setForm(emptyForm());
     setFormError('');
+    setSalePriceError('');
     setModalOpen(true);
   }
 
   function openEdit(p: Product) {
-    if (!canManageInventory) return;
+    if (!canManageInventory || p.is_deleted) return;
     setEditingId(p.id);
     setForm({
       name: p.name,
@@ -184,29 +200,38 @@ export default function ProductsPage() {
       sale_price: formatCurrencyInput(p.sale_price),
       cost_price: formatCurrencyInput(p.cost_price),
       current_stock: String(p.current_stock),
-      low_stock_threshold: String(p.low_stock_threshold ?? 5),
+      low_stock_threshold: String(resolveLowStockThreshold(p.low_stock_threshold)),
       tracks_inventory: p.tracks_inventory !== false,
       is_active: p.is_active,
     });
     setFormError('');
+    setSalePriceError('');
     setModalOpen(true);
   }
 
   function set(field: keyof ProductForm, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === 'sale_price' || field === 'is_active') setSalePriceError('');
   }
 
   async function handleSave(event?: React.FormEvent) {
     event?.preventDefault();
     if (!canManageInventory) return;
     const existingProduct = editingId ? products.find((product) => product.id === editingId) : null;
-    if (existingProduct && !existingProduct.is_active) {
+    // Only archived (deleted) products are read-only in the database; an
+    // inactive product can be edited and reactivated.
+    if (existingProduct?.is_deleted) {
       setFormError(t('inactiveEditBlocked'));
       return;
     }
 
-    if (!selectedClubId || !form.name.trim()) {
+    const validation = validateProductForm(form);
+    if (!selectedClubId || validation === 'name_required') {
       setFormError(tc('required'));
+      return;
+    }
+    if (validation === 'sale_price_required') {
+      setSalePriceError(t('salePriceRequired'));
       return;
     }
     setSaving(true);
@@ -216,12 +241,14 @@ export default function ProductsPage() {
     let err: string | null = null;
     if (editingId) {
       const payload = buildProductUpdatePayload(form, { isOwner });
-      const { error: e } = await supabase
+      const { data: updated, error: e } = await supabase
         .from('products')
         .update(payload)
         .eq('club_id', selectedClubId)
-        .eq('id', editingId);
-      err = e?.message ?? null;
+        .eq('id', editingId)
+        .select('id');
+      // RLS silently filters rows the user may not update; zero rows is a failure.
+      err = e?.message ?? ((updated?.length ?? 0) === 0 ? t('saveNoRows') : null);
     } else {
       const payload = buildProductInsertPayload(form, { isOwner });
       const maxSortOrder = products.reduce(
@@ -253,7 +280,16 @@ export default function ProductsPage() {
 
   async function handleDelete() {
     if (!editingId || !isOwner || !selectedClubId) return;
-    const confirmed = await confirm({ title: t('deleteProduct'), description: t('deleteConfirm'), confirmLabel: tc('delete') });
+    const product = products.find((item) => item.id === editingId);
+    const remainingStock = product && product.tracks_inventory !== false ? product.current_stock : 0;
+    const confirmed = await confirm({
+      title: t('deleteProduct'),
+      description: remainingStock > 0
+        ? t('deleteConfirmWithStock', { count: formatNumber(remainingStock) })
+        : t('deleteConfirm'),
+      confirmLabel: tc('delete'),
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     setDeleting(true);
@@ -295,17 +331,24 @@ export default function ProductsPage() {
     reordered.splice(targetIndex, 0, moved);
 
     setMovingId(productId);
-    setProducts(reordered);
+    setProducts(reordered.map((product, index) => (
+      product.sort_order === index + 1 ? product : { ...product, sort_order: index + 1 }
+    )));
 
     try {
       const supabase = createClient();
-      const updates = reordered.map((product, index) =>
-        supabase
-          .from('products')
-          .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
-          .eq('club_id', selectedClubId)
-          .eq('id', product.id),
-      );
+      // Only write rows whose position actually changed (normally the two
+      // swapped products; the first reorder also normalizes missing orders).
+      const updatedAt = new Date().toISOString();
+      const updates = reordered.flatMap((product, index) => (
+        product.sort_order === index + 1 ? [] : [
+          supabase
+            .from('products')
+            .update({ sort_order: index + 1, updated_at: updatedAt })
+            .eq('club_id', selectedClubId)
+            .eq('id', product.id),
+        ]
+      ));
       const results = await Promise.all(updates);
       const firstError = results.find((result) => result.error)?.error;
 
@@ -327,7 +370,9 @@ export default function ProductsPage() {
     { value: 'out', label: t('outOfStock') },
     { value: 'inactive', label: tc('inactive') },
   ];
-  const editingInactive = Boolean(editingId && products.find((product) => product.id === editingId)?.is_active === false);
+  const editingProduct = editingId ? products.find((product) => product.id === editingId) : undefined;
+  const editingInactive = Boolean(editingProduct && !editingProduct.is_active && !editingProduct.is_deleted);
+  const editingArchived = Boolean(editingProduct?.is_deleted);
 
   return (
     <div>
@@ -339,10 +384,20 @@ export default function ProductsPage() {
         ) : undefined}
       />
 
-      {loadError && <InlineAlert variant="danger" className="mb-4">{loadError}</InlineAlert>}
-
       {loading ? (
         <TableSkeleton rows={8} columns={canManageInventory ? 7 : 5} />
+      ) : loadError && products.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            title={loadError}
+            action={(
+              <Button variant="outline" onClick={() => { void loadProducts(); }} icon={<RefreshCcw size={16} aria-hidden="true" />}>
+                {tc('retry')}
+              </Button>
+            )}
+          />
+        </Card>
       ) : products.length === 0 ? (
         <Card>
           <EmptyState
@@ -355,6 +410,18 @@ export default function ProductsPage() {
         </Card>
       ) : (
         <div className="space-y-3">
+          {loadError && (
+            <InlineAlert
+              variant="danger"
+              action={(
+                <Button variant="outline" size="sm" onClick={() => { void loadProducts({ silent: true }); }} icon={<RefreshCcw size={14} aria-hidden="true" />}>
+                  {tc('retry')}
+                </Button>
+              )}
+            >
+              {loadError}
+            </InlineAlert>
+          )}
           <Card>
             <div className="flex flex-col gap-3 sm:flex-row">
               <SearchInput
@@ -467,9 +534,10 @@ export default function ProductsPage() {
                   className: 'whitespace-nowrap',
                   render: (r) => {
                     if (r.tracks_inventory === false) return <Badge variant="purple">{t('madeToOrder')}</Badge>;
-                    const quantity = t('stockUnits', { count: formatUnitCurrency(r.current_stock) });
-                    if (r.current_stock <= 0) return <Badge variant="danger">{t('outOfStock')} · {quantity}</Badge>;
-                    if (r.current_stock <= (r.low_stock_threshold ?? 5)) return <Badge variant="warning">{t('lowStock')} · {quantity}</Badge>;
+                    const quantity = t('stockUnits', { count: formatNumber(r.current_stock) });
+                    const level = stockLevel(r.current_stock, r.low_stock_threshold);
+                    if (level === 'out') return <Badge variant="danger">{t('outOfStock')} · {quantity}</Badge>;
+                    if (level === 'low') return <Badge variant="warning">{t('lowStock')} · {quantity}</Badge>;
                     return <span>{quantity}</span>;
                   },
                 },
@@ -490,8 +558,8 @@ export default function ProductsPage() {
                       variant="ghost"
                       size="sm"
                       className="text-primary-700"
-                      disabled={!r.is_active}
-                      title={!r.is_active ? t('inactiveEditBlocked') : undefined}
+                      disabled={Boolean(r.is_deleted)}
+                      title={r.is_deleted ? t('inactiveEditBlocked') : undefined}
                       onClick={() => openEdit(r)}
                     >
                       {tc('edit')}
@@ -517,12 +585,13 @@ export default function ProductsPage() {
               </Button>
             )}
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving || deleting}>{tc('cancel')}</Button>
-            <Button type="submit" form="product-form" loading={saving} loadingLabel={tc('saving')} disabled={deleting || editingInactive}>{tc('save')}</Button>
+            <Button type="submit" form="product-form" loading={saving} loadingLabel={tc('saving')} disabled={deleting || editingArchived}>{tc('save')}</Button>
           </>
         )}
       >
         <form id="product-form" onSubmit={handleSave} className="space-y-4">
-          {editingInactive && <InlineAlert variant="warning">{t('inactiveEditBlocked')}</InlineAlert>}
+          {editingArchived && <InlineAlert variant="warning">{t('inactiveEditBlocked')}</InlineAlert>}
+          {editingInactive && <InlineAlert variant="info">{t('inactiveEditHint')}</InlineAlert>}
           <Field label={t('name')} htmlFor="product-name" required>
             <Input id="product-name" type="text" required maxLength={120} value={form.name} onChange={(e) => set('name', e.target.value)} />
           </Field>
@@ -533,7 +602,7 @@ export default function ProductsPage() {
             </datalist>
           </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label={t('salePrice')} htmlFor="product-sale-price">
+            <Field label={t('salePrice')} htmlFor="product-sale-price" required={form.is_active} error={salePriceError || undefined}>
               <CurrencyInput id="product-sale-price" value={form.sale_price} onValueChange={(value) => set('sale_price', value)} trailingAddon={tc('currency')} />
             </Field>
             <Field

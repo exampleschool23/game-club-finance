@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/types';
-import { calculateStockOpeningBalances } from './calculations/stock';
+import { calculateStockOpeningBalances, summarizeStockRows } from './calculations/stock';
 import {
   applyBulkStockOrder,
   applyClosingStockDraft,
@@ -11,6 +11,7 @@ import {
   calculatePurchaseCostsByProduct,
   clearClosingStockDraft,
   closingStockDraftKey,
+  closingStockRowTotalsInput,
   parseClosingStockImportRecords,
   parseClosingStockImportSheetRows,
   readClosingStockDraft,
@@ -883,6 +884,53 @@ describe('closing stock save payloads', () => {
       closing_stock: 13,
       sold_quantity: 2,
     });
+  });
+
+  it('maps editable rows into canonical totals input', () => {
+    const rows = [
+      row({ product: product({ id: 'a', sale_price: 100, cost_price: 40 }), previousStock: '10', addedToday: '2', closingStock: '7', soldQuantity: '5' }),
+      row({ product: product({ id: 'b', tracks_inventory: false, sale_price: 50, cost_price: 10 }), previousStock: '0', addedToday: '0', closingStock: '0', soldQuantity: '4' }),
+    ];
+    const totals = summarizeStockRows(rows.map((item) => closingStockRowTotalsInput(item, item.product.id === 'a' ? 80 : 0)));
+    expect(totals).toEqual({ sold: 9, income: 700, profit: 460, stockValue: 280, previous: 10, added: 2, purchaseCost: 80 });
+  });
+
+  it('rejects a blank closing count instead of recording every unit as sold', () => {
+    const blankClosing = row({
+      product: product({ id: 'cola', name: 'Cola' }),
+      previousStock: '10',
+      addedToday: '2',
+      closingStock: '',
+      soldQuantity: '12',
+    });
+    const error = validateClosingStockRows([blankClosing]);
+    expect(error?.code).toBe('closing_required');
+    expect(error?.productId).toBe('cola');
+    expect(error?.availableStock).toBe(12);
+    expect(() => buildClosingStockUpserts({
+      date: '2026-06-28',
+      createdBy: null,
+      rows: [blankClosing],
+    })).toThrow(/closing stock count/i);
+  });
+
+  it('rejects a blank sold quantity for a tracked product in sold-entry mode', () => {
+    expect(validateClosingStockRows([row({
+      previousStock: '10',
+      addedToday: '0',
+      closingStock: '10',
+      soldQuantity: ' ',
+    })])?.code).toBe('sold_required');
+  });
+
+  it('still allows a blank made-to-order sold quantity, which records no sales', () => {
+    expect(validateClosingStockRows([row({
+      product: product({ id: 'hot-dog', tracks_inventory: false }),
+      previousStock: '0',
+      addedToday: '0',
+      closingStock: '0',
+      soldQuantity: '',
+    })])).toBeNull();
   });
 
   it('requires a reason for every non-zero inventory adjustment', () => {

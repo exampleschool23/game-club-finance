@@ -6,6 +6,7 @@ import {
   calculateDirectSalesSummary,
   calculateStockCountSummary,
   validateStockAvailability,
+  type StockTotalsRowInput,
 } from './calculations/stock';
 
 export interface ClosingStockRowData {
@@ -319,6 +320,24 @@ export function normalizeStockCount(value: unknown): number {
 export function normalizeStockAdjustment(value: unknown): number {
   const parsed = parseClosingStockNumber(value);
   return parsed === null ? 0 : Math.trunc(parsed);
+}
+
+/** Maps an editable closing-stock row to the pure totals input. */
+export function closingStockRowTotalsInput(
+  row: ClosingStockRowData,
+  purchaseCost = 0,
+): StockTotalsRowInput {
+  return {
+    tracksInventory: row.product.tracks_inventory !== false,
+    previousStock: normalizeStockCount(row.previousStock),
+    addedToday: normalizeStockCount(row.addedToday),
+    adjustmentQuantity: normalizeStockAdjustment(row.adjustmentQuantity),
+    closingStock: normalizeStockCount(row.closingStock),
+    soldQuantity: normalizeStockCount(row.soldQuantity),
+    salePrice: Number(row.product.sale_price ?? 0),
+    costPrice: Number(row.product.cost_price ?? 0),
+    purchaseCost,
+  };
 }
 
 export function getBulkStockAvailableQuantity(row: ClosingStockRowData): number | null {
@@ -877,6 +896,8 @@ export function buildEditableClosingStockRows({
 }
 
 export type ClosingStockValidationCode =
+  | 'closing_required'
+  | 'sold_required'
   | 'adjustment_reason_required'
   | 'closing_exceeds_available'
   | 'negative_available_stock'
@@ -890,7 +911,11 @@ export class ClosingStockValidationError extends Error {
     public readonly availableStock: number,
   ) {
     super(
-      code === 'adjustment_reason_required'
+      code === 'closing_required'
+        ? `${productName}: enter the closing stock count.`
+        : code === 'sold_required'
+          ? `${productName}: enter the sold quantity.`
+          : code === 'adjustment_reason_required'
         ? `${productName}: an inventory adjustment requires a reason.`
         : code === 'negative_available_stock'
           ? `${productName}: the adjustment makes available stock negative.`
@@ -905,6 +930,33 @@ export class ClosingStockValidationError extends Error {
 export function validateClosingStockRows(rows: ClosingStockRowData[]): ClosingStockValidationError | null {
   for (const row of rows) {
     if (row.product.tracks_inventory === false) continue;
+
+    // A blank count must never be read as zero: for a tracked product that
+    // would silently record every available unit as sold.
+    if (String(row.closingStock ?? '').trim() === '') {
+      return new ClosingStockValidationError(
+        'closing_required',
+        row.product.id,
+        row.product.name,
+        calculateAvailableStock(
+          normalizeStockCount(row.previousStock),
+          normalizeStockCount(row.addedToday),
+          normalizeStockAdjustment(row.adjustmentQuantity),
+        ),
+      );
+    }
+    if (String(row.soldQuantity ?? '').trim() === '') {
+      return new ClosingStockValidationError(
+        'sold_required',
+        row.product.id,
+        row.product.name,
+        calculateAvailableStock(
+          normalizeStockCount(row.previousStock),
+          normalizeStockCount(row.addedToday),
+          normalizeStockAdjustment(row.adjustmentQuantity),
+        ),
+      );
+    }
 
     const previousStock = normalizeStockCount(row.previousStock);
     const addedToday = normalizeStockCount(row.addedToday);

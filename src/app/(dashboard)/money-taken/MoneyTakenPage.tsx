@@ -9,6 +9,7 @@ import {
   Gamepad2,
   GlassWater,
   Landmark,
+  RefreshCcw,
   Trash2,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -85,7 +86,8 @@ export default function MoneyTakenPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState('');
+  /** Balances failed to load; mutations stay disabled until a successful reload. */
+  const [error, setError] = useState(false);
   const [form, setForm] = useState({
     month: currentMonth,
     source: 'game_club' as MoneySource,
@@ -122,7 +124,7 @@ export default function MoneyTakenPage() {
       }
 
       if (!silent) setLoading(true);
-      setError('');
+      setError(false);
       const supabase = createClient();
       const snapshotResult = await supabase.rpc('get_owner_profit_snapshot', {
         p_club_id: selectedClubId,
@@ -141,7 +143,7 @@ export default function MoneyTakenPage() {
       }
 
       if (snapshotResult.error && !isMissingDatabaseFunction(snapshotResult.error, 'get_owner_profit_snapshot')) {
-        setError(snapshotResult.error.message);
+        setError(true);
         setLoading(false);
         return;
       }
@@ -198,7 +200,7 @@ export default function MoneyTakenPage() {
       ].find(Boolean);
 
       if (firstError) {
-        setError(firstError.message);
+        setError(true);
         setLoading(false);
         return;
       }
@@ -231,9 +233,9 @@ export default function MoneyTakenPage() {
         ),
       ])));
       setLoading(false);
-    } catch (loadError: unknown) {
+    } catch {
       if (id === requestId.current) {
-        setError(loadError instanceof Error ? loadError.message : String(loadError));
+        setError(true);
         setLoading(false);
       }
     }
@@ -307,7 +309,7 @@ export default function MoneyTakenPage() {
       if (insertError) {
         showToast(isMissingDatabaseFunction(insertError, 'withdraw_owner_money_for_month')
           ? t('migrationRequired')
-          : insertError.code === '23514' ? t('exceedsAvailable') : insertError.message, 'error');
+          : insertError.code === '23514' ? t('exceedsAvailable') : t('saveError'), 'error');
         await loadData({ silent: true });
         return;
       }
@@ -315,9 +317,9 @@ export default function MoneyTakenPage() {
       setForm((current) => ({ ...current, comment: '', amount: '' }));
       showToast(t('saved'), 'success');
       await loadData({ silent: true });
-    } catch (saveError: unknown) {
+    } catch {
       if (operationRequestId !== requestId.current) return;
-      showToast(saveError instanceof Error ? saveError.message : String(saveError), 'error');
+      showToast(t('saveError'), 'error');
       await loadData({ silent: true });
     } finally {
       mutationPending.current = false;
@@ -328,8 +330,18 @@ export default function MoneyTakenPage() {
   async function handleDelete(row: OwnerWithdrawal) {
     if (mutationPending.current || loading || error || row.club_id !== selectedClubId) return;
     if (!selectedClubId || !isOwner) return;
-    const confirmed = await confirm({ title: tc('delete'), description: t('deleteConfirm'), confirmLabel: tc('delete') });
-    if (!confirmed) return;
+    const requestIdBeforeConfirm = requestId.current;
+    const confirmed = await confirm({
+      title: tc('delete'),
+      description: t('deleteConfirmDetailed', {
+        amount: currency(row.amount),
+        source: t(`sources.${row.source}`),
+        month: formatYearMonth(row.period_month.slice(0, 7), locale),
+      }),
+      confirmLabel: tc('delete'),
+    });
+    // A club switch or reload while the dialog was open makes `row` stale.
+    if (!confirmed || requestIdBeforeConfirm !== requestId.current || mutationPending.current) return;
 
     const operationRequestId = requestId.current;
     mutationPending.current = true;
@@ -344,15 +356,15 @@ export default function MoneyTakenPage() {
 
       if (operationRequestId !== requestId.current) return;
       if (deleteError) {
-        showToast(deleteError.message, 'error');
+        showToast(t('deleteError'), 'error');
         return;
       }
 
       showToast(t('deleted'), 'success');
       await loadData({ silent: true });
-    } catch (deleteError: unknown) {
+    } catch {
       if (operationRequestId !== requestId.current) return;
-      showToast(deleteError instanceof Error ? deleteError.message : String(deleteError), 'error');
+      showToast(t('deleteError'), 'error');
       await loadData({ silent: true });
     } finally {
       mutationPending.current = false;
@@ -416,7 +428,25 @@ export default function MoneyTakenPage() {
         )}
       />
 
-      {error ? <InlineAlert variant="danger" className="mb-5">{error}</InlineAlert> : null}
+      {error ? (
+        <InlineAlert
+          variant="danger"
+          className="mb-5"
+          action={(
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => void loadData()}
+              icon={<RefreshCcw size={15} aria-hidden="true" />}
+            >
+              {tc('retry')}
+            </Button>
+          )}
+        >
+          {t('loadError')}
+        </InlineAlert>
+      ) : null}
 
       <section aria-label={t('monthlyOverallProfit')}>
         <MetricCard
@@ -505,7 +535,7 @@ export default function MoneyTakenPage() {
           <Card as="section">
             <SectionHeading title={t('historyTitle')} description={t('historyDescription')} className="mb-4" />
 
-            {withdrawals.length === 0 ? (
+            {error && withdrawals.length === 0 ? null : withdrawals.length === 0 ? (
               <EmptyState compact bordered title={t('noHistory')} />
             ) : (
               <div className="space-y-6">
@@ -530,7 +560,7 @@ export default function MoneyTakenPage() {
                               <IconButton
                                 variant="danger"
                                 size="sm"
-                                label={tc('delete')}
+                                label={`${tc('delete')}: ${t(`sources.${row.source}`)} · ${currency(row.amount)}`}
                                 icon={<Trash2 size={16} />}
                                 loading={deletingId === row.id}
                                 disabled={loading || !!error || saving || deletingId !== null}

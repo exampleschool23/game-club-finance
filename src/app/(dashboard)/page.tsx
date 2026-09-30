@@ -2,7 +2,7 @@ import DashboardPage from './DashboardPage';
 import { Suspense } from 'react';
 import { PageSkeleton } from '@/components/PresentationFoundation';
 import type { Club, ClubMembership } from '@/types';
-import { normalizeBusinessDayStartHour, todayIso } from '@/lib/utils';
+import { normalizeBusinessDayStartHour, serverTodayIso } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
 import { getDashboardBootstrap } from '@/lib/supabase/dashboardBootstrap';
 import {
@@ -68,8 +68,11 @@ async function DashboardSnapshotRoute({
       return typeof value === 'string' ? value : null;
     },
   };
-  const businessToday = todayIso(
-    new Date(),
+  // The server runs in UTC; compute the club's business date in the app time
+  // zone so the snapshot matches the range the browser will ask for.
+  const now = new Date();
+  const businessToday = serverTodayIso(
+    now,
     normalizeBusinessDayStartHour(club.business_day_start_hour),
   );
   const range = initialDashboardRange(query, businessToday);
@@ -110,6 +113,9 @@ async function DashboardSnapshotRoute({
         clubId: bootstrap.initialSelectedClubId,
         data,
         range,
+        // Browser Back can replay this server payload from the router cache;
+        // the client only trusts it without refetching while it is fresh.
+        generatedAt: now.getTime(),
       }}
     />
   );

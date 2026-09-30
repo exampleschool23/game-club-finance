@@ -8,8 +8,10 @@ import { createClient } from '@/lib/supabase/client';
 import { runWithJwtTimingRetry } from '@/lib/supabase/authRetry';
 import { useClub } from '@/components/layout/DashboardShell';
 import {
+  Avatar,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CurrencyInput,
   DataTable,
@@ -36,10 +38,18 @@ import {
   formatCurrencyInput,
   formatDateOnly,
   formatNumber,
+  formatUnitCurrency,
   parseCurrencyInput,
 } from '@/lib/formatters';
-import { calculateWeightedAverageCost, isWholePositiveStockQuantity } from '@/lib/calculations/stock';
 import {
+  calculateWeightedAverageCost,
+  isWholePositiveStockQuantity,
+  resolveLowStockThreshold,
+  stockLevel,
+} from '@/lib/calculations/stock';
+import { classifyStockWriteError, type StockWriteErrorLike } from '@/lib/stockWriteErrors';
+import {
+  AlertTriangle,
   Check,
   CheckCircle,
   ChevronLeft,
@@ -67,16 +77,6 @@ function parseQuantity(value: string) {
 
 function sanitizePurchaseSearch(value: string) {
   return value.replace(/[,%()*.\\]/g, ' ').trim();
-}
-
-function productInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
 }
 
 function paymentBadgeVariant(method: string): 'success' | 'primary' | 'purple' | 'neutral' {
@@ -114,7 +114,8 @@ async function fetchActiveProductsOrdered(supabase: ReturnType<typeof createClie
 export default function StockPurchasePage() {
   const t = useTranslations('stockPurchase');
   const tc = useTranslations('common');
-  const { selectedClubId, businessDayStartHour, enabledPaymentMethods } = useClub();
+  const { selectedClubId, businessDayStartHour, enabledPaymentMethods, role } = useClub();
+  const canWrite = role === 'owner' || role === 'admin';
   const { locale } = useAppLocale();
   const { showToast, toastElement } = useToast();
   const { confirm, confirmDialog } = useConfirm();
@@ -126,13 +127,15 @@ export default function StockPurchasePage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
-  const [loadError, setLoadError] = useState('');
+  const [productsError, setProductsError] = useState('');
+  const [purchasesError, setPurchasesError] = useState('');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [purchasePage, setPurchasePage] = useState(1);
   const [purchaseCount, setPurchaseCount] = useState(0);
   const [purchasesLoading, setPurchasesLoading] = useState(true);
   const purchaseRequest = useRef(0);
+  const productRequest = useRef(0);
 
   const [form, setForm] = useState({
     date: businessToday,
@@ -145,9 +148,15 @@ export default function StockPurchasePage() {
   });
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
+    const timer = window.setTimeout(() => {
+      const next = query.trim();
+      if (next === debouncedQuery) return;
+      // Change the query and page together so a search from page 2+ fetches once.
+      setDebouncedQuery(next);
+      setPurchasePage(1);
+    }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [query]);
+  }, [debouncedQuery, query]);
 
   const matchingProductIds = useMemo(() => {
     const needle = debouncedQuery.toLowerCase();
@@ -158,28 +167,43 @@ export default function StockPurchasePage() {
   }, [products, debouncedQuery]);
   const matchingProductKey = matchingProductIds?.join(',') ?? '';
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++productRequest.current;
+    const isCurrent = () => requestId === productRequest.current;
     if (!selectedClubId) {
       setProducts([]);
       setProductsLoading(false);
       return;
     }
 
-    setProductsLoading(true);
-    const supabase = createClient();
-    const productsRes = await runWithJwtTimingRetry(
-      supabase,
-      async () => fetchActiveProductsOrdered(supabase, selectedClubId),
-    );
-    setProductsLoading(false);
-
-    if (productsRes.error) {
-      setLoadError(productsRes.error.message);
-      return;
+    if (!silent) {
+      setProductsLoading(true);
+      setProducts([]);
     }
+    const supabase = createClient();
+    try {
+      const productsRes = await runWithJwtTimingRetry(
+        supabase,
+        async () => fetchActiveProductsOrdered(supabase, selectedClubId),
+      );
+      // A slower response for a previously selected club must never replace
+      // (or be selected in) the current club's product list.
+      if (!isCurrent()) return;
+      setProductsLoading(false);
 
-    setProducts(productsRes.data ?? []);
-  }, [selectedClubId]);
+      if (productsRes.error) {
+        setProductsError(t('productsLoadFailed'));
+        return;
+      }
+
+      setProductsError('');
+      setProducts(productsRes.data ?? []);
+    } catch {
+      if (!isCurrent()) return;
+      setProductsLoading(false);
+      setProductsError(t('productsLoadFailed'));
+    }
+  }, [selectedClubId, t]);
 
   const loadPurchases = useCallback(async (page: number) => {
     const requestId = ++purchaseRequest.current;
@@ -220,37 +244,52 @@ export default function StockPurchasePage() {
     setPurchasesLoading(false);
 
     if (purchasesError) {
-      setLoadError(purchasesError.message);
+      setPurchasesError(t('purchasesLoadFailed'));
       return;
     }
 
-    setLoadError('');
+    setPurchasesError('');
     setPurchases((data as PurchaseWithProduct[]) ?? []);
     setPurchaseCount(count ?? 0);
-  }, [debouncedQuery, matchingProductKey, selectedClubId]);
+  }, [debouncedQuery, matchingProductKey, selectedClubId, t]);
 
+  // A different club has different products: never carry a product, prices or
+  // comment from the previous club into this form.
   useEffect(() => {
     setPurchasePage(1);
+    setFormError('');
     setForm((prev) => ({
       ...prev,
-      date: businessToday,
-      payment_method: enabledPaymentMethods.some((method) => method === prev.payment_method)
-        ? prev.payment_method
-        : defaultPaymentMethod(enabledPaymentMethods),
+      product_id: '',
+      quantity: '',
+      cost_price: '',
+      sale_price: '',
+      comment: '',
     }));
-  }, [businessToday, enabledPaymentMethods, selectedClubId]);
+  }, [selectedClubId]);
 
   useEffect(() => {
-    loadProducts().catch((err) => setLoadError(err instanceof Error ? err.message : String(err)));
+    setForm((prev) => ({ ...prev, date: businessToday }));
+  }, [businessToday, selectedClubId]);
+
+  useEffect(() => {
+    setForm((prev) => (enabledPaymentMethods.some((method) => method === prev.payment_method)
+      ? prev
+      : { ...prev, payment_method: defaultPaymentMethod(enabledPaymentMethods) }));
+  }, [enabledPaymentMethods]);
+
+  useEffect(() => {
+    void loadProducts();
+    return () => { productRequest.current += 1; };
   }, [loadProducts]);
 
   useEffect(() => {
-    loadPurchases(purchasePage).catch((err) => {
+    loadPurchases(purchasePage).catch(() => {
       setPurchasesLoading(false);
-      setLoadError(err instanceof Error ? err.message : String(err));
+      setPurchasesError(t('purchasesLoadFailed'));
     });
     return () => { purchaseRequest.current += 1; };
-  }, [loadPurchases, purchasePage]);
+  }, [loadPurchases, purchasePage, t]);
 
   const selectedProduct = products.find((product) => product.id === form.product_id) ?? null;
   const quantity = parseQuantity(form.quantity);
@@ -270,6 +309,11 @@ export default function StockPurchasePage() {
       })
     : 0;
 
+  const selectedProductLevel = selectedProduct
+    ? stockLevel(selectedProduct.current_stock, selectedProduct.low_stock_threshold)
+    : null;
+  const formDisabled = !canWrite;
+
   const purchasePageCount = Math.max(1, Math.ceil(purchaseCount / PURCHASES_PAGE_SIZE));
   const purchaseRangeFrom = purchaseCount === 0 ? 0 : (purchasePage - 1) * PURCHASES_PAGE_SIZE + 1;
   const purchaseRangeTo = Math.min(purchasePage * PURCHASES_PAGE_SIZE, purchaseCount);
@@ -277,6 +321,36 @@ export default function StockPurchasePage() {
 
   function set<K extends keyof typeof form>(field: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setFormError('');
+  }
+
+  function writeErrorMessage(writeError: StockWriteErrorLike, fallback: string) {
+    switch (classifyStockWriteError(writeError)) {
+      case 'permission':
+      case 'adminPastDate':
+      case 'adjustmentOwnerOnly':
+        return t('errorPermission');
+      case 'futureDate': return t('errorFutureDate');
+      case 'productUnavailable': return t('errorProductUnavailable');
+      case 'notFound': return t('errorNotFound');
+      case 'insufficientStock': return t('errorInsufficientStock');
+      case 'invalid':
+      case 'laterCountInvalid':
+        return t('errorInvalid');
+      default: return fallback;
+    }
+  }
+
+  /** Clears the item fields after a save but keeps the date and payment method. */
+  function clearItemFields() {
+    setForm((prev) => ({
+      ...prev,
+      product_id: '',
+      quantity: '',
+      cost_price: '',
+      sale_price: '',
+      comment: '',
+    }));
     setFormError('');
   }
 
@@ -305,7 +379,7 @@ export default function StockPurchasePage() {
   }
 
   async function reloadAfterMutation(nextPage: number) {
-    await loadProducts();
+    await loadProducts({ silent: true });
     if (nextPage === purchasePage) {
       await loadPurchases(nextPage);
     } else {
@@ -315,6 +389,7 @@ export default function StockPurchasePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canWrite) return;
     if (!selectedClubId || !form.product_id || !form.quantity || !form.cost_price) {
       setFormError(tc('required'));
       return;
@@ -329,46 +404,69 @@ export default function StockPurchasePage() {
     setFormError('');
 
     const supabase = createClient();
-    const { error: err } = await supabase.rpc('record_stock_purchase', {
-      p_club_id: selectedClubId,
-      p_date: form.date,
-      p_product_id: form.product_id,
-      p_quantity: quantity,
-      p_cost_price: costPrice,
-      p_sale_price: form.sale_price ? salePrice : null,
-      p_payment_method: form.payment_method,
-      p_comment: form.comment.trim() || null,
-    });
+    let err: StockWriteErrorLike | null = null;
+    try {
+      const result = await supabase.rpc('record_stock_purchase', {
+        p_club_id: selectedClubId,
+        p_date: form.date,
+        p_product_id: form.product_id,
+        p_quantity: quantity,
+        p_cost_price: costPrice,
+        p_sale_price: form.sale_price ? salePrice : null,
+        p_payment_method: form.payment_method,
+        p_comment: form.comment.trim() || null,
+      });
+      err = result.error;
+    } catch {
+      err = { message: 'network' };
+    }
 
     setSaving(false);
 
     if (err) {
-      setFormError(err.code === '55000' ? t('purchaseBlockedByClosing') : err.message);
+      setFormError(err.code === '55000' ? t('purchaseBlockedByClosing') : writeErrorMessage(err, t('saveFailed')));
+      if (classifyStockWriteError(err) === 'productUnavailable') void loadProducts({ silent: true });
       return;
     }
 
-    resetForm();
+    clearItemFields();
     showToast(t('success'));
     await reloadAfterMutation(1);
   }
 
   async function handleDeletePurchase(purchase: PurchaseWithProduct) {
-    if (!selectedClubId) return;
-    const confirmed = await confirm({ title: tc('delete'), description: t('deleteConfirm'), confirmLabel: tc('delete') });
+    if (!selectedClubId || !canWrite) return;
+    const confirmed = await confirm({
+      title: tc('delete'),
+      description: t('deleteConfirmDetailed', {
+        product: purchase.products?.name ?? '—',
+        quantity: formatNumber(purchase.quantity),
+        date: formatDateOnly(purchase.date, locale),
+      }),
+      confirmLabel: tc('delete'),
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     setDeletingId(purchase.id);
 
     const supabase = createClient();
-    const { error: deleteError } = await supabase.rpc('delete_stock_purchase', {
-      p_club_id: selectedClubId,
-      p_purchase_id: purchase.id,
-    });
+    let deleteError: StockWriteErrorLike | null = null;
+    try {
+      const result = await supabase.rpc('delete_stock_purchase', {
+        p_club_id: selectedClubId,
+        p_purchase_id: purchase.id,
+      });
+      deleteError = result.error;
+    } catch {
+      deleteError = { message: 'network' };
+    }
 
     setDeletingId(null);
 
     if (deleteError) {
-      showToast(deleteError.code === '55000' ? t('deleteBlockedByClosing') : deleteError.message, 'error');
+      showToast(deleteError.code === '55000' ? t('deleteBlockedByClosing') : writeErrorMessage(deleteError, t('deleteFailed')), 'error');
+      if (classifyStockWriteError(deleteError) === 'notFound') await reloadAfterMutation(purchasePage);
       return;
     }
 
@@ -385,7 +483,33 @@ export default function StockPurchasePage() {
         description={t('description')}
       />
 
-      {loadError && <InlineAlert variant="danger">{loadError}</InlineAlert>}
+      {!canWrite && (
+        <InlineAlert variant="info" title={t('viewerReadOnlyTitle')}>{t('viewerReadOnlyBody')}</InlineAlert>
+      )}
+
+      {productsError && (
+        <InlineAlert
+          variant="danger"
+          action={(
+            <Button variant="outline" size="sm" onClick={() => { void loadProducts(); }} icon={<RefreshCcw size={14} aria-hidden="true" />}>
+              {tc('retry')}
+            </Button>
+          )}
+        >
+          {productsError}
+        </InlineAlert>
+      )}
+
+      {!productsLoading && !productsError && products.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={Package}
+            title={t('noTrackedProductsTitle')}
+            description={t('noTrackedProductsBody')}
+            action={<ButtonLink href="/products" variant="primary">{t('goToProducts')}</ButtonLink>}
+          />
+        </Card>
+      )}
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_480px]">
         <Card as="form" id="stock-purchase-form" onSubmit={handleSubmit}>
@@ -397,7 +521,7 @@ export default function StockPurchasePage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t('date')} required>
-              <DatePicker ariaLabel={t('date')} value={form.date} max={businessToday} onChange={(value) => set('date', value)} />
+              <DatePicker ariaLabel={t('date')} value={form.date} max={businessToday} disabled={formDisabled} onChange={(value) => set('date', value)} />
             </Field>
 
             <Field label={t('product')} htmlFor="purchase-product" required>
@@ -406,7 +530,7 @@ export default function StockPurchasePage() {
                 className="font-semibold"
                 value={form.product_id}
                 onChange={(event) => selectProduct(event.target.value)}
-                disabled={productsLoading}
+                disabled={formDisabled || productsLoading}
                 required
               >
                 <option value="">{productsLoading ? tc('loading') : t('selectProduct')}</option>
@@ -425,6 +549,7 @@ export default function StockPurchasePage() {
                 leadingIcon={<Package size={17} className="text-primary-600" />}
                 trailingAddon={t('pcs')}
                 value={form.quantity}
+                disabled={formDisabled}
                 onChange={(event) => set('quantity', event.target.value.replace(/\D/g, ''))}
                 required
               />
@@ -436,6 +561,7 @@ export default function StockPurchasePage() {
                 className="font-semibold"
                 trailingAddon={currency}
                 value={form.cost_price}
+                disabled={formDisabled}
                 onValueChange={(value) => set('cost_price', value)}
                 required
               />
@@ -447,6 +573,7 @@ export default function StockPurchasePage() {
                 className="bg-success-50/40 font-semibold"
                 trailingAddon={currency}
                 value={form.sale_price}
+                disabled={formDisabled}
                 onValueChange={(value) => set('sale_price', value)}
               />
             </Field>
@@ -456,6 +583,7 @@ export default function StockPurchasePage() {
                 id="purchase-payment"
                 className="font-semibold"
                 value={form.payment_method}
+                disabled={formDisabled}
                 onChange={(event) => set('payment_method', event.target.value as EntryPaymentMethod)}
               >
                 {enabledPaymentMethods.map((method) => (
@@ -471,6 +599,7 @@ export default function StockPurchasePage() {
                 maxLength={250}
                 placeholder={t('commentPlaceholder')}
                 value={form.comment}
+                disabled={formDisabled}
                 onChange={(event) => set('comment', event.target.value)}
               />
             </Field>
@@ -488,7 +617,7 @@ export default function StockPurchasePage() {
             </div>
             {selectedProduct && quantity > 0 && costPrice > 0 && (
               <p className="mt-3 rounded-md bg-white/70 px-3 py-2 text-center text-sm font-medium text-success-800">
-                {t('newAverageBuyPrice')} {formatCurrency(projectedAverageCost)} {currency}
+                {t('newAverageBuyPrice')} {formatUnitCurrency(projectedAverageCost)} {currency}
               </p>
             )}
           </Card>
@@ -496,10 +625,10 @@ export default function StockPurchasePage() {
           {formError && <InlineAlert variant="danger" className="mt-3">{formError}</InlineAlert>}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1.8fr]">
-            <Button variant="outline" onClick={resetForm} disabled={saving} icon={<RefreshCcw size={16} aria-hidden="true" />}>
+            <Button variant="outline" onClick={resetForm} disabled={saving || formDisabled} icon={<RefreshCcw size={16} aria-hidden="true" />}>
               {t('reset')}
             </Button>
-            <Button type="submit" loading={saving} loadingLabel={tc('saving')} icon={<Check size={17} aria-hidden="true" />}>
+            <Button type="submit" loading={saving} loadingLabel={tc('saving')} disabled={formDisabled} icon={<Check size={17} aria-hidden="true" />}>
               {t('submit')}
             </Button>
           </div>
@@ -509,29 +638,31 @@ export default function StockPurchasePage() {
           <SectionHeading
             icon={<Package size={18} aria-hidden="true" />}
             title={t('productInfo')}
-            badge={selectedProduct
-              ? <Badge variant={selectedProduct.current_stock > 0 ? 'success' : 'danger'}>{selectedProduct.current_stock > 0 ? t('inStock') : t('outOfStock')}</Badge>
-              : <Badge variant="neutral">{t('selectProduct')}</Badge>}
+            badge={selectedProductLevel === 'out'
+              ? <Badge variant="danger">{t('outOfStock')}</Badge>
+              : selectedProductLevel === 'low'
+                ? <Badge variant="warning">{t('lowStock')}</Badge>
+                : selectedProductLevel === 'ok'
+                  ? <Badge variant="success">{t('inStock')}</Badge>
+                  : <Badge variant="neutral">{t('selectProduct')}</Badge>}
             className="mb-5"
           />
 
           {selectedProduct ? (
             <>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-lg font-bold text-gray-500" aria-hidden="true">
-                  {productInitials(selectedProduct.name)}
-                </div>
+                <Avatar name={selectedProduct.name} size="lg" tone="neutral" />
                 <div className="min-w-0">
                   <h3 className="break-words text-xl font-bold text-gray-900">{selectedProduct.name}</h3>
                   <p className="mt-2 text-sm text-gray-600">
                     {t('salePriceLabel')} <span className="font-bold text-success-600">{formatCurrency(salePrice)} {currency}</span>
                   </p>
                   <p className="mt-1 text-sm text-gray-600">
-                    {t('costPriceLabel')} <span className="font-bold text-danger-600">{formatCurrency(selectedProduct.cost_price)} {currency}</span>
+                    {t('costPriceLabel')} <span className="font-bold text-danger-600">{formatUnitCurrency(selectedProduct.cost_price)} {currency}</span>
                   </p>
                   {quantity > 0 && costPrice > 0 && (
                     <p className="mt-1 text-sm text-gray-600">
-                      {t('newAvgCost')} <span className="font-bold text-primary-600">{formatCurrency(projectedAverageCost)} {currency}</span>
+                      {t('newAvgCost')} <span className="font-bold text-primary-600">{formatUnitCurrency(projectedAverageCost)} {currency}</span>
                     </p>
                   )}
                 </div>
@@ -539,7 +670,7 @@ export default function StockPurchasePage() {
 
               <div className="mt-5 grid gap-3 rounded-lg border border-purple-100 bg-purple-50/30 p-4 sm:grid-cols-2">
                 <StatTile variant="flat" size="sm" label={t('currentStock')} value={formatNumber(selectedProduct.current_stock)} unit={t('pcs')} tone="primary" />
-                <StatTile variant="flat" size="sm" label={t('lowStockAlert')} value={formatNumber(selectedProduct.low_stock_threshold ?? 5)} unit={t('pcs')} tone="warning" />
+                <StatTile variant="flat" size="sm" label={t('lowStockAlert')} value={formatNumber(resolveLowStockThreshold(selectedProduct.low_stock_threshold))} unit={t('pcs')} tone="warning" />
                 <StatTile variant="flat" size="sm" label={t('stockValue')} value={formatCurrency(selectedProduct.current_stock * selectedProduct.cost_price)} unit={currency} tone="success" className="sm:col-span-2" />
               </div>
             </>
@@ -567,12 +698,25 @@ export default function StockPurchasePage() {
               className="w-full sm:w-72"
               controlSize="sm"
               value={query}
-              onChange={(value) => { setQuery(value); setPurchasePage(1); }}
+              onChange={setQuery}
               placeholder={t('searchPlaceholder')}
-              clearLabel={tc('cancel')}
             />
           )}
         />
+
+        {purchasesError && (
+          <InlineAlert
+            variant="danger"
+            className="mb-4"
+            action={(
+              <Button variant="outline" size="sm" onClick={() => { void loadPurchases(purchasePage); }} icon={<RefreshCcw size={14} aria-hidden="true" />}>
+                {tc('retry')}
+              </Button>
+            )}
+          >
+            {purchasesError}
+          </InlineAlert>
+        )}
 
         {purchasesLoading && purchases.length === 0 ? (
           <TableSkeleton rows={6} columns={8} className="shadow-none" />
@@ -582,7 +726,9 @@ export default function StockPurchasePage() {
             data={purchases}
             minWidth={980}
             className={purchasesLoading ? 'opacity-60 transition-opacity' : 'transition-opacity'}
-            emptyState={<EmptyState compact icon={ShoppingCart} title={tc('noData')} />}
+            emptyState={purchasesError
+              ? <EmptyState compact icon={AlertTriangle} title={t('purchasesLoadFailed')} />
+              : <EmptyState compact icon={ShoppingCart} title={tc('noData')} />}
             columns={[
               { key: 'index', header: '#', className: 'w-12', render: (_row, index) => <span className="font-semibold text-gray-700">{(purchasePage - 1) * PURCHASES_PAGE_SIZE + index + 1}</span> },
               { key: 'date', header: t('date'), render: (row) => <span className="font-semibold text-gray-900">{formatDateOnly(row.date, locale)}</span> },
@@ -591,15 +737,13 @@ export default function StockPurchasePage() {
                 header: t('product'),
                 render: (row) => (
                   <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-8 flex-shrink-0 items-center justify-center rounded bg-gray-100 text-[10px] font-bold text-gray-500" aria-hidden="true">
-                      {productInitials(row.products?.name ?? '-')}
-                    </span>
+                    <Avatar name={row.products?.name ?? '-'} size="sm" tone="neutral" />
                     <span className="font-bold text-gray-900">{row.products?.name ?? '—'}</span>
                   </div>
                 ),
               },
               { key: 'quantity', header: t('quantity'), align: 'center', render: (row) => <span className="font-semibold">{formatNumber(row.quantity)} {t('pcs')}</span> },
-              { key: 'cost', header: `${t('costPrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="font-semibold">{formatCurrency(row.cost_price)}</span> },
+              { key: 'cost', header: `${t('costPrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="font-semibold">{formatUnitCurrency(row.cost_price)}</span> },
               { key: 'sale', header: `${t('salePrice')} (${t('perPcs')})`, align: 'right', render: (row) => <span className="font-semibold">{formatCurrency(row.sale_price ?? row.products?.sale_price ?? 0)}</span> },
               { key: 'total', header: `${t('totalCostHeader')} (${currency})`, align: 'right', render: (row) => <span className="font-bold text-gray-900">{formatCurrency(row.quantity * row.cost_price)}</span> },
               {
@@ -612,22 +756,22 @@ export default function StockPurchasePage() {
                   </Badge>
                 ),
               },
-              {
+              ...(canWrite ? [{
                 key: 'actions',
                 header: tc('actions'),
-                align: 'center',
-                render: (row) => (
+                align: 'center' as const,
+                render: (row: PurchaseWithProduct) => (
                   <IconButton
                     size="sm"
                     variant="danger"
-                    label={tc('delete')}
+                    label={`${tc('delete')} · ${row.products?.name ?? ''}`}
                     icon={<Trash2 size={16} />}
                     loading={deletingId === row.id}
                     disabled={Boolean(deletingId)}
                     onClick={() => handleDeletePurchase(row)}
                   />
                 ),
-              },
+              }] : []),
             ]}
           />
         )}
