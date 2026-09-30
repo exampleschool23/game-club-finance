@@ -419,7 +419,8 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
         {dialog === 'employee' && (
           <SegmentedControl
             variant="soft"
-            className="mb-5 grid-cols-2 sm:grid-cols-4"
+            // Four labels never fit on one row inside the half-width form card.
+            className="mb-5 grid-cols-2"
             columns="auto"
             label={t('salarySetup')}
             options={setupModeOptions}
