@@ -201,7 +201,7 @@ export function Sidebar({
               <span className="block truncate text-[11px] text-gray-500">{tTeam(`roles.${role}`)}</span>
             </span>
             <select
-              className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+              className="absolute inset-0 h-full w-full cursor-pointer appearance-none text-base opacity-0"
               value={selectedClubId}
               onChange={(event) => onSelectClub?.(event.target.value)}
               aria-label={t('club')}

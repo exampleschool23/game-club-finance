@@ -361,7 +361,7 @@ export function DashboardShell({
 
   return (
       <ClubContext.Provider value={clubContextValue}>
-      <div className="min-h-dvh overflow-x-hidden bg-gray-50">
+      <div className="relative min-h-dvh overflow-x-clip bg-gray-50">
         <a
           href="#main-content"
           className="sr-only z-[100] rounded-lg bg-surface px-4 py-2 text-sm font-semibold text-primary-700 shadow-lg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
@@ -409,7 +409,7 @@ export function DashboardShell({
             </div>
           </div>
 
-          <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto outline-none">
+          <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-x-clip outline-none">
             <div className="mx-auto w-full max-w-[1400px] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[4.5rem] sm:px-6 lg:px-8 lg:py-8">
               {shellError ? (
                 <InlineAlert

@@ -988,7 +988,7 @@ export default function TeamPageClient() {
         <p className="text-sm leading-6 text-gray-600">{t('inviteHelp')}</p>
         <Field label={t('loginLink')} htmlFor="team-login-link" className="mt-4">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Input id="team-login-link" readOnly value={loginUrl} onFocus={(event) => event.currentTarget.select()} className="font-mono text-[13px]" />
+            <Input id="team-login-link" readOnly value={loginUrl} onFocus={(event) => event.currentTarget.select()} className="font-mono sm:text-[13px]" />
             <Button variant="outline" className="shrink-0" onClick={() => void copyLoginLink()} icon={<Copy size={16} aria-hidden="true" />}>
               {t('copyLink')}
             </Button>

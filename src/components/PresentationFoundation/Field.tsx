@@ -16,7 +16,7 @@ import { formatCurrencyInput } from '@/lib/formatters';
 
 /** Shared text-control styling; exported so bespoke controls can match it. */
 export const controlClassName =
-  'w-full rounded-xl border border-gray-200 bg-surface px-3.5 text-sm text-gray-900 outline-none transition ' +
+  'w-full rounded-xl border border-gray-200 bg-surface px-3.5 text-base text-gray-900 sm:text-sm outline-none transition ' +
   'placeholder:text-gray-400 hover:border-gray-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/15 ' +
   'disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400 aria-[invalid=true]:border-danger-500 aria-[invalid=true]:focus:ring-danger-500/15';
 
