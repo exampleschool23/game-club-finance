@@ -288,10 +288,29 @@ export default function TeamPageClient() {
     [profiles],
   );
 
-  const activeProfiles = useMemo(
-    () => profiles.filter((profile) => profile.memberships.length > 0),
-    [profiles],
-  );
+  // Most access first: highest role, then number of clubs, then number of permissions.
+  const activeProfiles = useMemo(() => {
+    const roleRank: Record<UserRole, number> = { owner: 2, admin: 1, viewer: 0 };
+    const accessScore = (profile: TeamMember) => {
+      const topRole = Math.max(...profile.memberships.map((membership) => roleRank[membership.role]));
+      const featureCount = profile.memberships.reduce(
+        (sum, membership) => sum + featureAccessForMembership(membership.role, membership.featureAccess).length,
+        0,
+      );
+      return [topRole, profile.memberships.length, featureCount];
+    };
+
+    return profiles
+      .filter((profile) => profile.memberships.length > 0)
+      .sort((a, b) => {
+        const scoreA = accessScore(a);
+        const scoreB = accessScore(b);
+        for (let i = 0; i < scoreA.length; i += 1) {
+          if (scoreA[i] !== scoreB[i]) return scoreB[i] - scoreA[i];
+        }
+        return a.full_name.localeCompare(b.full_name);
+      });
+  }, [profiles]);
 
   const filteredActiveProfiles = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase(locale);
