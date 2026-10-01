@@ -28,6 +28,7 @@ guide relevant to the task; do not load every document or migration by default.
 | Tables, RLS, RPCs, auth, or migrations | `docs/agents/database.md` |
 | Verification strategy | `docs/agents/testing.md` |
 | Telegram reports, cron, retries, or deployment | `docs/runbooks/telegram-report.md` |
+| Database backups or restore | `docs/runbooks/database-backup.md` |
 
 ## Non-negotiable invariants
 

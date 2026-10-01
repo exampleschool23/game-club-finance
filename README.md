@@ -99,6 +99,7 @@ npm run build
 - [Database and authorization](docs/agents/database.md)
 - [Testing guide](docs/agents/testing.md)
 - [Telegram report runbook](docs/runbooks/telegram-report.md)
+- [Database backup runbook](docs/runbooks/database-backup.md)
 
 ## Scheduled Telegram report
 
