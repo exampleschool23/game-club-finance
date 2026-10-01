@@ -36,20 +36,62 @@ apt.postgresql.org publishes packages for the newer codename.
 5. Run the workflow once from the Actions tab (Run workflow) and confirm a file
    appears in the bucket.
 
-Never commit these values or copy them into `.env.example`, fixtures, or logs.
+The dump keeps grants and revokes so a restore cannot reopen access the
+migrations closed. Never commit these values or copy them into `.env.example`, fixtures, or logs.
 
-## Restore (test it once on a scratch database)
+## What a backup contains
 
-Create an empty scratch Postgres or Supabase project, download a dump from R2,
-then:
+| Included | Not included (recreate after a restore) |
+|---|---|
+| Every `public` table, row, function, policy, trigger, and grant | Supabase Cron jobs (`scripts/restore-cron-jobs.sql`) |
+| Sign-in accounts: `auth.users` and `auth.identities` | Vault secrets, API keys, Auth settings, Vercel variables |
+| | Active sessions: everyone signs in again with the same email and password |
 
-```bash
-AGE_IDENTITY_FILE=age-key.txt scripts/db-restore.sh db-2026-10-02T010000Z.dump.age "postgresql://scratch-url"
-```
+## Restore after losing the database
 
-Needs `age` and a `pg_restore` of the same major version as the server.
-Restoring into the live database overwrites it, including append-only debt
-ledgers and saved stock snapshots; do that only in a real disaster.
+Restore into a **new, empty** Supabase project. `db-restore.sh` refuses a target
+that already has tables in `public` or users in `auth`, so it cannot overwrite a
+live database. You need the age private key, the Cloudflare account, and Vercel.
+
+1. **New project.** Create a Supabase project (same region and Postgres 17).
+   In Database → Extensions, enable `pg_cron` and `pg_net`.
+2. **Download** the newest file from R2: your bucket →
+   `game-club-finance/db-backups/` (older months are under `monthly/`).
+3. **Restore** (needs `age` and Postgres 17 client tools, `brew install age postgresql@17`).
+   Use the new project's Session pooler string:
+
+   ```bash
+   AGE_IDENTITY_FILE=age-key.txt scripts/db-restore.sh db-2026-10-02T010000Z.dump.age "postgresql://new-project-url"
+   ```
+
+   It loads accounts first, then all club data, policies, functions, grants, and
+   the sign-up trigger, each step all-or-nothing. Supabase's default grants are
+   paused during the load so revoked access stays revoked.
+4. **Check** the result when the old database is still reachable:
+
+   ```bash
+   scripts/db-compare.sh "postgresql://old-url" "postgresql://new-project-url"
+   ```
+
+   It prints only counts and schema metadata. Row-count differences are expected
+   for tables written after the backup ran; grant, policy, or trigger differences
+   are not.
+5. **Cron and Vault.** Create the Vault secret from the
+   [Telegram report runbook](telegram-report.md), then run
+   `scripts/restore-cron-jobs.sql` in the SQL editor.
+6. **Auth settings.** Set the Site URL, redirect URLs, and any sign-in providers
+   and email templates to match the old project.
+7. **Point the app at it.** In Vercel, update `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`, then
+   redeploy. Update the `SUPABASE_DB_URL` GitHub secret so backups follow.
+
+## Practice restore
+
+Run steps 1–4 against a throwaway project after any change to these scripts and
+at least once a year, then delete the project. Steps 5–7 are only for a real
+recovery. A local rehearsal against a Supabase-shaped Postgres 17 with every
+migration applied restored all tables, functions, policies, grants, and the
+`auth.users` trigger with no differences.
 
 ## Notes
 
@@ -58,7 +100,5 @@ ledgers and saved stock snapshots; do that only in a real disaster.
   run to reset that timer. If the Actions tab ever shows the workflow disabled,
   enable it there and run it once manually.
 - Storage buckets are not included; the app does not use Supabase Storage.
-- Supabase Cron jobs and Vault secrets live outside `public`/`auth` and are not
-  in the dump; recreate them from the [Telegram report runbook](telegram-report.md)
-  after a restore.
 - Rotating the age key does not re-encrypt old dumps; keep old private keys.
+- Dumps made before 2026-10-01 omitted grants; do not restore those.

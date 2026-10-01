@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -14,7 +14,7 @@ const configured = Object.fromEntries(
 
 describe('database backup', () => {
   it('ships valid bash scripts', () => {
-    for (const script of ['scripts/db-backup.sh', 'scripts/db-restore.sh']) {
+    for (const script of ['scripts/db-backup.sh', 'scripts/db-restore.sh', 'scripts/db-compare.sh']) {
       const result = spawnSync('bash', ['-n', path(script)]);
       expect(result.status, result.stderr.toString()).toBe(0);
     }
@@ -75,6 +75,38 @@ describe('database backup', () => {
     expect(flow).toMatch(/workflow_dispatch/);
     expect(flow).toMatch(/if: failure\(\)/);
     expect(flow).not.toMatch(/run:[^\n]*\$\{\{\s*secrets\./);
+  });
+
+  it('keeps grants in the dump so a restore cannot reopen revoked access', () => {
+    const script = read('scripts/db-backup.sh');
+    expect(script).not.toMatch(/--no-privileges|--no-acl|\s-x\s/);
+    expect(script).toMatch(/--schema=public --schema=auth/);
+  });
+
+  it('restores accounts before club data and keeps Supabase default grants from widening access', () => {
+    const script = read('scripts/db-restore.sh');
+    expect(script).not.toMatch(/--no-privileges|--clean/);
+    expect(script).toMatch(/for table in users identities/);
+    expect(script.indexOf('auth.list')).toBeLessThan(script.indexOf('app.list'));
+    expect(script).toMatch(/grep -v ' DEFAULT ACL '/);
+    expect(script).toMatch(/defaults revoke from\n/);
+    expect(script).toMatch(/trap 'defaults grant to/);
+    expect(script).toMatch(/use a new, empty project/);
+    expect(script.match(/--single-transaction/g)).toHaveLength(2);
+  });
+
+  it('recreates every cron job the migrations schedule', () => {
+    const restoreSql = read('scripts/restore-cron-jobs.sql');
+    const jobs = readdirSync(path('migrations')).filter((name) => name.endsWith('.sql'))
+      .flatMap((name) => [...read(`migrations/${name}`).matchAll(/cron\.schedule\(\s*'([^']+)'/g)].map((match) => match[1]));
+    expect(jobs.length).toBeGreaterThan(0);
+    for (const job of jobs) expect(restoreSql).toContain(`'${job}'`);
+  });
+
+  it('requires both database URLs to compare', () => {
+    const result = run('scripts/db-compare.sh', ['only-one']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr.toString()).toMatch(/Usage/);
   });
 
   it('requires an identity file and both arguments to restore', () => {

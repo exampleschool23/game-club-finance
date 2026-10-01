@@ -27,7 +27,8 @@ export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_A
 endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
 # public holds the club data; auth holds the accounts, so restored users can still sign in.
-"${PG_DUMP:-pg_dump}" "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges --schema=public --schema=auth \
+# Privileges stay in the dump: the migrations revoke access that a restore must not reopen.
+"${PG_DUMP:-pg_dump}" "$SUPABASE_DB_URL" --format=custom --no-owner --schema=public --schema=auth \
   | age -r "$AGE_PUBLIC_KEY" > "$file"
 
 # A truncated or empty dump must fail the job instead of looking like a backup.
