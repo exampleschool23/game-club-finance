@@ -324,7 +324,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
         >
           <option value="">{t('selectEmployee')}</option>
           {data.employees.filter((e) => dialog !== 'entry' || e.joined_on <= today).map((employee) => (
-            <option key={employee.id} value={employee.id}>{employee.name}{employee.joined_on > today ? ` · ${t('upcoming')}` : ''}</option>
+            <option key={employee.id} value={employee.id}>{employee.name} · {roleLabel(employee.job_title)}{employee.joined_on > today ? ` · ${t('upcoming')}` : ''}</option>
           ))}
         </Select>
       </Field>
