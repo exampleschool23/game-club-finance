@@ -64,7 +64,8 @@ import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
 import { canAccessFeature } from '@/lib/permissions';
-import ExpenseRegistrationForm, { EXPENSE_CATEGORIES, isKnownExpenseCategory } from './ExpensesPanel';
+import ExpenseRegistrationForm from './ExpensesPanel';
+import { EXPENSE_CATEGORIES, isKnownExpenseCategory } from '@/lib/expenseCategories';
 
 const emptyReportRows = {
   cash: [] as MoneyReportCashRow[],
@@ -192,7 +193,6 @@ export default function ReportsPage() {
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<{ activity: MoneyReportActivity; date: string } | null>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
-  const [allCustomCategories, setAllCustomCategories] = useState<string[] | null>(null);
   const requestSequence = useRef(0);
   const currentClubId = useRef(selectedClubId);
   const deletePending = useRef(false);
@@ -205,42 +205,11 @@ export default function ReportsPage() {
     reportRows.barSales,
     reportRows.stockPurchases,
   ), [categoryFilter, reportRows]);
-  const customExpenseCategories = useMemo(() => {
-    const knownCategories = new Set<string>(EXPENSE_CATEGORIES);
-    return Array.from(new Set(
-      reportRows.expenses
-        .map((expense) => expense.category)
-        .filter((category) => category && !knownCategories.has(category)),
-    )).sort((a, b) => a.localeCompare(b));
-  }, [reportRows.expenses]);
-
-  // Custom expense categories are read once per club (not on every dialog open)
-  // so the expense form can offer categories used outside the visible range.
-  useEffect(() => {
-    if (!selectedClubId || !hasExpensesAccess) {
-      setAllCustomCategories(null);
-      return;
-    }
-    let cancelled = false;
-    const supabase = createClient();
-    fetchAllRows<{ category: string }>(() => supabase.from('expenses').select('category').eq('club_id', selectedClubId))
-      .then((result) => {
-        if (cancelled || result.error) return;
-        setAllCustomCategories(Array.from(new Set(
-          (result.data ?? []).map((row) => row.category).filter((category) => category && !isKnownExpenseCategory(category)),
-        )).sort((a, b) => a.localeCompare(b)));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [hasExpensesAccess, selectedClubId]);
-
   useEffect(() => {
     if (!categoryFilter.startsWith('expense:')) return;
     const category = categoryFilter.slice('expense:'.length);
-    if (!isKnownExpenseCategory(category) && !customExpenseCategories.includes(category)) {
-      setCategoryFilter('all');
-    }
-  }, [categoryFilter, customExpenseCategories]);
+    if (!isKnownExpenseCategory(category)) setCategoryFilter('all');
+  }, [categoryFilter]);
 
   const loadReport = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++requestSequence.current;
@@ -617,7 +586,6 @@ export default function ReportsPage() {
 
   async function handleExpenseRegistered() {
     setExpenseDialogOpen(false);
-    setAllCustomCategories(null);
     showToast(t('expenseRegistered'));
     if (hasReportsAccess) await loadReport({ silent: true });
   }
@@ -680,11 +648,6 @@ export default function ReportsPage() {
                   {EXPENSE_CATEGORIES.map((category) => (
                     <option key={category} value={`expense:${category}`}>
                       {te(category)}
-                    </option>
-                  ))}
-                  {customExpenseCategories.map((category) => (
-                    <option key={category} value={`expense:${category}`}>
-                      {category}
                     </option>
                   ))}
                 </optgroup>
@@ -814,7 +777,6 @@ export default function ReportsPage() {
         size="xl"
       >
         <ExpenseRegistrationForm
-          knownCustomCategories={allCustomCategories ? Array.from(new Set([...allCustomCategories, ...customExpenseCategories])).sort((a, b) => a.localeCompare(b)) : undefined}
           onSaved={handleExpenseRegistered}
         />
       </Modal>

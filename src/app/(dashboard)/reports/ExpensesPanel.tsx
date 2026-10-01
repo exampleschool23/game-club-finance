@@ -10,43 +10,25 @@ import {
   DatePicker,
   Field,
   InlineAlert,
-  Input,
   SegmentedControl,
   Select,
   Textarea,
 } from '@/components/PresentationFoundation';
 import { parseCurrencyInput } from '@/lib/formatters';
-import { fetchAllRows } from '@/lib/supabase/pagination';
-import { createClient, mutateFinanceRequest } from '@/lib/supabase/client';
+import { EXPENSE_CATEGORIES } from '@/lib/expenseCategories';
+import { mutateFinanceRequest } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
-import type { EntryPaymentMethod, Expense } from '@/types';
+import type { EntryPaymentMethod } from '@/types';
 
-export const EXPENSE_CATEGORIES = [
-  'rent', 'salary', 'electricity', 'internet', 'repair',
-  'cleaning', 'food_drinks', 'marketing', 'equipment', 'tax', 'other',
-] as const;
-export type KnownExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
-
-export function isKnownExpenseCategory(category: string): category is KnownExpenseCategory {
-  return (EXPENSE_CATEGORIES as readonly string[]).includes(category);
-}
-
-const CUSTOM_CATEGORY_VALUE = '__custom__';
 const PAYMENT_SOURCES = ['game_club', 'bar'] as const;
 type PaymentSource = (typeof PAYMENT_SOURCES)[number];
 
-function normalizeCustomCategory(value: string): string {
-  return value.trim().replace(/\s+/g, ' ');
-}
-
 interface ExpenseRegistrationFormProps {
-  /** Custom categories already known by the parent; avoids an extra read. */
-  knownCustomCategories?: string[];
   onSaved?: () => void | Promise<void>;
 }
 
-export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved }: ExpenseRegistrationFormProps) {
+export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistrationFormProps) {
   const t = useTranslations('expenses');
   const tc = useTranslations('common');
   const { selectedClubId, businessDayStartHour, enabledPaymentMethods } = useClub();
@@ -54,18 +36,14 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
     () => todayIso(new Date(), businessDayStartHour),
     [businessDayStartHour],
   );
-  const [customCategories, setCustomCategories] = useState<string[]>(knownCustomCategories ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const categoryLoadSequence = useRef(0);
-  const customCategoryRef = useRef<HTMLInputElement>(null);
   // Blocks a second submit before the `saving` state re-renders the button.
   const submitPending = useRef(false);
   const [form, setForm] = useState({
     date: businessToday,
     amount: '',
     category: 'other',
-    custom_category: '',
     payment_method: defaultPaymentMethod(enabledPaymentMethods),
     payment_source: 'game_club' as PaymentSource,
     comment: '',
@@ -92,64 +70,25 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
       date: businessToday,
       amount: '',
       category: 'other',
-      custom_category: '',
-      payment_method: defaultPaymentMethod(enabledPaymentMethods),
+        payment_method: defaultPaymentMethod(enabledPaymentMethods),
       payment_source: 'game_club',
       comment: '',
     });
   }, [businessToday, enabledPaymentMethods, selectedClubId]);
-
-  useEffect(() => {
-    // The parent already knows the custom categories in the visible range;
-    // only read the full ledger when nothing was passed in.
-    if (knownCustomCategories) {
-      setCustomCategories(knownCustomCategories);
-      return;
-    }
-    const requestId = ++categoryLoadSequence.current;
-
-    if (!selectedClubId) {
-      setCustomCategories([]);
-      return;
-    }
-
-    const supabase = createClient();
-    fetchAllRows<Pick<Expense, 'category'>>(() => supabase
-      .from('expenses')
-      .select('category')
-      .eq('club_id', selectedClubId))
-      .then((result) => {
-        if (requestId !== categoryLoadSequence.current) return;
-        if (result.error) return;
-        setCustomCategories(Array.from(new Set(
-          (result.data ?? [])
-            .map((expense) => expense.category)
-            .filter((category) => category && !isKnownExpenseCategory(category)),
-        )).sort((a, b) => a.localeCompare(b)));
-      })
-      .catch(() => {});
-    return () => { categoryLoadSequence.current += 1; };
-  }, [knownCustomCategories, selectedClubId]);
-
-  useEffect(() => {
-    if (form.category === CUSTOM_CATEGORY_VALUE) customCategoryRef.current?.focus();
-  }, [form.category]);
 
   function set<K extends keyof typeof form>(field: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
   function categoryLabel(category: string): string {
-    return isKnownExpenseCategory(category) ? t(`categories.${category}`) : category;
+    return t(`categories.${category}`);
   }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (submitPending.current) return;
     const amount = parseCurrencyInput(form.amount);
-    const category = form.category === CUSTOM_CATEGORY_VALUE
-      ? normalizeCustomCategory(form.custom_category)
-      : form.category;
+    const category = form.category;
 
     if (!selectedClubId) {
       setError(tc('error'));
@@ -157,10 +96,6 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
     }
     if (!amount || amount <= 0) {
       setError(tc('invalidAmount'));
-      return;
-    }
-    if (!category) {
-      setError(tc('required'));
       return;
     }
     if (!enabledPaymentMethods.includes(form.payment_method)) {
@@ -205,8 +140,7 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
         date: businessToday,
         amount: '',
         category: 'other',
-        custom_category: '',
-        payment_method: defaultPaymentMethod(enabledPaymentMethods),
+            payment_method: defaultPaymentMethod(enabledPaymentMethods),
         payment_source: 'game_club',
         comment: '',
       });
@@ -249,27 +183,9 @@ export default function ExpenseRegistrationForm({ knownCustomCategories, onSaved
             {EXPENSE_CATEGORIES.map((category) => (
               <option key={category} value={category}>{categoryLabel(category)}</option>
             ))}
-            {customCategories.map((category) => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-            <option value={CUSTOM_CATEGORY_VALUE}>{t('addCategory')}</option>
           </Select>
         </Field>
       </div>
-
-      {form.category === CUSTOM_CATEGORY_VALUE && (
-        <Field label={t('customCategoryPlaceholder')} htmlFor="expense-custom-category" required>
-          <Input
-            ref={customCategoryRef}
-            id="expense-custom-category"
-            type="text"
-            value={form.custom_category}
-            onChange={(event) => set('custom_category', event.target.value)}
-            maxLength={80}
-            required
-          />
-        </Field>
-      )}
 
       <Field label={t('paymentSource')} hint={t('paymentSourceHelp')}>
         <SegmentedControl

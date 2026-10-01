@@ -487,8 +487,6 @@
     "previousPage": "Previous",
     "nextPage": "Next",
     "commentPlaceholder": "What was this expense for? (optional)",
-    "addCategory": "Add new category",
-    "customCategoryPlaceholder": "New category name",
     "filterByCategory": "Filter by category",
     "allCategories": "All categories",
     "paymentSources": {
@@ -506,6 +504,8 @@
       "marketing": "Marketing",
       "equipment": "Equipment",
       "tax": "Tax",
+      "correction": "Correction / mistake",
+      "discount": "Customer discounts & bonuses",
       "other": "Other"
     }
   },

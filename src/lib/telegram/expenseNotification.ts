@@ -27,6 +27,8 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   marketing: 'Маркетинг',
   equipment: 'Оборудование',
   tax: 'Налог',
+  correction: 'Исправление / ошибка',
+  discount: 'Скидки и бонусы клиентам',
   other: 'Другое',
 };
 

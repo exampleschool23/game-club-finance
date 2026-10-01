@@ -169,3 +169,5 @@ trigger still caps the overall Game Club month. Older rows stay unassigned and
 are never reclassified. The 050/051 function bodies tracked by migration health
 are unchanged. Owner Profit reads the column separately and falls back to
 source-only withdrawals when it is missing.
+
+Migration 068 fixes expense categories to `rent, salary, electricity, internet, repair, cleaning, food_drinks, marketing, equipment, tax, correction, discount, other` (`src/lib/expenseCategories.ts`, with a `expenses_category_known` check and validation in `POST /api/expenses`). Earlier free-text categories were remapped; the original text was moved into the start of the expense comment. Do not reintroduce user-defined categories; add a new key to the list, all three message files and the Telegram labels instead.

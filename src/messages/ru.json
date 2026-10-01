@@ -487,8 +487,6 @@
     "previousPage": "Назад",
     "nextPage": "Вперёд",
     "commentPlaceholder": "На что потратили? (необязательно)",
-    "addCategory": "Добавить категорию",
-    "customCategoryPlaceholder": "Название новой категории",
     "filterByCategory": "Фильтр по категории",
     "allCategories": "Все категории",
     "paymentSources": {
@@ -506,6 +504,8 @@
       "marketing": "Маркетинг",
       "equipment": "Оборудование",
       "tax": "Налог",
+      "correction": "Исправление / ошибка",
+      "discount": "Скидки и бонусы клиентам",
       "other": "Другое"
     }
   },

@@ -487,8 +487,6 @@
     "previousPage": "Oldingi",
     "nextPage": "Keyingi",
     "commentPlaceholder": "Bu xarajat nima uchun edi? (ixtiyoriy)",
-    "addCategory": "Yangi kategoriya qo'shish",
-    "customCategoryPlaceholder": "Yangi kategoriya nomi",
     "filterByCategory": "Kategoriya bo'yicha filtrlash",
     "allCategories": "Barcha kategoriyalar",
     "paymentSources": {
@@ -506,6 +504,8 @@
       "marketing": "Marketing",
       "equipment": "Jihozlar",
       "tax": "Soliq",
+      "correction": "Tuzatish / xato",
+      "discount": "Mijozlarga chegirma va bonus",
       "other": "Boshqa"
     }
   },

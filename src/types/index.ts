@@ -8,7 +8,8 @@ export type PaymentSource = 'cash' | 'terminal' | 'bank';
 export type IncomeCategory = 'game_time' | 'food' | 'drinks' | 'other';
 export type ExpenseCategory =
   | 'rent' | 'salary' | 'electricity' | 'internet' | 'repair'
-  | 'cleaning' | 'food_drinks' | 'marketing' | 'equipment' | 'tax' | 'other';
+  | 'cleaning' | 'food_drinks' | 'marketing' | 'equipment' | 'tax'
+  | 'correction' | 'discount' | 'other';
 export type ExpensePaymentSource = 'game_club' | 'bar';
 export const OWNER_WITHDRAWAL_SOURCES = ['game_club', 'bar'] as const;
 export type OwnerWithdrawalSource = (typeof OWNER_WITHDRAWAL_SOURCES)[number];
