@@ -15,7 +15,6 @@ import {
   Users,
   LogOut,
   X,
-  Gamepad2,
   ChevronsUpDown,
   Archive,
   Settings,
@@ -26,7 +25,7 @@ import {
 } from 'lucide-react';
 import type { Club, UserRole } from '@/types';
 import { canAccessFeature, featureForPath, type FeatureKey } from '@/lib/permissions';
-import { Avatar, IconButton, LanguageSwitcher, ThemeSwitcher, initialsOf } from '@/components/PresentationFoundation';
+import { Avatar, ClubLogo, IconButton, LanguageSwitcher, ThemeSwitcher } from '@/components/PresentationFoundation';
 import { isTopModal, trapFocus, useModalLayer } from '@/components/PresentationFoundation/Modal';
 
 interface SidebarClubOption {
@@ -193,9 +192,7 @@ export function Sidebar({
       <div className="flex items-center gap-2 px-3 pb-2 pt-3">
         {memberships.length > 0 ? (
           <label className="relative flex min-h-12 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl border border-gray-200 bg-surface px-2.5 transition hover:border-gray-300 focus-within:ring-2 focus-within:ring-primary-500">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-[11px] font-bold text-white" aria-hidden="true">
-              {selectedClub ? initialsOf(selectedClub.name) : <Gamepad2 size={16} />}
-            </span>
+            <ClubLogo />
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block truncate text-sm font-semibold text-gray-950">{selectedClub?.name ?? t('appName')}</span>
               <span className="block truncate text-[11px] text-gray-500">{tTeam(`roles.${role}`)}</span>
@@ -216,9 +213,7 @@ export function Sidebar({
           </label>
         ) : (
           <div className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 px-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-950 text-gray-50" aria-hidden="true">
-              <Gamepad2 size={16} />
-            </span>
+            <ClubLogo />
             <span className="truncate text-sm font-semibold text-gray-950">{t('appName')}</span>
           </div>
         )}

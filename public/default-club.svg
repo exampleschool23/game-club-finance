@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Game club">
+  <rect width="64" height="64" rx="14" fill="#4f46e5"/>
+  <path fill="#fff" d="M20 22h24c5.5 0 9 4.2 10 10l1.4 8.4c.6 3.6-2 6.6-5.4 6.6-2.2 0-4-1.2-5.2-3L42 40H22l-2.8 4c-1.2 1.8-3 3-5.2 3-3.400 0-6-3-5.400-6.600L10 32c1-5.800 4.500-10 10-10Z"/>
+  <path fill="#4f46e5" d="M20 29h2.600v2.600H25.200v2.600H22.600v2.600H20v-2.600h-2.600v-2.600H20Z"/>
+  <circle cx="42" cy="30.500" r="2" fill="#4f46e5"/>
+  <circle cx="46.500" cy="35" r="2" fill="#4f46e5"/>
+</svg>

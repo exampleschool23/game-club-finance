@@ -14,6 +14,7 @@
  * Misc:              LanguageSwitcher, ThemeSwitcher
  */
 export { Avatar, initialsOf } from './Avatar';
+export { ClubLogo, DEFAULT_CLUB_LOGO } from './ClubLogo';
 export { Badge, type BadgeVariant } from './Badge';
 export { Button, ButtonLink, buttonClassName, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button';
 export { DatePicker, DateRangePicker, MonthPicker } from './CalendarPicker';
