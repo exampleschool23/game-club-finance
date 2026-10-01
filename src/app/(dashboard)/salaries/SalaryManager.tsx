@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { useAppLocale } from '@/components/i18n/AppLocaleContext';
 import { createClient } from '@/lib/supabase/client';
 import { loadSalaries } from '@/lib/supabase/salaries';
-import { calculateSalaries, salaryBalance, canDeleteSalaryRate, type SalaryEmployee, type SalaryEntry } from '@/lib/calculations/salaries';
+import { calculateSalaries, salaryBalance, canDeleteSalaryRate, type KpiBasis, type SalaryEmployee, type SalaryEntry, type SalaryRate } from '@/lib/calculations/salaries';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatDateOnly, formatDateTime, formatYearMonth } from '@/lib/formatters';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
 import { canAccessFeature } from '@/lib/permissions';
@@ -113,7 +113,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   const [setupMode, setSetupMode] = useState<SetupMode>('new');
   const [entrySelected, setEntrySelected] = useState<SalaryEmployee | null>(null);
   const [selectedEmployee, setSelected] = useState<SalaryEmployee | null>(null);
-  const [employeeForm, setEmployeeForm] = useState(() => ({ id: crypto.randomUUID(), name: '', job_title: '', date: today, salary_type: 'daily', amount: '0', kpi: '0', active: true }));
+  const [employeeForm, setEmployeeForm] = useState(() => ({ id: crypto.randomUUID(), name: '', job_title: '', date: today, salary_type: 'daily', amount: '0', kpi: '0', kpi_basis: 'overall_profit' as KpiBasis, kpi_game_club: true, kpi_bar: true, active: true }));
   const [entryForm, setEntryForm] = useState(() => ({ id: crypto.randomUUID(), kind: 'payment' as EntryKind, amount: '', date: today, comment: '', payment_method: defaultPaymentMethod(enabledPaymentMethods), payment_source: 'game_club' }));
   const generation = useRef(0);
   const mutating = useRef(false);
@@ -131,6 +131,10 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   const roleLabel = (value: string) => {
     const known = knownEmployeeRole(value);
     return known ? t(`roles.${known}`) : value || t('noRole');
+  };
+  const kpiSummary = (rate: Pick<SalaryRate, 'kpi_basis' | 'kpi_game_club' | 'kpi_bar'> | undefined) => {
+    const pools = [(rate?.kpi_game_club ?? true) && t('poolGameClub'), (rate?.kpi_bar ?? true) && t('poolBar')].filter(Boolean).join(' + ');
+    return `${t((rate?.kpi_basis ?? 'overall_profit') === 'owner_profit' ? 'kpiBasisOwnerShort' : 'kpiBasisOverallShort')} · ${pools}`;
   };
   const currency = (value: number) => `${formatCurrency(value)} ${tc('currency')}`;
   const writeErrorMessage = (error: unknown) => {
@@ -170,6 +174,9 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
       salary_type: rate?.salary_type ?? 'daily',
       amount: rate ? formatCurrencyInput(Number(rate.amount)) : '0',
       kpi: String(rate?.kpi_percent ?? 0),
+      kpi_basis: (rate?.kpi_basis ?? 'overall_profit') as KpiBasis,
+      kpi_game_club: rate?.kpi_game_club ?? true,
+      kpi_bar: rate?.kpi_bar ?? true,
       active: rate?.active ?? true,
     };
   }
@@ -219,6 +226,10 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
       setError(tc('invalidAmount'));
       return;
     }
+    if (dialog === 'employee' && setupMode !== 'salary' && !employeeForm.kpi_game_club && !employeeForm.kpi_bar) {
+      setError(t('kpiPoolRequired'));
+      return;
+    }
     mutating.current = true;
     setSavingTarget(dialog);
     setError('');
@@ -231,11 +242,15 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
           paymentSource: entryForm.kind === 'payment' ? entryForm.payment_source : null,
         });
       } else if (setupMode === 'salary' || setupMode === 'kpi') {
-        await postSalary(clubId, { action: 'change_term', employeeId: targetEmployee!.id, kind: setupMode, amount, salaryType: employeeForm.salary_type });
+        await postSalary(clubId, {
+          action: 'change_term', employeeId: targetEmployee!.id, kind: setupMode, amount, salaryType: employeeForm.salary_type,
+          ...(setupMode === 'kpi' ? { kpiBasis: employeeForm.kpi_basis, kpiGameClub: employeeForm.kpi_game_club, kpiBar: employeeForm.kpi_bar } : {}),
+        });
       } else {
         await postSalary(clubId, {
           action: 'save_employee', employeeId: employeeForm.id, name: employeeForm.name.trim(), jobTitle: employeeForm.job_title.trim(),
           date: employeeForm.date, salaryType: employeeForm.salary_type, amount, kpi: Number(employeeForm.kpi), active: employeeForm.active,
+          kpiBasis: employeeForm.kpi_basis, kpiGameClub: employeeForm.kpi_game_club, kpiBar: employeeForm.kpi_bar,
         });
       }
       if (dialog === 'entry') setEntryForm((form) => ({ ...form, id: crypto.randomUUID(), amount: '', comment: '' }));
@@ -377,9 +392,22 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
           </div>
         )}
         {setupMode !== 'salary' && (
+          <>
           <Field label={t('kpiPercent')} htmlFor="salary-kpi">
             <Input id="salary-kpi" type="number" required min="0" max="100" step="0.01" inputMode="decimal" value={employeeForm.kpi} onChange={(e) => setEmployeeForm({ ...employeeForm, kpi: e.target.value })} onWheel={(event) => event.currentTarget.blur()} trailingAddon="%" />
           </Field>
+            <Field label={t('kpiBasis')} htmlFor="salary-kpi-basis" hint={t(employeeForm.kpi_basis === 'owner_profit' ? 'kpiBasisOwnerHelp' : 'kpiBasisOverallHelp')} className="sm:col-span-2">
+              <Select id="salary-kpi-basis" value={employeeForm.kpi_basis} onChange={(e) => setEmployeeForm({ ...employeeForm, kpi_basis: e.target.value as KpiBasis })}>
+                <option value="overall_profit">{t('kpiBasisOverall')}</option>
+                <option value="owner_profit">{t('kpiBasisOwner')}</option>
+              </Select>
+            </Field>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:col-span-2" role="group" aria-label={t('kpiPools')}>
+              <span className="text-sm font-medium text-gray-700">{t('kpiPools')}</span>
+              <Checkbox label={t('poolGameClub')} checked={employeeForm.kpi_game_club} onChange={(e) => setEmployeeForm({ ...employeeForm, kpi_game_club: e.target.checked })} />
+              <Checkbox label={t('poolBar')} checked={employeeForm.kpi_bar} onChange={(e) => setEmployeeForm({ ...employeeForm, kpi_bar: e.target.checked })} />
+            </div>
+          </>
         )}
         {(setupMode === 'new' || setupMode === 'profile') && (
           <Checkbox className="self-end" label={t('active')} checked={employeeForm.active} onChange={(e) => setEmployeeForm({ ...employeeForm, active: e.target.checked })} />
@@ -526,6 +554,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
                     [t(upcoming ? 'startsOn' : 'joined'), formatDateOnly(employee.joined_on, locale)],
                     [t(rate?.salary_type ?? 'daily'), currency(Number(rate?.amount ?? 0))],
                     [t('kpi'), `${Number(rate?.kpi_percent ?? 0)}%`],
+                    [t('kpiBasis'), kpiSummary(rate)],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-center justify-between gap-4 py-2">
                       <dt className="text-gray-500">{label}</dt>
@@ -715,7 +744,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
                   return (
                     <li className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-gray-600" key={rate.id}>
                       <p className={rate.deleted_at ? 'line-through opacity-60' : ''}>
-                        {formatDateOnly(rate.effective_date, locale)} · {t(rate.salary_type)} · {currency(Number(rate.amount))} · {t('kpi')}: {Number(rate.kpi_percent)}% · {t(rate.active ? 'active' : 'inactive')}
+                        {formatDateOnly(rate.effective_date, locale)} · {t(rate.salary_type)} · {currency(Number(rate.amount))} · {t('kpi')}: {Number(rate.kpi_percent)}% ({kpiSummary(rate)}) · {t(rate.active ? 'active' : 'inactive')}
                       </p>
                       {rate.deleted_at ? (
                         <Badge variant="neutral" size="sm">{t('deleted')} · {formatDateTime(rate.deleted_at, locale)}</Badge>

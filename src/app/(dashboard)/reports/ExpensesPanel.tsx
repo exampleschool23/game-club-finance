@@ -15,7 +15,7 @@ import {
   Textarea,
 } from '@/components/PresentationFoundation';
 import { parseCurrencyInput } from '@/lib/formatters';
-import { EXPENSE_CATEGORIES } from '@/lib/expenseCategories';
+import { MANUAL_EXPENSE_CATEGORIES } from '@/lib/expenseCategories';
 import { mutateFinanceRequest } from '@/lib/supabase/client';
 import { todayIso } from '@/lib/utils';
 import { defaultPaymentMethod } from '@/lib/paymentMethods';
@@ -43,7 +43,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
   const [form, setForm] = useState({
     date: businessToday,
     amount: '',
-    category: 'other',
+    category: '',
     payment_method: defaultPaymentMethod(enabledPaymentMethods),
     payment_source: 'game_club' as PaymentSource,
     comment: '',
@@ -69,7 +69,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     setForm({
       date: businessToday,
       amount: '',
-      category: 'other',
+      category: '',
         payment_method: defaultPaymentMethod(enabledPaymentMethods),
       payment_source: 'game_club',
       comment: '',
@@ -96,6 +96,10 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
     }
     if (!amount || amount <= 0) {
       setError(tc('invalidAmount'));
+      return;
+    }
+    if (!category) {
+      setError(tc('required'));
       return;
     }
     if (!enabledPaymentMethods.includes(form.payment_method)) {
@@ -139,7 +143,7 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
       setForm({
         date: businessToday,
         amount: '',
-        category: 'other',
+        category: '',
             payment_method: defaultPaymentMethod(enabledPaymentMethods),
         payment_source: 'game_club',
         comment: '',
@@ -179,8 +183,9 @@ export default function ExpenseRegistrationForm({ onSaved }: ExpenseRegistration
           <DatePicker ariaLabel={t('date')} value={form.date} max={businessToday} onChange={(value) => set('date', value)} />
         </Field>
         <Field label={t('category')} htmlFor="expense-category">
-          <Select id="expense-category" value={form.category} onChange={(event) => set('category', event.target.value)}>
-            {EXPENSE_CATEGORIES.map((category) => (
+          <Select id="expense-category" required value={form.category} onChange={(event) => set('category', event.target.value)}>
+            <option value="" disabled>{t('selectCategory')}</option>
+            {MANUAL_EXPENSE_CATEGORIES.map((category) => (
               <option key={category} value={category}>{categoryLabel(category)}</option>
             ))}
           </Select>

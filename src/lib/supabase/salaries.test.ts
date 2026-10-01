@@ -41,6 +41,7 @@ beforeAll(async () => {
   await db.exec(readFileSync(resolve('supabase/migrations/064_salary_employee_role.sql'), 'utf8'));
   await db.exec(readFileSync(resolve('supabase/migrations/065_payroll_read_and_rate_integrity.sql'), 'utf8'));
   await db.exec(readFileSync(resolve('supabase/migrations/067_owner_only_payroll_terms.sql'), 'utf8'));
+  await db.exec(readFileSync(resolve('supabase/migrations/070_salary_kpi_basis.sql'), 'utf8'));
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${owner}',false);`);
   await save();
 }, 60_000);
@@ -260,4 +261,19 @@ it('restores already missing salary settings without erasing deleted history',as
  await save(id,'2026-09-24');
  await db.query('select change_salary_term($1,$2,$3,$4)',[club,id,'kpi',5]);
  expect((await db.query('select * from salary_rates where employee_id=$1',[id])).rows).toHaveLength(2);
+});
+
+it('stores the KPI basis and pools, keeping them when other terms change', async () => {
+  const id = '20000000-0000-0000-0000-000000000090';
+  await save(id, '2026-09-24');
+  const read = async () => (await db.query('select kpi_basis,kpi_game_club,kpi_bar from salary_rates where employee_id=$1 and deleted_at is null',[id])).rows;
+  expect(await read()).toEqual([{ kpi_basis: 'overall_profit', kpi_game_club: true, kpi_bar: true }]);
+  await db.query('select change_salary_term($1,$2,$3,$4,$5,$6,$7,$8)', [club,id,'kpi',8,null,'owner_profit',false,true]);
+  expect(await read()).toEqual([{ kpi_basis: 'owner_profit', kpi_game_club: false, kpi_bar: true }]);
+  await db.query('select change_salary_term($1,$2,$3,$4,$5)', [club,id,'salary',5000,'daily']);
+  await db.query('select deactivate_salary_employee($1,$2)', [club,id]);
+  await db.query('select activate_salary_employee($1,$2)', [club,id]);
+  expect(await read()).toEqual([{ kpi_basis: 'owner_profit', kpi_game_club: false, kpi_bar: true }]);
+  await expect(db.query('select change_salary_term($1,$2,$3,$4,$5,$6,$7,$8)', [club,id,'kpi',8,null,'owner_profit',false,false])).rejects.toThrow('Invalid KPI settings');
+  await expect(db.query('select change_salary_term($1,$2,$3,$4,$5,$6,$7,$8)', [club,id,'kpi',8,null,'weekly',true,true])).rejects.toThrow('Invalid KPI settings');
 });

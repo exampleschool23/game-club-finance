@@ -489,6 +489,7 @@
     "commentPlaceholder": "What was this expense for? (optional)",
     "filterByCategory": "Filter by category",
     "allCategories": "All categories",
+    "selectCategory": "Select a category",
     "paymentSources": {
       "game_club": "Game Club money",
       "bar": "Bar money"
@@ -506,6 +507,7 @@
       "tax": "Tax",
       "correction": "Correction / mistake",
       "discount": "Customer discounts & bonuses",
+      "supplies": "Supplies & household goods",
       "other": "Other"
     }
   },
@@ -955,7 +957,7 @@
     "totalPaid": "Total paid · all time",
     "howItWorks": "How salary and KPI are calculated",
     "baseHelp": "Daily salary accrues for each active calendar day, including today. Monthly salary is divided by the days in that month and accrues for active days. Deactivation stops accrual from its effective date.",
-    "kpiHelp": "KPI uses the Owner Profit earned amount before withdrawals, after all salary costs (base salaries + bonuses − fines + KPI). All employees share the same remaining profit. A loss earns no KPI. The percentage is weighted by active days and rate changes within each month.",
+    "kpiHelp": "KPI is a percentage of profit. Each employee uses either Overall profit (earned every day, before owner withdrawals, after all salary costs) or Owner profit (only what the owner withdrew that month), taken from Game Club, Bar or both. A loss earns no KPI. The percentage is weighted by active days and rate changes within each month.",
     "estimateHelp": "Balances are live estimates through the current business date. Changes to income or expenses can change past KPI. Monthly rows show that month’s net movement; the employee balance includes all months. Amounts are in UZS.",
     "paymentHelp": "A payment reduces the employee balance and creates a salary expense from the selected source. It does not deduct salary twice from KPI. Payments above the balance are advances. Mistaken records can be deleted from employee history with editing access.",
     "emptyTitle": "Add your first employee",
@@ -1031,6 +1033,17 @@
     "deleteRateHelp": "This removes the rate from salary calculations. The previous rate, if any, continues until the next rate. Historical balances and KPI may change. The deleted rate stays in history.",
     "recordOperations": "Record payment / bonus / fine",
     "deactivate": "Deactivate",
+    "kpiBasis": "KPI basis",
+    "kpiBasisOverall": "Overall profit (calculated every day)",
+    "kpiBasisOwner": "Owner profit (when the owner withdraws)",
+    "kpiBasisOverallHelp": "Share of the profit earned each day, before owner withdrawals and after salary costs.",
+    "kpiBasisOwnerHelp": "Share of the money the owner actually withdrew in the month. Nothing is earned until money is withdrawn.",
+    "kpiBasisOverallShort": "Overall profit",
+    "kpiBasisOwnerShort": "Owner profit",
+    "kpiPools": "Take profit from",
+    "poolGameClub": "Game Club",
+    "poolBar": "Bar",
+    "kpiPoolRequired": "Tick Game Club, Bar or both.",
     "activate": "Activate",
     "activated": "Employee activated. Salary and KPI accrue again from today.",
     "activateConfirm": "{name} will start accruing salary and KPI again from today. Previous history and any unpaid balance are kept.",

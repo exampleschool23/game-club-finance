@@ -15,6 +15,7 @@ beforeAll(async () => {
       ('INTERNET TARIF', null), ('RASXOD', 'misc'), ('  Shakar ', null), ('brand new thing', null);
   `);
   await db.exec(readFileSync(resolve('supabase/migrations/068_unify_expense_categories.sql'), 'utf8'));
+  await db.exec(readFileSync(resolve('supabase/migrations/069_remove_other_expense_category.sql'), 'utf8'));
 });
 afterAll(async () => { await db?.close(); });
 
@@ -28,13 +29,15 @@ describe('migration 068 unifies expense categories', () => {
       { category: 'correction', comment: 'ashibka' },
       { category: 'discount', comment: 'SKIDKA' },
       { category: 'internet', comment: 'INTERNET TARIF' },
-      { category: 'other', comment: 'RASXOD: misc' },
+      { category: 'supplies', comment: 'RASXOD: misc' },
       { category: 'food_drinks', comment: '  Shakar ' },
-      { category: 'other', comment: 'brand new thing' },
+      { category: 'supplies', comment: 'brand new thing' },
     ]);
   });
-  it('rejects unknown categories afterwards and matches the application list', async () => {
+  it('rejects other and unknown categories afterwards and matches the application list', async () => {
     await expect(db.query("insert into expenses(category) values ('custom')")).rejects.toThrow();
+    await expect(db.query("insert into expenses(category) values ('other')")).rejects.toThrow();
+    await db.query("insert into expenses(category) values ('salary')");
     for (const category of EXPENSE_CATEGORIES) await db.query('insert into expenses(category) values ($1)', [category]);
   });
 });

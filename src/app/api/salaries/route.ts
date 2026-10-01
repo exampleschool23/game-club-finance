@@ -17,6 +17,22 @@ const text = (value: unknown, max: number) => (typeof value === 'string' && valu
 
 class BadRequest extends Error {}
 
+/** Optional KPI basis/pools; null means "keep what the employee has today". */
+function kpiSettings(body: Body): { basis: string | null; gameClub: boolean | null; bar: boolean | null } {
+  const basis = body.kpiBasis ?? null;
+  const gameClub = body.kpiGameClub ?? null;
+  const bar = body.kpiBar ?? null;
+  if ((basis !== null && basis !== 'owner_profit' && basis !== 'overall_profit')
+    || (gameClub !== null && typeof gameClub !== 'boolean') || (bar !== null && typeof bar !== 'boolean')
+    || (gameClub === false && bar === false)) throw new BadRequest();
+  return { basis, gameClub, bar };
+}
+const withDefaults = (settings: ReturnType<typeof kpiSettings>) => ({
+  basis: (settings.basis ?? 'overall_profit') as 'owner_profit' | 'overall_profit',
+  gameClub: settings.gameClub ?? true,
+  bar: settings.bar ?? true,
+});
+
 async function actorName(supabase: SupabaseClient, user: User) {
   const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
   return profile?.full_name?.trim()
@@ -71,23 +87,27 @@ export async function POST(request: Request) {
         const jobTitle = text(body.jobTitle, 120);
         if (!name || jobTitle === null || !isDate(body.date) || !isSalaryType(body.salaryType)
           || !isNumber(body.amount) || !isNumber(body.kpi) || typeof body.active !== 'boolean') throw new BadRequest();
+        const kpiOptions = kpiSettings(body);
         const { data: existing } = await supabase.from('salary_employees').select('id').eq('club_id', clubId).eq('id', employeeId).maybeSingle();
         rpcResult = await supabase.rpc('save_salary_employee', {
+          p_kpi_basis: kpiOptions.basis, p_kpi_game_club: kpiOptions.gameClub, p_kpi_bar: kpiOptions.bar,
           p_club_id: clubId, p_employee_id: employeeId, p_name: name, p_job_title: jobTitle,
           p_effective_date: body.date, p_salary_type: body.salaryType, p_amount: body.amount, p_kpi_percent: body.kpi, p_active: body.active,
         });
-        notification = { event: existing ? 'employee_updated' : 'employee_added', role: jobTitle, salaryType: body.salaryType, amount: body.amount, kpi: body.kpi, date: body.date };
+        notification = { event: existing ? 'employee_updated' : 'employee_added', role: jobTitle, salaryType: body.salaryType, amount: body.amount, kpi: body.kpi, kpiSettings: withDefaults(kpiOptions), date: body.date };
         break;
       }
       case 'change_term': {
         if ((body.kind !== 'salary' && body.kind !== 'kpi') || !isNumber(body.amount)) throw new BadRequest();
         const salaryType = body.kind === 'salary' ? body.salaryType : null;
         if (body.kind === 'salary' && !isSalaryType(salaryType)) throw new BadRequest();
+        const kpiOptions = kpiSettings(body);
         rpcResult = await supabase.rpc('change_salary_term', {
           p_club_id: clubId, p_employee_id: employeeId, p_kind: body.kind, p_amount: body.amount, p_salary_type: salaryType,
+          p_kpi_basis: kpiOptions.basis, p_kpi_game_club: kpiOptions.gameClub, p_kpi_bar: kpiOptions.bar,
         });
         notification = body.kind === 'kpi'
-          ? { event: 'kpi_changed', kpi: body.amount }
+          ? { event: 'kpi_changed', kpi: body.amount, kpiSettings: withDefaults(kpiOptions) }
           : { event: 'salary_changed', salaryType: salaryType as 'daily' | 'monthly', amount: body.amount };
         break;
       }

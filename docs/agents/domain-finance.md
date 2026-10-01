@@ -116,14 +116,24 @@ that month. Changes/deactivation start today; historical rates stay intact.
 Same-business-day settings can be corrected. KPI percentages are weighted by
 eligible days over elapsed days in that month.
 
-KPI uses the existing Owner Profit **earned** cash definition before owner
-withdrawals, after all accrued payroll costs, including KPI. Add back linked
-salary payments to monthly earned cash, then deduct base + bonus - fine. With
-`P` as that remainder and `r` as the sum of weighted employee KPI fractions,
-remaining owner profit is `max(0, P) / (1 + r)`; each employee receives their
-fraction of that remaining profit. Salary payment timing cannot change KPI.
-Existing manual salary expenses remain ordinary expenses; do not record the
-same payout again through payroll.
+Each salary rate carries a KPI basis (migration 070) and the pools it draws from
+(`kpi_game_club`, `kpi_bar`; at least one):
+
+- `overall_profit` (default for all older rates): the Owner Profit **earned** cash
+  of the ticked pools before owner withdrawals, calculated live every day. Add
+  back linked salary payments paid from those pools, then deduct the group's
+  fixed pay (base + bonus - fine). With `P` as that remainder and `r` as the sum
+  of weighted KPI fractions of the group, remaining profit is
+  `max(0, P) / (1 + r)`; each employee receives their fraction of it.
+- `owner_profit`: only money the owner actually withdrew from the ticked pools
+  in the month; KPI is the percentage of that amount, with no extra deduction.
+
+Employees sharing a basis and pools form a group; groups are independent, so
+overlapping pools with different groups are not netted against each other.
+`get_salary_profit_snapshot` therefore exposes monthly withdrawn totals (never
+individual withdrawal rows) to club members. Salary payment timing cannot
+change KPI. Existing manual salary expenses remain ordinary expenses; do not
+record the same payout again through payroll.
 
 Employee balance = accrued base + KPI + bonuses - fines - payments. Negative
 balances represent advances/credit and carry across months. Bonuses and fines

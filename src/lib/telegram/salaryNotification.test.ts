@@ -18,13 +18,17 @@ describe('buildSalaryNotification', () => {
     expect(buildSalaryNotification({ ...base, event: 'fine', amount: 1000, date: '2026-10-01', comment: null })).toContain('Штраф');
   });
   it('reports KPI, salary and activation changes', () => {
-    expect(buildSalaryNotification({ ...base, event: 'kpi_changed', kpi: 5 })).toContain('KPI: 5%');
+    const kpi = buildSalaryNotification({ ...base, event: 'kpi_changed', kpi: 5, kpiSettings: { basis: 'owner_profit', gameClub: false, bar: true } });
+    expect(kpi).toContain('KPI: 5%');
+    expect(kpi).toContain('Прибыль владельца');
+    expect(kpi).toContain('Источник прибыли: Бар');
+    expect(kpi).not.toContain('Игровой клуб');
     expect(buildSalaryNotification({ ...base, event: 'salary_changed', salaryType: 'monthly', amount: 3000000 })).toContain('Месячная зарплата');
     expect(buildSalaryNotification({ ...base, event: 'deactivated' })).toContain('деактивирован');
     expect(buildSalaryNotification({ ...base, event: 'activated' })).toContain('активирован');
   });
   it('announces a new employee with terms', () => {
-    const text = buildSalaryNotification({ ...base, event: 'employee_added', role: 'Manager', salaryType: 'daily', amount: 100000, kpi: 3, date: '2026-10-01' });
+    const text = buildSalaryNotification({ ...base, event: 'employee_added', role: 'Manager', salaryType: 'daily', amount: 100000, kpi: 3, kpiSettings: { basis: 'overall_profit', gameClub: true, bar: true }, date: '2026-10-01' });
     expect(text).toContain('Добавлен сотрудник');
     expect(text).toContain('Должность: Менеджер');
   });

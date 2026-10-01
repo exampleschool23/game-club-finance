@@ -442,7 +442,7 @@ export default function ReportsPage() {
     if (activity.kind === 'income') return t('dailyClubIncome');
     if (activity.kind === 'debt_payment') return t('debtPayment');
     const category = activity.category ?? 'other';
-    const label = isKnownExpenseCategory(category) ? te(category) : category;
+    const label = isKnownExpenseCategory(category) || category === 'other' ? te(category) : category;
     return activity.paymentSource === 'bar' ? `${t('bar')} · ${label}` : label;
   }
 

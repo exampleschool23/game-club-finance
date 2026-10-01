@@ -1,12 +1,25 @@
-/** The only expense categories new entries may use (migration 068 enforces it). */
+/** Categories a person can choose when registering an expense by hand. */
+export const MANUAL_EXPENSE_CATEGORIES = [
+  'rent', 'electricity', 'internet', 'repair', 'cleaning',
+  'food_drinks', 'marketing', 'equipment', 'tax',
+  'correction', 'discount', 'supplies',
+] as const;
+
+/**
+ * Every category an expense row may have. `salary` is written only by the
+ * payroll flow (record_salary_entry), never chosen by hand. Migrations 068-070
+ * enforce this list in the database.
+ */
 export const EXPENSE_CATEGORIES = [
-  'rent', 'salary', 'electricity', 'internet', 'repair',
-  'cleaning', 'food_drinks', 'marketing', 'equipment', 'tax',
-  'correction', 'discount', 'other',
+  'salary', ...MANUAL_EXPENSE_CATEGORIES,
 ] as const;
 
 export type KnownExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 export function isKnownExpenseCategory(category: string): category is KnownExpenseCategory {
   return (EXPENSE_CATEGORIES as readonly string[]).includes(category);
+}
+
+export function isManualExpenseCategory(category: string): boolean {
+  return (MANUAL_EXPENSE_CATEGORIES as readonly string[]).includes(category);
 }

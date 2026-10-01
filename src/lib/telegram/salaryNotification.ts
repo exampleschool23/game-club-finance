@@ -1,13 +1,15 @@
 import { formatCurrency, formatDateShort } from '../formatters';
 
+export type KpiSettings = { basis: 'owner_profit' | 'overall_profit'; gameClub: boolean; bar: boolean };
+
 export type SalaryNotificationInput = {
   addedBy: string;
   employee: string;
 } & (
-  | { event: 'employee_added'; role: string; salaryType: 'daily' | 'monthly'; amount: number; kpi: number; date: string }
-  | { event: 'employee_updated'; role: string; salaryType: 'daily' | 'monthly'; amount: number; kpi: number; date: string }
+  | { event: 'employee_added'; role: string; salaryType: 'daily' | 'monthly'; amount: number; kpi: number; kpiSettings: KpiSettings; date: string }
+  | { event: 'employee_updated'; role: string; salaryType: 'daily' | 'monthly'; amount: number; kpi: number; kpiSettings: KpiSettings; date: string }
   | { event: 'salary_changed'; salaryType: 'daily' | 'monthly'; amount: number }
-  | { event: 'kpi_changed'; kpi: number }
+  | { event: 'kpi_changed'; kpi: number; kpiSettings: KpiSettings }
   | { event: 'deactivated' }
   | { event: 'activated' }
   | { event: 'payment' | 'bonus' | 'fine'; amount: number; date: string; comment: string | null; paymentMethod?: string | null; paymentSource?: string | null }
@@ -19,6 +21,11 @@ const ROLES: Record<string, string> = { Manager: 'Менеджер', Admin: 'А�
 const SALARY_TYPES = { daily: 'Дневная зарплата', monthly: 'Месячная зарплата' } as const;
 const money = (value: number) => `${formatCurrency(value)} сум`;
 const percent = (value: number) => `${Number(value)}%`;
+const BASES = { owner_profit: 'Прибыль владельца (выведенные деньги)', overall_profit: 'Общая прибыль (ежедневно)' } as const;
+const kpiLines = (kpi: number, settings: KpiSettings) => {
+  const pools = [settings.gameClub && 'Игровой клуб', settings.bar && 'Бар'].filter(Boolean).join(' + ');
+  return [`KPI: ${percent(kpi)}`, `База KPI: ${BASES[settings.basis]}`, `Источник прибыли: ${pools}`];
+};
 
 export function buildSalaryNotification(input: SalaryNotificationInput): string {
   const head = (title: string) => [title, '', `Сотрудник: ${input.employee}`];
@@ -29,14 +36,14 @@ export function buildSalaryNotification(input: SalaryNotificationInput): string 
     case 'employee_updated':
       lines = head(input.event === 'employee_added' ? '👤 Добавлен сотрудник' : '✏️ Обновлён сотрудник');
       if (input.role) lines.push(`Должность: ${ROLES[input.role] ?? input.role}`);
-      lines.push(`${SALARY_TYPES[input.salaryType]}: ${money(input.amount)}`, `KPI: ${percent(input.kpi)}`,
+      lines.push(`${SALARY_TYPES[input.salaryType]}: ${money(input.amount)}`, ...kpiLines(input.kpi, input.kpiSettings),
         `${input.event === 'employee_added' ? 'Начало работы' : 'Действует с'}: ${formatDateShort(input.date, 'ru')}`);
       break;
     case 'salary_changed':
       lines = [...head('💼 Изменена зарплата'), `${SALARY_TYPES[input.salaryType]}: ${money(input.amount)}`];
       break;
     case 'kpi_changed':
-      lines = [...head('📈 Изменён KPI'), `KPI: ${percent(input.kpi)}`];
+      lines = [...head('📈 Изменён KPI'), ...kpiLines(input.kpi, input.kpiSettings)];
       break;
     case 'deactivated':
       lines = head('⏸ Сотрудник деактивирован');

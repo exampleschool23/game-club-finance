@@ -66,5 +66,7 @@
   "065_payroll_read_and_rate_integrity.sql",
   "066_owner_withdrawal_payment_methods.sql",
   "067_owner_only_payroll_terms.sql",
-  "068_unify_expense_categories.sql"
+  "068_unify_expense_categories.sql",
+  "069_remove_other_expense_category.sql",
+  "070_salary_kpi_basis.sql"
 ]

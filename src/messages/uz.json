@@ -489,6 +489,7 @@
     "commentPlaceholder": "Bu xarajat nima uchun edi? (ixtiyoriy)",
     "filterByCategory": "Kategoriya bo'yicha filtrlash",
     "allCategories": "Barcha kategoriyalar",
+    "selectCategory": "Kategoriyani tanlang",
     "paymentSources": {
       "game_club": "Klub puli",
       "bar": "Bar puli"
@@ -506,6 +507,7 @@
       "tax": "Soliq",
       "correction": "Tuzatish / xato",
       "discount": "Mijozlarga chegirma va bonus",
+      "supplies": "Sarf materiallari va xo‘jalik mollari",
       "other": "Boshqa"
     }
   },
@@ -955,7 +957,7 @@
     "totalPaid": "To‘langan · jami",
     "howItWorks": "Ish haqi va KPI qanday hisoblanadi",
     "baseHelp": "Kunlik ish haqi har bir faol kalendar kuni uchun, bugunni ham qo‘shib hisoblanadi. Oylik ish haqi shu oydagi kunlar soniga bo‘linadi va faol kunlar uchun hisoblanadi. Nofaol qilish belgilangan sanadan hisoblashni to‘xtatadi.",
-    "kpiHelp": "KPI «Ega foydasi» bo‘limidagi pul yechishdan oldingi, barcha ish haqi xarajatlaridan (asosiy ish haqi + mukofotlar − jarimalar + KPI) keyingi foydadan hisoblanadi. Barcha xodimlar uchun asos bir xil — qolgan foyda. Zarar bo‘lsa KPI nolga teng. Foiz har oydagi faol kunlar va stavka o‘zgarishlarini hisobga oladi.",
+    "kpiHelp": "KPI — foydadan foiz. Har bir xodim uchun Umumiy foyda (har kuni ishlanadi, ega yechishlaridan oldin va barcha ish haqi xarajatlaridan keyin) yoki Ega foydasi (faqat oy davomida ega yechgan pul) tanlanadi, manba — O‘yin klubi, Bar yoki ikkalasi. Zarar KPI keltirmaydi. Foiz faol kunlar va stavka o‘zgarishlariga qarab o‘lchanadi.",
     "estimateHelp": "Qoldiqlar joriy ish sanasigacha hisoblanadi. Daromad yoki xarajat o‘zgarishi oldingi KPIga ta’sir qilishi mumkin. Oy qatori shu oydagi o‘zgarishni, xodim qoldig‘i esa barcha oylarni ko‘rsatadi. Summalar so‘mda.",
     "paymentHelp": "To‘lov xodim qoldig‘ini kamaytiradi va tanlangan manbadan ish haqi xarajatini yaratadi. Ish haqi KPI dan ikki marta ayrilmaydi. Qoldiqdan ortiq to‘lov avans hisoblanadi. Tahrirlash huquqi bilan xato yozuvlarni xodim tarixidan o‘chirish mumkin.",
     "emptyTitle": "Birinchi xodimni qo‘shing",
@@ -1031,6 +1033,17 @@
     "deleteRateHelp": "Stavka hisobdan chiqariladi. Oldingi stavka mavjud bo‘lsa, keyingisigacha amal qiladi. Oldingi qoldiq va KPI o‘zgarishi mumkin. O‘chirilgan stavka tarixda saqlanadi.",
     "recordOperations": "To‘lov / mukofot / jarima kiritish",
     "deactivate": "Faolsizlantirish",
+    "kpiBasis": "KPI asosi",
+    "kpiBasisOverall": "Umumiy foyda (har kuni hisoblanadi)",
+    "kpiBasisOwner": "Ega foydasi (ega pul yechganda)",
+    "kpiBasisOverallHelp": "Har kuni ishlangan foydaning ulushi: ega yechishlaridan oldin va ish haqi xarajatlaridan keyin.",
+    "kpiBasisOwnerHelp": "Ega oy davomida haqiqatda yechgan pulning ulushi. Pul yechilmaguncha KPI hisoblanmaydi.",
+    "kpiBasisOverallShort": "Umumiy foyda",
+    "kpiBasisOwnerShort": "Ega foydasi",
+    "kpiPools": "Foydani olish manbai",
+    "poolGameClub": "O‘yin klubi",
+    "poolBar": "Bar",
+    "kpiPoolRequired": "O‘yin klubi, Bar yoki ikkalasini belgilang.",
     "activate": "Faollashtirish",
     "activated": "Xodim faollashtirildi. Ish haqi va KPI bugundan yana hisoblanadi.",
     "activateConfirm": "Bugundan boshlab {name} uchun maosh va KPI yana hisoblanadi. Oldingi tarix va to‘lanmagan qoldiq saqlanadi.",

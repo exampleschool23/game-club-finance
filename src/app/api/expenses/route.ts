@@ -1,4 +1,4 @@
-import { isKnownExpenseCategory } from '@/lib/expenseCategories';
+import { isManualExpenseCategory } from '@/lib/expenseCategories';
 import { createClient } from '@/lib/supabase/server';
 import { buildExpenseNotification } from '@/lib/telegram/expenseNotification';
 import { targetChatId } from '@/lib/telegram/clubChat';
@@ -40,7 +40,7 @@ function isValidBody(body: ExpenseRequestBody): body is ValidExpenseRequestBody 
     && Number.isFinite(body.amount)
     && body.amount > 0
     && typeof body.category === 'string'
-    && isKnownExpenseCategory(body.category.trim())
+    && isManualExpenseCategory(body.category.trim())
     && PAYMENT_METHODS.includes(body.paymentMethod as (typeof PAYMENT_METHODS)[number])
     && PAYMENT_SOURCES.includes(body.paymentSource as (typeof PAYMENT_SOURCES)[number])
     && (body.comment === null || body.comment === undefined || (typeof body.comment === 'string' && body.comment.length <= 300));

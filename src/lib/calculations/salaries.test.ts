@@ -93,3 +93,37 @@ it('keeps the final live rate available for editing, ignoring deleted history an
  expect(canDeleteSalaryRate([rate,{...rate,id:'deleted',deleted_at:'2026-09-24'},{...rate,id:'other',employee_id:'two'}],rate)).toBe(false);
  expect(canDeleteSalaryRate([rate,{...rate,id:'replacement'}],rate)).toBe(true);
 });
+
+describe('KPI basis and profit pools', () => {
+  const mixed = { ...profit(12000), bar_earned: 6000, game_club_withdrawn: 4000, bar_withdrawn: 1000 };
+  it('takes KPI from the ticked pool only', () => {
+    const gameClub = calculate({ rates: [{ ...rate, kpi_game_club: true, kpi_bar: false }], monthlyProfit: [mixed] }).one[0];
+    const bar = calculate({ rates: [{ ...rate, kpi_game_club: false, kpi_bar: true }], monthlyProfit: [mixed] }).one[0];
+    const both = calculate({ monthlyProfit: [mixed] }).one[0];
+    expect(gameClub).toMatchObject({ kpi: 1000, kpiProfit: 10000 });
+    expect(bar).toMatchObject({ kpi: 454.55, kpiProfit: 4545.45 });
+    expect(both.kpi).toBe(1545.45);
+  });
+  it('adds back only salary payments paid from the ticked pools', () => {
+    const payment = { ...entry('payment', 500), payment_source: 'bar' };
+    const gameClub = calculate({ rates: [{ ...rate, kpi_bar: false }], entries: [payment], monthlyProfit: [profit(12000)] }).one[0];
+    expect(gameClub.kpi).toBe(1000);
+  });
+  it('owner profit basis is a percentage of what the owner withdrew from the ticked pools', () => {
+    const base = { ...rate, kpi_basis: 'owner_profit' as const };
+    expect(calculate({ rates: [base], monthlyProfit: [mixed] }).one[0]).toMatchObject({ kpi: 500, kpiProfit: 5000 });
+    expect(calculate({ rates: [{ ...base, kpi_bar: false }], monthlyProfit: [mixed] }).one[0].kpi).toBe(400);
+    expect(calculate({ rates: [{ ...base, kpi_game_club: false }], monthlyProfit: [mixed] }).one[0].kpi).toBe(100);
+    expect(calculate({ rates: [base], monthlyProfit: [profit(12000)] }).one[0].kpi).toBe(0);
+  });
+  it('keeps groups with different bases independent', () => {
+    const second = { ...employee, id: 'two' };
+    const rows = calculate({
+      employees: [employee, second],
+      rates: [rate, { ...rate, id: 'r2', employee_id: 'two', kpi_percent: 20, kpi_basis: 'owner_profit' }],
+      monthlyProfit: [mixed],
+    });
+    expect(rows.one[0].kpi).toBe(1545.45);
+    expect(rows.two[0].kpi).toBe(1000);
+  });
+});
