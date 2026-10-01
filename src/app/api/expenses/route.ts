@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { buildExpenseNotification } from '@/lib/telegram/expenseNotification';
+import { targetChatId } from '@/lib/telegram/clubChat';
 import { deleteTelegramMessage } from '@/lib/telegram/deleteTelegramMessage';
 import { sendTelegramMessage } from '@/lib/telegram/sendDailyFinanceReport';
 import { PAYMENT_METHODS, type Expense } from '@/types';
@@ -29,19 +30,6 @@ interface ValidExpenseRequestBody {
 interface DeleteExpenseRequestBody {
   clubId?: unknown;
   expenseId?: unknown;
-}
-
-function targetChatId(clubId: string): string | null {
-  const targets = [
-    ['TELEGRAM_PIXEL_CLUB_ID', 'TELEGRAM_PIXEL_CHAT_ID'],
-    ['TELEGRAM_MAIN_CLUB_ID', 'TELEGRAM_MAIN_CHAT_ID'],
-    ['TELEGRAM_BUNKER_CLUB_ID', 'TELEGRAM_BUNKER_CHAT_ID'],
-  ] as const;
-
-  for (const [clubKey, chatKey] of targets) {
-    if (process.env[clubKey] === clubId) return process.env[chatKey] ?? null;
-  }
-  return null;
 }
 
 function isValidBody(body: ExpenseRequestBody): body is ValidExpenseRequestBody {

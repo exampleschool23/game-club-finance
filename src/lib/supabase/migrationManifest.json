@@ -64,5 +64,6 @@
   "063_deactivate_salary_employee.sql",
   "064_salary_employee_role.sql",
   "065_payroll_read_and_rate_integrity.sql",
-  "066_owner_withdrawal_payment_methods.sql"
+  "066_owner_withdrawal_payment_methods.sql",
+  "067_owner_only_payroll_terms.sql"
 ]

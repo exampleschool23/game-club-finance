@@ -40,6 +40,7 @@ beforeAll(async () => {
   await db.exec(readFileSync(resolve('supabase/migrations/063_deactivate_salary_employee.sql'), 'utf8'));
   await db.exec(readFileSync(resolve('supabase/migrations/064_salary_employee_role.sql'), 'utf8'));
   await db.exec(readFileSync(resolve('supabase/migrations/065_payroll_read_and_rate_integrity.sql'), 'utf8'));
+  await db.exec(readFileSync(resolve('supabase/migrations/067_owner_only_payroll_terms.sql'), 'utf8'));
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${owner}',false);`);
   await save();
 }, 60_000);
@@ -73,14 +74,14 @@ describe('salary database authorization and ledger integrity', () => {
     await db.exec('reset role; alter table expenses drop constraint test_limit; set role authenticated;');
   });
   it('blocks cross-club writes, keeps ungranted members read-only and denies nonmembers', async () => {
-    await expect(save('20000000-0000-0000-0000-000000000002','2026-09-24',other)).rejects.toThrow('Salary editing access');
+    await expect(save('20000000-0000-0000-0000-000000000002','2026-09-24',other)).rejects.toThrow('club owner');
     await expect(pay(payment,'payment',100,'2026-09-24',other)).rejects.toThrow('Salary editing access');
     for (const role of ['admin','viewer']) {
       await db.exec(`reset role; update club_memberships set role='${role}'; set role authenticated;`);
       for (const table of ['salary_employees','salary_rates','salary_entries']) expect((await db.query(`select * from ${table}`)).rows.length).toBeGreaterThan(0);
       await expect(pay()).rejects.toThrow('Salary editing access');
-      await expect(save()).rejects.toThrow('Salary editing access');
-      await expect(db.query('select change_salary_term($1,$2,$3,$4)', [club,employee,'kpi',5])).rejects.toThrow('Salary editing access');
+      await expect(save()).rejects.toThrow('club owner');
+      await expect(db.query('select change_salary_term($1,$2,$3,$4)', [club,employee,'kpi',5])).rejects.toThrow('club owner');
     }
     await db.exec(`reset role; update club_memberships set role='owner'; set role authenticated; select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000099',false);`);
     expect((await db.query('select * from salary_employees')).rows).toEqual([]);
@@ -116,8 +117,16 @@ describe('salary database authorization and ledger integrity', () => {
       { effective_date: '2026-10-01', amount: '150000.00', kpi_percent: '7.00', salary_type: 'daily' },
     ]);
     await expect(save(id, '2026-09-24')).rejects.toThrow('before the employee joins');
-    await expect(db.query('select change_salary_term($1,$2,$3,$4)', [other,id,'kpi',5])).rejects.toThrow('Salary editing access');
+    await expect(db.query('select change_salary_term($1,$2,$3,$4)', [other,id,'kpi',5])).rejects.toThrow('club owner');
     await expect(db.query('select record_salary_entry($1,$2,$3,$4,$5,$6,$7,$8,$9)', [club,id,'30000000-0000-0000-0000-000000000010','2026-09-24','bonus',100,'',null,null])).rejects.toThrow();
+  });
+  it('changes KPI for an employee who joined on the current business date', async () => {
+    const id = '20000000-0000-0000-0000-000000000011';
+    await save(id, '2026-09-24');
+    await db.query('select change_salary_term($1,$2,$3,$4,$5)', [club,id,'kpi',5,null]);
+    expect((await db.query('select effective_date::text,kpi_percent,amount from salary_rates where employee_id=$1 and deleted_at is null',[id])).rows).toEqual([
+      { effective_date: '2026-09-24', kpi_percent: '5.00', amount: '3000000.00' },
+    ]);
   });
   it('changes KPI today without overwriting past rates or the base salary', async () => {
     await db.query('select change_salary_term($1,$2,$3,$4)', [club,employee,'kpi',6]);
@@ -127,22 +136,23 @@ describe('salary database authorization and ledger integrity', () => {
     ]);
   });
 
-  it('allows explicitly granted admins and viewers to edit and revokes writes immediately', async () => {
+  it('lets granted admins and viewers record payments, bonuses and fines but never change payroll terms', async () => {
     for (const [index, role] of ['admin','viewer'].entries()) {
       await db.exec(`reset role; update club_memberships set role='${role}',feature_access=array['salaries']; set role authenticated;`);
-      const id = `20000000-0000-0000-0000-00000000002${index}`;
-      await save(id,'2026-09-24');
-      await db.query('select change_salary_term($1,$2,$3,$4)', [club,id,'kpi',5]);
       await pay(`30000000-0000-0000-0000-00000000002${index}`, 'payment', 100);
       await pay(`30000000-0000-0000-0000-00000000003${index}`, 'bonus', 100);
       await pay(`30000000-0000-0000-0000-00000000004${index}`, 'fine', 100);
-      await expect(db.query('select change_salary_term($1,$2,$3,$4)', [other,id,'kpi',5])).rejects.toThrow('Salary editing access');
+      await expect(save()).rejects.toThrow('club owner');
+      await expect(db.query('select change_salary_term($1,$2,$3,$4)', [club,employee,'kpi',5])).rejects.toThrow('club owner');
+      await expect(db.query('select change_salary_term($1,$2,$3,$4,$5)', [club,employee,'salary',5,'daily'])).rejects.toThrow('club owner');
+      await expect(db.query('select deactivate_salary_employee($1,$2)', [club,employee])).rejects.toThrow('club owner');
+      await expect(db.query('select activate_salary_employee($1,$2)', [club,employee])).rejects.toThrow('club owner');
+      await expect(db.query('select change_salary_employee_role($1,$2,$3)', [club,employee,'Cleaner'])).rejects.toThrow('club owner');
+      const rate = (await db.query<{id:string}>('select id from salary_rates where employee_id=$1 and deleted_at is null limit 1',[employee])).rows[0];
+      await expect(db.query('select delete_salary_record($1,$2,$3)',[club,rate.id,'rate'])).rejects.toThrow('club owner');
       await db.exec(`reset role; update club_memberships set feature_access=array[]::text[]; set role authenticated;`);
-      await expect(save(id,'2026-09-24')).rejects.toThrow('Salary editing access');
-      await expect(db.query('select change_salary_term($1,$2,$3,$4)', [club,id,'kpi',8])).rejects.toThrow('Salary editing access');
       await expect(pay()).rejects.toThrow('Salary editing access');
-      expect((await db.query('select * from salary_employees where id=$1',[id])).rows).toHaveLength(1);
-      await expect(db.query('update salary_rates set amount=0 where employee_id=$1',[id])).rejects.toThrow();
+      await expect(db.query('update salary_rates set amount=0 where employee_id=$1',[employee])).rejects.toThrow();
     }
     await db.exec(`reset role; update club_memberships set role='owner',feature_access=null; set role authenticated;`);
   });
@@ -192,26 +202,35 @@ describe('salary database authorization and ledger integrity', () => {
     ]);
     expect((await db.query('select * from salary_entries order by id')).rows).toEqual(entries);
   });
-  it('requires editing access to deactivate and supports future employees', async () => {
+  it('requires ownership to deactivate and supports future employees', async () => {
     const id='20000000-0000-0000-0000-000000000031';
     await save(id,'2026-10-01');
-    await expect(db.query('select deactivate_salary_employee($1,$2)',[other,id])).rejects.toThrow('Salary editing access');
-    await db.exec("reset role; update club_memberships set role='viewer',feature_access=array[]::text[]; set role authenticated;");
-    await expect(db.query('select deactivate_salary_employee($1,$2)',[club,id])).rejects.toThrow('Salary editing access');
-    await db.exec("reset role; update club_memberships set feature_access=array['salaries']; set role authenticated;");
+    await expect(db.query('select deactivate_salary_employee($1,$2)',[other,id])).rejects.toThrow('club owner');
+    await db.exec("reset role; update club_memberships set role='viewer',feature_access=array['salaries']; set role authenticated;");
+    await expect(db.query('select deactivate_salary_employee($1,$2)',[club,id])).rejects.toThrow('club owner');
+    await db.exec("reset role; update club_memberships set role='owner',feature_access=null; set role authenticated;");
     await db.query('select deactivate_salary_employee($1,$2)',[club,id]);
     expect((await db.query('select effective_date::text,active from salary_rates where employee_id=$1',[id])).rows).toEqual([{effective_date:'2026-10-01',active:false}]);
-    await db.exec("reset role; update club_memberships set role='owner',feature_access=null; set role authenticated;");
+  });
+  it('reactivates from the business date, keeping terms and history, idempotently', async () => {
+    const id='20000000-0000-0000-0000-000000000030';
+    await db.query('select activate_salary_employee($1,$2)',[club,id]);
+    await db.query('select activate_salary_employee($1,$2)',[club,id]);
+    expect((await db.query('select effective_date::text,active,amount,kpi_percent from salary_rates where employee_id=$1 and deleted_at is null order by effective_date',[id])).rows).toEqual([
+      {effective_date:'2026-09-01',active:true,amount:'3000000.00',kpi_percent:'10.00'},
+      {effective_date:'2026-09-24',active:true,amount:'3000000.00',kpi_percent:'10.00'},
+    ]);
+    await expect(db.query('select activate_salary_employee($1,$2)',[other,id])).rejects.toThrow('club owner');
   });
 
-  it('changes only the employee job title with an explicit editing grant', async () => {
+  it('changes only the employee job title, and only for owners', async () => {
     const rates = (await db.query('select * from salary_rates order by id')).rows;
     const entries = (await db.query('select * from salary_entries order by id')).rows;
-    await expect(db.query('select change_salary_employee_role($1,$2,$3)',[other,employee,'Cleaner'])).rejects.toThrow('Salary editing access');
+    await expect(db.query('select change_salary_employee_role($1,$2,$3)',[other,employee,'Cleaner'])).rejects.toThrow('club owner');
     await expect(db.query('select change_salary_employee_role($1,$2,$3)',[club,employee,'Owner'])).rejects.toThrow('Invalid employee role');
-    await db.exec("reset role; update club_memberships set role='viewer',feature_access=array[]::text[]; set role authenticated;");
-    await expect(db.query('select change_salary_employee_role($1,$2,$3)',[club,employee,'Cleaner'])).rejects.toThrow('Salary editing access');
-    await db.exec("reset role; update club_memberships set feature_access=array['salaries']; set role authenticated;");
+    await db.exec("reset role; update club_memberships set role='viewer',feature_access=array['salaries']; set role authenticated;");
+    await expect(db.query('select change_salary_employee_role($1,$2,$3)',[club,employee,'Cleaner'])).rejects.toThrow('club owner');
+    await db.exec("reset role; update club_memberships set role='owner',feature_access=null; set role authenticated;");
     await db.query('select change_salary_employee_role($1,$2,$3)',[club,employee,'Cleaner']);
     expect((await db.query('select name,job_title from salary_employees where id=$1',[employee])).rows).toEqual([{name:'Employee',job_title:'Cleaner'}]);
     expect((await db.query('select * from salary_rates order by id')).rows).toEqual(rates);

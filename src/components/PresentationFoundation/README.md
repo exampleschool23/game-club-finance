@@ -28,7 +28,7 @@ import { Button, Card, Field, Input, InlineAlert, PageHeader } from '@/component
 | KPI numbers | `MetricCard` (formatted value), `AmountCard` (money with comparison), `StatTile` (compact) |
 | Tables | `DataTable` (supports totals row, sticky header, empty state; pass `label` so keyboard users can scroll wide tables) |
 | Nothing to show | `EmptyState` |
-| Loading | `Skeleton`, `MetricGridSkeleton`, `TableSkeleton`, `FormSkeleton`, `DetailListSkeleton`, `ChartSkeleton`, `PageSkeleton` |
+| Loading | `Skeleton`, `MetricGridSkeleton`, `TableSkeleton`, `FormSkeleton`, `DetailListSkeleton`, `EmployeeCardGridSkeleton`, `ChartSkeleton`, `PageSkeleton` |
 
 Design rules ("quiet surfaces, loud numbers"):
 

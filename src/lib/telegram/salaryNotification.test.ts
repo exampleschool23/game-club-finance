@@ -1,0 +1,31 @@
+import { describe, expect, it } from 'vitest';
+import { buildSalaryNotification } from './salaryNotification';
+
+const base = { addedBy: 'Owner', employee: 'Izzat' };
+
+describe('buildSalaryNotification', () => {
+  it('describes a salary payment with its source and method', () => {
+    const text = buildSalaryNotification({ ...base, event: 'payment', amount: 150000, date: '2026-10-01', comment: 'аванс', paymentMethod: 'cash', paymentSource: 'bar' });
+    expect(text).toContain('Выплата зарплаты');
+    expect(text).toContain('Сотрудник: Izzat');
+    expect(text).toContain('Источник: Бар');
+    expect(text).toContain('Способ оплаты: Наличные');
+    expect(text).toContain('Комментарий: аванс');
+    expect(text.endsWith('Добавил(а): Owner')).toBe(true);
+  });
+  it('omits payment details for bonuses and fines', () => {
+    expect(buildSalaryNotification({ ...base, event: 'bonus', amount: 1000, date: '2026-10-01', comment: null })).not.toContain('Источник');
+    expect(buildSalaryNotification({ ...base, event: 'fine', amount: 1000, date: '2026-10-01', comment: null })).toContain('Штраф');
+  });
+  it('reports KPI, salary and activation changes', () => {
+    expect(buildSalaryNotification({ ...base, event: 'kpi_changed', kpi: 5 })).toContain('KPI: 5%');
+    expect(buildSalaryNotification({ ...base, event: 'salary_changed', salaryType: 'monthly', amount: 3000000 })).toContain('Месячная зарплата');
+    expect(buildSalaryNotification({ ...base, event: 'deactivated' })).toContain('деактивирован');
+    expect(buildSalaryNotification({ ...base, event: 'activated' })).toContain('активирован');
+  });
+  it('announces a new employee with terms', () => {
+    const text = buildSalaryNotification({ ...base, event: 'employee_added', role: 'Manager', salaryType: 'daily', amount: 100000, kpi: 3, date: '2026-10-01' });
+    expect(text).toContain('Добавлен сотрудник');
+    expect(text).toContain('Должность: Менеджер');
+  });
+});

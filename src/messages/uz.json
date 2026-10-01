@@ -721,7 +721,7 @@
       "settings": "Sozlamalar",
       "settingsDescription": "Klub sozlamalarini boshqarish",
       "salaries": "Ish haqini tahrirlash",
-      "salariesDescription": "Xodimlar, ish haqi va KPI ni o‘zgartirish, to‘lov, mukofot va jarima kiritish. Barcha klub a’zolari ish haqini ko‘ra oladi."
+      "salariesDescription": "Ish haqi to‘lovlari, mukofot va jarimalarni kiritish. Xodimlar, ish haqi va KPI ni faqat egalar o‘zgartiradi. Barcha klub a’zolari ish haqini ko‘ra oladi."
     },
     "roles": {
       "owner": "Klub egasi",
@@ -1031,6 +1031,13 @@
     "deleteRateHelp": "Stavka hisobdan chiqariladi. Oldingi stavka mavjud bo‘lsa, keyingisigacha amal qiladi. Oldingi qoldiq va KPI o‘zgarishi mumkin. O‘chirilgan stavka tarixda saqlanadi.",
     "recordOperations": "To‘lov / mukofot / jarima kiritish",
     "deactivate": "Faolsizlantirish",
+    "activate": "Faollashtirish",
+    "activated": "Xodim faollashtirildi. Ish haqi va KPI bugundan yana hisoblanadi.",
+    "activateConfirm": "Bugundan boshlab {name} uchun maosh va KPI yana hisoblanadi. Oldingi tarix va to‘lanmagan qoldiq saqlanadi.",
+    "deactivatedSection": "Faolsizlantirilgan xodimlar ({count})",
+    "ownerOnlySetupHelp": "Xodim qo‘shish hamda ish haqi, KPI, lavozim va faollikni faqat klub egasi o‘zgartira oladi. Siz to‘lov, mukofot va jarima kiritishingiz mumkin.",
+    "historyEmptyTitle": "Xodim tanlanmagan",
+    "historyEmptyDescription": "Oylik hisob-kitob, to‘lovlar va stavkalar tarixini ko‘rish uchun xodim kartochkasidan «Tarix» ni oching.",
     "deactivated": "Xodim faolsizlantirildi. Tarix va to‘lanmagan qoldiq saqlandi.",
     "changeRole": "Lavozimni o‘zgartirish",
     "lastRateHelp": "Kamida bitta ish haqi stavkasi saqlanishi kerak. Xodim sozlamalarini o‘zgartiring yoki uni faolsizlantiring.",

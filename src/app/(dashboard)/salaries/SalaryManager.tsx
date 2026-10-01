@@ -14,6 +14,7 @@ import {
   CurrencyInput,
   DataTable,
   DatePicker,
+  EmployeeCardGridSkeleton,
   EmptyState,
   Field,
   IconButton,
@@ -57,9 +58,21 @@ type SalaryView = 'operations' | 'employees' | 'history';
 type EntryKind = SalaryEntry['kind'];
 type SavingTarget = 'entry' | 'employee' | 'role' | 'deactivate' | 'delete';
 
+async function postSalary(clubId: string, body: Record<string, unknown>) {
+  const response = await fetch('/api/salaries', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ clubId, ...body }),
+  });
+  const payload = await response.json().catch(() => null) as { error?: string; code?: string | null } | null;
+  if (!response.ok) {
+    throw Object.assign(new Error(payload?.error ?? `HTTP ${response.status}`), { code: payload?.code ?? (response.status === 403 ? '42501' : '') });
+  }
+}
+
 const emptyData: Awaited<ReturnType<typeof loadSalaries>> = { employees: [], rates: [], entries: [], monthlyProfit: [] };
 
-export default function SalariesPage({ view = 'operations', employeeId }: { view?: SalaryView; employeeId?: string }) {
+export default function SalariesPage({ view = 'employees', employeeId }: { view?: SalaryView; employeeId?: string }) {
   const t = useTranslations('salaries');
   const { selectedClubId, loading: clubLoading } = useClub();
   if (!selectedClubId) {
@@ -82,7 +95,9 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   const { businessDayStartHour, enabledPaymentMethods, role, featureAccess } = useClub();
   const { showToast, toastElement } = useToast();
   const { confirm, confirmDialog } = useConfirm();
+  // Salary editors record payments, bonuses and fines; only owners change employees, salary, KPI or activation.
   const canEdit = canAccessFeature(role, featureAccess, 'salaries');
+  const isOwner = role === 'owner';
   const today = todayIso(new Date(), businessDayStartHour);
   const [data, setData] = useState(emptyData);
   const [loading, setLoading] = useState(true);
@@ -121,7 +136,10 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   const writeErrorMessage = (error: unknown) => {
     console.error('Salary write failed', error);
     const kind = classifyDatabaseWriteError(error);
-    return kind === 'permission' ? t('permissionError') : kind === 'check' ? t('checkError') : t('saveError');
+    if (kind === 'permission') return t('permissionError');
+    if (kind === 'check') return t('checkError');
+    const detail = error instanceof Error && error.message ? ` (${error.message})` : '';
+    return `${t('saveError')}${detail}`;
   };
 
   const reload = useCallback(async ({ silent = false } = {}) => {
@@ -159,14 +177,14 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   // Forms are rendered inline, so selecting an employee or switching a
   // segmented option never scrolls the page.
   function selectSetupEmployee(employee: SalaryEmployee | null) {
-    if (savingTarget === 'employee' || !canEdit) return;
+    if (savingTarget === 'employee' || !isOwner) return;
     setSelected(employee);
     setEmployeeForm(employeeFormFor(employee));
     setEmployeeError('');
   }
 
   function changeSetupMode(mode: SetupMode) {
-    if (savingTarget === 'employee' || !canEdit || mode === setupMode) return;
+    if (savingTarget === 'employee' || !isOwner || mode === setupMode) return;
     setEmployeeError('');
     if (setupMode === 'new') newEmployeeDraft.current = employeeForm;
     if (mode === 'new') {
@@ -193,7 +211,8 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
     const setError = dialog === 'entry' ? setEntryError : setEmployeeError;
     const targetEmployee = dialog === 'entry' ? entrySelected : selectedEmployee;
     event.preventDefault();
-    if (mutating.current || !canEdit) return;
+    const allowed = dialog === 'entry' ? canEdit : isOwner;
+    if (!allowed || mutating.current) return;
     if ((dialog === 'entry' || setupMode !== 'new') && !targetEmployee) return;
     const amount = dialog === 'employee' && setupMode === 'kpi' ? Number(employeeForm.kpi) : parseCurrencyInput(dialog === 'employee' ? employeeForm.amount : entryForm.amount);
     if (!Number.isFinite(amount) || amount >= 100000000000000 || (dialog === 'employee' ? amount < 0 : amount <= 0)) {
@@ -204,25 +223,21 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
     setSavingTarget(dialog);
     setError('');
     try {
-      const db = createClient();
-      const result = dialog === 'employee' && (setupMode === 'salary' || setupMode === 'kpi')
-        ? await db.rpc('change_salary_term', {
-          p_club_id: clubId, p_employee_id: targetEmployee!.id,
-          p_kind: setupMode, p_amount: amount,
-          p_salary_type: setupMode === 'salary' ? employeeForm.salary_type : null,
-        })
-        : dialog === 'employee'
-        ? await db.rpc('save_salary_employee', {
-          p_club_id: clubId, p_employee_id: employeeForm.id, p_name: employeeForm.name.trim(), p_job_title: employeeForm.job_title.trim(),
-          p_effective_date: employeeForm.date, p_salary_type: employeeForm.salary_type, p_amount: amount, p_kpi_percent: Number(employeeForm.kpi), p_active: employeeForm.active,
-        })
-        : await db.rpc('record_salary_entry', {
-          p_club_id: clubId, p_employee_id: targetEmployee!.id, p_request_id: entryForm.id, p_date: entryForm.date,
-          p_kind: entryForm.kind, p_amount: amount, p_comment: entryForm.comment.trim(),
-          p_payment_method: entryForm.kind === 'payment' ? entryForm.payment_method : null,
-          p_payment_source: entryForm.kind === 'payment' ? entryForm.payment_source : null,
+      if (dialog === 'entry') {
+        await postSalary(clubId, {
+          action: 'record_entry', employeeId: targetEmployee!.id, requestId: entryForm.id, date: entryForm.date,
+          kind: entryForm.kind, amount, comment: entryForm.comment.trim(),
+          paymentMethod: entryForm.kind === 'payment' ? entryForm.payment_method : null,
+          paymentSource: entryForm.kind === 'payment' ? entryForm.payment_source : null,
         });
-      if (result.error) throw result.error;
+      } else if (setupMode === 'salary' || setupMode === 'kpi') {
+        await postSalary(clubId, { action: 'change_term', employeeId: targetEmployee!.id, kind: setupMode, amount, salaryType: employeeForm.salary_type });
+      } else {
+        await postSalary(clubId, {
+          action: 'save_employee', employeeId: employeeForm.id, name: employeeForm.name.trim(), jobTitle: employeeForm.job_title.trim(),
+          date: employeeForm.date, salaryType: employeeForm.salary_type, amount, kpi: Number(employeeForm.kpi), active: employeeForm.active,
+        });
+      }
       if (dialog === 'entry') setEntryForm((form) => ({ ...form, id: crypto.randomUUID(), amount: '', comment: '' }));
       else if (setupMode === 'new') {
         newEmployeeDraft.current = null;
@@ -235,13 +250,12 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   }
 
   async function saveEmployeeRole() {
-    if (!roleEdit || !canEdit || mutating.current) return;
+    if (!roleEdit || !isOwner || mutating.current) return;
     mutating.current = true;
     setSavingTarget('role');
     setRoleError('');
     try {
-      const result = await createClient().rpc('change_salary_employee_role', { p_club_id: clubId, p_employee_id: roleEdit.id, p_job_title: roleEdit.role });
-      if (result.error) throw result.error;
+      await postSalary(clubId, { action: 'change_role', employeeId: roleEdit.id, jobTitle: roleEdit.role });
       setData((previous) => ({ ...previous, employees: previous.employees.map((employee) => employee.id === roleEdit.id ? { ...employee, job_title: roleEdit.role } : employee) }));
       setRoleEdit(null);
       showToast(t('saved'));
@@ -249,23 +263,26 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
     finally { mutating.current = false; setSavingTarget(null); }
   }
 
-  async function deactivateEmployee(employee: SalaryEmployee) {
-    if (mutating.current || !canEdit) return;
-    const confirmed = await confirm({ title: `${t('deactivate')} · ${employee.name}`, description: t('deactivateConfirm', { name: employee.name }), confirmLabel: t('deactivate') });
+  async function setEmployeeActive(employee: SalaryEmployee, active: boolean) {
+    if (mutating.current || !isOwner) return;
+    const confirmed = await confirm({
+      title: `${t(active ? 'activate' : 'deactivate')} · ${employee.name}`,
+      description: t(active ? 'activateConfirm' : 'deactivateConfirm', { name: employee.name }),
+      confirmLabel: t(active ? 'activate' : 'deactivate'),
+    });
     if (!confirmed) return;
     mutating.current = true;
     setSavingTarget('deactivate');
     try {
-      const result = await createClient().rpc('deactivate_salary_employee', { p_club_id: clubId, p_employee_id: employee.id });
-      if (result.error) throw result.error;
-      showToast(t('deactivated'));
+      await postSalary(clubId, { action: 'set_active', employeeId: employee.id, active });
+      showToast(t(active ? 'activated' : 'deactivated'));
       await reload({ silent: true });
     } catch (error) { showToast(writeErrorMessage(error), 'error'); }
     finally { mutating.current = false; setSavingTarget(null); }
   }
 
   async function deleteRecord() {
-    if (!deletion || !canEdit || mutating.current) return;
+    if (!deletion || !canEdit || (deletion.kind === 'rate' && !isOwner) || mutating.current) return;
     mutating.current = true;
     setSavingTarget('delete');
     setDeleteError('');
@@ -289,7 +306,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   const viewOptions: SegmentedOption<SalaryView>[] = [
     { value: 'employees', label: t('employees') },
     { value: 'operations', label: t('dailyOperations') },
-    { value: 'history', label: historyEmployee?.name ?? t('history'), disabled: !employeeId },
+    { value: 'history', label: historyEmployee?.name ?? t('history') },
   ];
 
   function renderEmployeeSelect(dialog: 'entry' | 'employee', selected: SalaryEmployee | null) {
@@ -429,6 +446,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
             onChange={changeSetupMode}
           />
         )}
+        {/* eslint-disable-next-line react-hooks/refs -- save() reads refs only inside the submit handler, never while rendering. */}
         <form onSubmit={(event) => void save(event, dialog)} className="space-y-4">
           <fieldset disabled={formDisabled(dialog)} className="grid gap-4 sm:grid-cols-2">
             {dialog === 'entry' && (
@@ -461,8 +479,88 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
     );
   }
 
+  function renderEmployeeCard(employee: SalaryEmployee) {
+    const rate = displayRate(employee);
+    const upcoming = employee.joined_on > today && Boolean(rate?.active);
+    const balance = salaryBalance(balances[employee.id] ?? []);
+    const status = upcoming ? 'upcoming' : rate?.active ? 'active' : 'inactive';
+
+    return (
+              <Card key={employee.id} as="article" padding="lg">
+                <div className="mb-5 flex items-start gap-3">
+                  <Avatar name={employee.name} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="break-words text-base font-semibold text-gray-950">{employee.name}</h2>
+                    <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-500">
+                      <span className="break-words">{roleLabel(employee.job_title)}</span>
+                      {isOwner && roleEdit?.id !== employee.id && (
+                        <IconButton
+                          variant="ghost"
+                          size="sm"
+                          label={`${t('changeRole')} · ${employee.name}`}
+                          icon={<Pencil size={15} />}
+                          disabled={saving}
+                          onClick={() => { setRoleError(''); setRoleEdit({ id: employee.id, role: knownEmployeeRole(employee.job_title) ?? '' }); }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant={status === 'upcoming' ? 'info' : status === 'active' ? 'success' : 'neutral'}>{t(status)}</Badge>
+                </div>
+                {isOwner && roleEdit?.id === employee.id && (
+                  <form className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3" onSubmit={(event) => { event.preventDefault(); void saveEmployeeRole(); }}>
+                    <Field label={t('role')} htmlFor={`employee-role-${employee.id}`} error={roleError || undefined}>
+                      <div className="flex flex-wrap gap-2">
+                        <Select id={`employee-role-${employee.id}`} className="min-w-0 flex-1" required disabled={saving} value={roleEdit.role} onChange={(event) => setRoleEdit({ ...roleEdit, role: event.target.value })}>
+                          <option value="">{t('selectRole')}</option>
+                          {employeeRoles.map((option) => <option key={option} value={option}>{t(`roles.${option}`)}</option>)}
+                        </Select>
+                        <IconButton type="submit" variant="soft" label={tc('save')} icon={<Check size={18} />} loading={savingTarget === 'role'} disabled={!roleEdit.role || (saving && savingTarget !== 'role')} />
+                        <IconButton label={tc('cancel')} icon={<X size={18} />} disabled={saving} onClick={() => { setRoleEdit(null); setRoleError(''); }} />
+                      </div>
+                    </Field>
+                  </form>
+                )}
+                <dl className="divide-y divide-gray-100 text-sm">
+                  {[
+                    [t(upcoming ? 'startsOn' : 'joined'), formatDateOnly(employee.joined_on, locale)],
+                    [t(rate?.salary_type ?? 'daily'), currency(Number(rate?.amount ?? 0))],
+                    [t('kpi'), `${Number(rate?.kpi_percent ?? 0)}%`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-4 py-2">
+                      <dt className="text-gray-500">{label}</dt>
+                      <dd className="text-right font-semibold tabular-nums text-gray-900">{value}</dd>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between gap-4 pt-3">
+                    <dt className="text-gray-500">{t(balance < 0 ? 'advance' : 'balance')}</dt>
+                    <dd className={cn('text-right text-xl font-bold tracking-tight tabular-nums', balance > 0 ? 'text-warning-600' : 'text-gray-950')}>
+                      {formatCurrency(Math.abs(balance))}{currencySuffix}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <ButtonLink size="sm" href={`/salaries/employees/${employee.id}`} icon={<History size={16} aria-hidden="true" />}>{t('history')}</ButtonLink>
+                  {isOwner && (
+                    <Button
+                      variant={rate?.active ? 'dangerOutline' : 'outline'}
+                      size="sm"
+                      disabled={saving}
+                      onClick={() => void setEmployeeActive(employee, !rate?.active)}
+                      icon={<Power size={16} aria-hidden="true" />}
+                    >
+                      {t(rate?.active ? 'deactivate' : 'activate')}
+                    </Button>
+                  )}
+                </div>
+              </Card>
+    );
+  }
+
   const pageTitle = view === 'history' ? historyEmployee?.name ?? t('history') : t(view === 'employees' ? 'employees' : 'title');
   const employeesSorted = [...data.employees].sort((a, b) => a.name.localeCompare(b.name));
+  const inactiveEmployees = employeesSorted.filter((employee) => !displayRate(employee)?.active);
+  const liveEmployees = employeesSorted.filter((employee) => displayRate(employee)?.active);
   const dueValue = view === 'history' ? salaryBalance(historyMonths) : due;
   const currencySuffix = <span className="ml-1.5 text-sm font-medium tracking-normal text-gray-500">{tc('currency')}</span>;
   const metricMoney = (value: number) => <>{formatCurrency(value)}{currencySuffix}</>;
@@ -470,7 +568,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
   return (
     <div className="space-y-5">
       <PageHeader
-        back={view === 'history' ? '/salaries/employees' : undefined}
+        back={view === 'history' && employeeId ? '/salaries/employees' : undefined}
         backLabel={t('employees')}
         title={pageTitle}
         description={t(view === 'history' ? 'history' : 'description')}
@@ -517,102 +615,50 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
 
       {!canEdit && <InlineAlert variant="info">{t('viewOnlyHelp')}</InlineAlert>}
 
+      {canEdit && !isOwner && view === 'operations' && <InlineAlert variant="info">{t('ownerOnlySetupHelp')}</InlineAlert>}
+
       {canEdit && view === 'operations' && (
-        <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <div className={cn('grid gap-5 xl:items-start', isOwner && 'xl:grid-cols-2')}>
           {renderForm('entry')}
-          {renderForm('employee')}
+          {isOwner && renderForm('employee')}
         </div>
       )}
 
-      {view === 'employees' && loading && <TableSkeleton rows={4} columns={3} />}
+      {view === 'employees' && loading && <EmployeeCardGridSkeleton />}
 
       {view === 'employees' && !loading && !loadError && data.employees.length === 0 && (
         <Card><EmptyState icon={Users} title={t('emptyTitle')} description={t('emptyDescription')} /></Card>
       )}
 
       {view === 'employees' && !loading && !loadError && data.employees.length > 0 && (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {employeesSorted.map((employee) => {
-            const rate = displayRate(employee);
-            const upcoming = employee.joined_on > today && Boolean(rate?.active);
-            const balance = salaryBalance(balances[employee.id] ?? []);
-            const status = upcoming ? 'upcoming' : rate?.active ? 'active' : 'inactive';
-
-            return (
-              <Card key={employee.id} as="article" padding="lg">
-                <div className="mb-5 flex items-start gap-3">
-                  <Avatar name={employee.name} size="lg" />
-                  <div className="min-w-0 flex-1">
-                    <h2 className="break-words text-base font-semibold text-gray-950">{employee.name}</h2>
-                    <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-500">
-                      <span className="break-words">{roleLabel(employee.job_title)}</span>
-                      {canEdit && roleEdit?.id !== employee.id && (
-                        <IconButton
-                          variant="ghost"
-                          size="sm"
-                          label={`${t('changeRole')} · ${employee.name}`}
-                          icon={<Pencil size={15} />}
-                          disabled={saving}
-                          onClick={() => { setRoleError(''); setRoleEdit({ id: employee.id, role: knownEmployeeRole(employee.job_title) ?? '' }); }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                  <Badge variant={status === 'upcoming' ? 'info' : status === 'active' ? 'success' : 'neutral'}>{t(status)}</Badge>
-                </div>
-                {canEdit && roleEdit?.id === employee.id && (
-                  <form className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3" onSubmit={(event) => { event.preventDefault(); void saveEmployeeRole(); }}>
-                    <Field label={t('role')} htmlFor={`employee-role-${employee.id}`} error={roleError || undefined}>
-                      <div className="flex flex-wrap gap-2">
-                        <Select id={`employee-role-${employee.id}`} className="min-w-0 flex-1" required disabled={saving} value={roleEdit.role} onChange={(event) => setRoleEdit({ ...roleEdit, role: event.target.value })}>
-                          <option value="">{t('selectRole')}</option>
-                          {employeeRoles.map((option) => <option key={option} value={option}>{t(`roles.${option}`)}</option>)}
-                        </Select>
-                        <IconButton type="submit" variant="soft" label={tc('save')} icon={<Check size={18} />} loading={savingTarget === 'role'} disabled={!roleEdit.role || (saving && savingTarget !== 'role')} />
-                        <IconButton label={tc('cancel')} icon={<X size={18} />} disabled={saving} onClick={() => { setRoleEdit(null); setRoleError(''); }} />
-                      </div>
-                    </Field>
-                  </form>
-                )}
-                <dl className="divide-y divide-gray-100 text-sm">
-                  {[
-                    [t(upcoming ? 'startsOn' : 'joined'), formatDateOnly(employee.joined_on, locale)],
-                    [t(rate?.salary_type ?? 'daily'), currency(Number(rate?.amount ?? 0))],
-                    [t('kpi'), `${Number(rate?.kpi_percent ?? 0)}%`],
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between gap-4 py-2">
-                      <dt className="text-gray-500">{label}</dt>
-                      <dd className="text-right font-semibold tabular-nums text-gray-900">{value}</dd>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between gap-4 pt-3">
-                    <dt className="text-gray-500">{t(balance < 0 ? 'advance' : 'balance')}</dt>
-                    <dd className={cn('text-right text-xl font-bold tracking-tight tabular-nums', balance > 0 ? 'text-warning-600' : 'text-gray-950')}>
-                      {formatCurrency(Math.abs(balance))}{currencySuffix}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <ButtonLink size="sm" href={`/salaries/employees/${employee.id}`} icon={<History size={16} aria-hidden="true" />}>{t('history')}</ButtonLink>
-                  {canEdit && (
-                    <IconButton
-                      variant="danger"
-                      size="sm"
-                      label={`${t('deactivate')} · ${employee.name}`}
-                      disabled={saving || !rate?.active}
-                      onClick={() => void deactivateEmployee(employee)}
-                      icon={<Power size={16} aria-hidden="true" />}
-                    />
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+        <>
+          {liveEmployees.length > 0 && (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{liveEmployees.map(renderEmployeeCard)}</div>
+          )}
+          {inactiveEmployees.length > 0 && (
+            <details className="group">
+              <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-xl px-3 text-[13px] font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 [&::-webkit-details-marker]:hidden [&>svg]:transition-transform group-open:[&>svg]:rotate-90">
+                <ChevronRight size={16} aria-hidden="true" />
+                {t('deactivatedSection', { count: inactiveEmployees.length })}
+              </summary>
+              <div className="mt-3 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{inactiveEmployees.map(renderEmployeeCard)}</div>
+            </details>
+          )}
+        </>
       )}
 
-      {view === 'history' && loading && <TableSkeleton rows={6} columns={7} />}
-      {view === 'history' && !loading && !loadError && !historyEmployee && (
+      {view === 'history' && employeeId && loading && <TableSkeleton rows={6} columns={7} />}
+      {view === 'history' && !employeeId && (
+        <Card>
+          <EmptyState
+            icon={History}
+            title={t('historyEmptyTitle')}
+            description={t('historyEmptyDescription')}
+            action={<Button variant="outline" onClick={() => setView('employees')}>{t('employees')}</Button>}
+          />
+        </Card>
+      )}
+      {view === 'history' && employeeId && !loading && !loadError && !historyEmployee && (
         <Card><EmptyState icon={Users} title={t('employeeNotFound')} /></Card>
       )}
       {view === 'history' && historyEmployee && (
@@ -673,7 +719,7 @@ function SalaryManager({ clubId, view: initialView, employeeId }: { clubId: stri
                       </p>
                       {rate.deleted_at ? (
                         <Badge variant="neutral" size="sm">{t('deleted')} · {formatDateTime(rate.deleted_at, locale)}</Badge>
-                      ) : canEdit && (
+                      ) : isOwner && (
                         <div className="flex flex-col items-end gap-1">
                           <Button
                             variant="dangerOutline"

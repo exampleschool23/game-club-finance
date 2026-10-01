@@ -54,6 +54,37 @@ export function TableSkeleton({ rows = 6, columns = 4, className }: { rows?: num
   );
 }
 
+/** Placeholder with the footprint of the employee card grid. */
+export function EmployeeCardGridSkeleton({ count = 6, className }: { count?: number; className?: string }) {
+  const statusProps = useLoadingStatus();
+  return (
+    <div className={cn('grid gap-5 md:grid-cols-2 xl:grid-cols-3', className)} {...statusProps}>
+      {Array.from({ length: count }).map((_, index) => (
+        <div key={index} className="rounded-2xl border border-gray-200 bg-surface p-6 shadow-card">
+          <div className="mb-5 flex items-start gap-3">
+            <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-5 w-3/5" />
+              <Skeleton className="h-3 w-2/5 bg-gray-100" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, row) => (
+              <div key={row} className="flex items-center justify-between gap-4">
+                <Skeleton className="h-3 w-24 bg-gray-100" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+            ))}
+            <Skeleton className="ml-auto mt-4 h-7 w-32" />
+          </div>
+          <Skeleton className="mt-5 h-9 w-28 rounded-lg" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function FormSkeleton({ className }: { className?: string }) {
   const statusProps = useLoadingStatus();
   return (

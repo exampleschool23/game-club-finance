@@ -43,6 +43,7 @@ export { SegmentedControl, type SegmentedOption } from './SegmentedControl';
 export {
   ChartSkeleton,
   DetailListSkeleton,
+  EmployeeCardGridSkeleton,
   FormSkeleton,
   MetricGridSkeleton,
   PageSkeleton,

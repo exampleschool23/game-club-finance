@@ -721,7 +721,7 @@
       "settings": "Settings",
       "settingsDescription": "Manage club settings",
       "salaries": "Edit salaries",
-      "salariesDescription": "Allow employee, salary and KPI changes, payments, bonuses and fines. All club members can view salaries."
+      "salariesDescription": "Allow recording salary payments, bonuses and fines. Only owners change employees, salary and KPI. All club members can view salaries."
     },
     "roles": {
       "owner": "Owner",
@@ -1031,6 +1031,13 @@
     "deleteRateHelp": "This removes the rate from salary calculations. The previous rate, if any, continues until the next rate. Historical balances and KPI may change. The deleted rate stays in history.",
     "recordOperations": "Record payment / bonus / fine",
     "deactivate": "Deactivate",
+    "activate": "Activate",
+    "activated": "Employee activated. Salary and KPI accrue again from today.",
+    "activateConfirm": "{name} will start accruing salary and KPI again from today. Previous history and any unpaid balance are kept.",
+    "deactivatedSection": "Deactivated employees ({count})",
+    "ownerOnlySetupHelp": "Only a club owner can add employees or change salary, KPI, role and activation. You can record payments, bonuses and fines.",
+    "historyEmptyTitle": "No employee selected",
+    "historyEmptyDescription": "Open History from an employee card to see their monthly breakdown, payments and rate history.",
     "deactivated": "Employee deactivated. Previous history and unpaid balance are preserved.",
     "changeRole": "Change role",
     "lastRateHelp": "Keep at least one salary rate. Edit the employee settings or deactivate the employee instead.",
