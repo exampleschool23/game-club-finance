@@ -94,7 +94,9 @@ tables, even when RLS would also filter it.
 3. Make the final state safe for databases with all prior migrations applied.
 4. Preserve data and ledger history; use an explicit audited repair when needed.
 5. Restrict function execution and test important SQL text/behavior patterns.
-6. Apply all committed migrations in order with `supabase db push`.
+6. Apply all committed migrations in order with `scripts/db-migrate.sh <db-url>`
+   (`--dry-run` first). `supabase db push` does not read the top-level
+   `migrations/` folder. See the README for unrecorded-history handling.
 7. Coordinate database-first deployment when new application code requires a
    new function, column, constraint, or delivery ledger state.
 
@@ -114,7 +116,7 @@ Owners can run the read-only Settings health check after applying
 `052_migration_health.sql`. The RPC authorizes the selected club's owner before
 reading metadata. It returns recorded migration versions and direct function
 checks for 050/051; it never invokes a withdrawal RPC or returns function bodies.
-SQL Editor execution may not populate `supabase_migrations.schema_migrations`,
+`scripts/db-migrate.sh` records versions there; SQL Editor execution does not,
 so an unrecorded version is **unconfirmed**, not proof of a missing migration.
 Exact function-body fingerprints identify a match to this app version; different
 bodies require review, including harmless manual formatting changes.

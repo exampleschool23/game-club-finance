@@ -19,15 +19,29 @@ npm install
 
 ### 2. Set up Supabase
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Install the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
-3. Link the repository and apply **all** committed migrations in order:
+1. Create a project at [supabase.com](https://supabase.com). In Database →
+   Extensions, enable `pg_cron` and `pg_net`.
+2. Install the Postgres 17 client (`brew install postgresql@17`, or
+   `postgresql-client-17` on Linux) so `psql` is available.
+3. Copy the project's **Session pooler** connection string (Project Settings →
+   Database → Connection string) and apply **all** committed migrations in order:
 
 ```bash
-supabase login
-supabase link --project-ref <project-ref>
-supabase db push
+scripts/db-migrate.sh "postgresql://your-session-pooler-url" --dry-run
+scripts/db-migrate.sh "postgresql://your-session-pooler-url"
 ```
+
+The migrations live in `migrations/`, not `supabase/migrations/`, so
+`supabase db push` does not see them. `db-migrate.sh` runs each pending file and
+records it in `supabase_migrations.schema_migrations` in the same transaction,
+the history the Settings migration health check reads; a failed migration rolls
+back and is not recorded. Rerunning applies only new migrations.
+
+It stops without changing anything if the database has tables but no recorded
+history, or if an earlier migration is unrecorded while later ones are recorded.
+That means migrations were run by hand in the SQL editor. Confirm each listed
+version really is applied, record it with
+`scripts/db-migrate.sh "<url>" --mark-applied <version>`, then rerun.
 
 Do not run only `001_initial_schema.sql`: later migrations contain required
 multi-club, inventory, authorization, and reporting changes.
