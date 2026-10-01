@@ -48,6 +48,7 @@ describe('database backup', () => {
     expect(script).not.toMatch(/pg_dump[^\n]*>\s*[^"$]/);
     expect(script).toMatch(/"\$\{PG_DUMP:-pg_dump\}"/);
     expect(script).toMatch(/game-club-finance\/db-backups/);
+    expect(flow).toMatch(/runs-on: ubuntu-24\.04/);
     expect(flow).toMatch(/PG_DUMP: \/usr\/lib\/postgresql\/17\/bin\/pg_dump/);
     expect(flow).toMatch(/cron:/);
     expect(flow).toMatch(/workflow_dispatch/);

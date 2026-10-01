@@ -7,6 +7,11 @@ Cloudflare R2 bucket under `game-club-finance/db-backups/`, and keeps only the
 newest 14 dumps in that prefix (`BACKUP_KEEP`), deleting older ones. Manual runs
 count toward the 14. GitHub may start scheduled runs a few minutes late.
 
+The job is pinned to `ubuntu-24.04` rather than `ubuntu-latest`: it installs
+`pg_dump` 17 from the PostgreSQL apt repository by Ubuntu codename, which may
+not support a new Ubuntu release right away. Move the pin only after confirming
+apt.postgresql.org publishes packages for the newer codename.
+
 ## One-time setup
 
 1. **age key pair.** Run `age-keygen -o age-key.txt`. The public key (`age1...`)
