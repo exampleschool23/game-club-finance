@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, afterAll, expect, it } from 'vitest';
 
-const migration = (name: string) => readFileSync(resolve('supabase/migrations', name), 'utf8');
+const migration = (name: string) => readFileSync(resolve('migrations', name), 'utf8');
 let db: PGlite;
 beforeAll(async () => {
   db = new PGlite();

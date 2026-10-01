@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('final migration policy state', () => {
   it('removes pre-multi-club bypasses while retaining club-scoped replacements', () => {
-    const directory = resolve(process.cwd(), 'supabase/migrations');
+    const directory = resolve(process.cwd(), 'migrations');
     const active = new Set<string>();
     for (const file of readdirSync(directory).filter((name) => name.endsWith('.sql')).sort()) {
       const sql = readFileSync(resolve(directory, file), 'utf8');

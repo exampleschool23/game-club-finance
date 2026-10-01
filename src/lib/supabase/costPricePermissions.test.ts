@@ -2,7 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-const migration = (name: string) => readFileSync(`supabase/migrations/${name}`, 'utf8');
+const migration = (name: string) => readFileSync(`migrations/${name}`, 'utf8');
 const club = '10000000-0000-0000-0000-000000000001';
 const otherClub = '10000000-0000-0000-0000-000000000002';
 const actor = '20000000-0000-0000-0000-000000000001';

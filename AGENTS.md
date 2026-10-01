@@ -15,7 +15,7 @@ guide relevant to the task; do not load every document or migration by default.
 - `src/lib/supabase`: browser, server, and service clients plus query helpers.
 - `src/lib/telegram`: daily report assembly, rendering, transport, and delivery.
 - `src/messages/{en,ru,uz}.json`: all user-facing translations.
-- `supabase/migrations`: the ordered production schema and database behavior.
+- `migrations`: the ordered production schema and database behavior.
 - `scripts`: explicitly invoked maintenance and preview scripts.
 
 ## Read by task

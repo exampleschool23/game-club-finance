@@ -10,7 +10,7 @@ describe('Telegram report recovery crons', () => {
 
     expect(config.crons).toBeUndefined();
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/041_supabase_daily_report_cron_and_delivery_audit.sql'),
+      resolve(process.cwd(), 'migrations/041_supabase_daily_report_cron_and_delivery_audit.sql'),
       'utf8',
     );
     expect(migration).toContain("'game-club-daily-finance-report'");

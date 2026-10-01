@@ -14,8 +14,8 @@ beforeAll(async () => {
       ('rent', null), ('OVQAT', null), ('Musur', 'bags'), ('ashibka', ''), ('SKIDKA', null),
       ('INTERNET TARIF', null), ('RASXOD', 'misc'), ('  Shakar ', null), ('brand new thing', null);
   `);
-  await db.exec(readFileSync(resolve('supabase/migrations/068_unify_expense_categories.sql'), 'utf8'));
-  await db.exec(readFileSync(resolve('supabase/migrations/069_remove_other_expense_category.sql'), 'utf8'));
+  await db.exec(readFileSync(resolve('migrations/068_unify_expense_categories.sql'), 'utf8'));
+  await db.exec(readFileSync(resolve('migrations/069_remove_other_expense_category.sql'), 'utf8'));
 });
 afterAll(async () => { await db?.close(); });
 

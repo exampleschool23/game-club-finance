@@ -3,11 +3,11 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/037_telegram_report_delivery_ledger.sql'),
+  resolve(process.cwd(), 'migrations/037_telegram_report_delivery_ledger.sql'),
   'utf8',
 );
 const uuidFixMigration = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/039_fix_telegram_delivery_uuid_generation.sql'),
+  resolve(process.cwd(), 'migrations/039_fix_telegram_delivery_uuid_generation.sql'),
   'utf8',
 );
 

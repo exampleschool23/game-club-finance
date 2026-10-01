@@ -107,8 +107,8 @@ the forward stock chain. Preserve the database behavior in migrations 034 and
 - `src/lib/supabase/stockOpeningBalances.ts`: opening read RPC and paginated fallback.
 - `src/lib/calculations/stock.ts`: pure formulas.
 - `src/lib/calculations/barMoney.ts`: bar cash and purchase cutoff.
-- `supabase/migrations/034_atomic_closing_stock_save.sql`: atomic stock model.
-- `supabase/migrations/038_stock_snapshot_and_payment_method_integrity.sql`:
+- `migrations/034_atomic_closing_stock_save.sql`: atomic stock model.
+- `migrations/038_stock_snapshot_and_payment_method_integrity.sql`:
   historical snapshot and archive rules.
 
 ## Verification focus

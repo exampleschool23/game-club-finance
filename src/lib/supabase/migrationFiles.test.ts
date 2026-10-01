@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('Supabase migration files', () => {
   it('validates custom withdrawals and allocates all sources atomically', () => {
-    const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/051_custom_owner_withdrawals.sql'), 'utf8');
+    const migration = readFileSync(resolve(process.cwd(), 'migrations/051_custom_owner_withdrawals.sql'), 'utf8');
     expect(migration).toContain("current_user_club_role(p_club_id) is distinct from 'owner'");
     expect(migration).toContain('NEW.amount > available_in_month');
     expect(migration).not.toContain('NEW.amount <> available_in_month');
@@ -16,7 +16,7 @@ describe('Supabase migration files', () => {
   });
 
   it('uses a unique version prefix for every migration', () => {
-    const migrationDirectory = resolve(process.cwd(), 'supabase/migrations');
+    const migrationDirectory = resolve(process.cwd(), 'migrations');
     const migrationFiles = readdirSync(migrationDirectory).filter((name) => name.endsWith('.sql'));
     const versions = migrationFiles.map((name) => {
       const match = /^(\d+)_/.exec(name);
@@ -29,7 +29,7 @@ describe('Supabase migration files', () => {
 
   it('protects ledger-controlled product fields at the database boundary', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/034_atomic_closing_stock_save.sql'),
+      resolve(process.cwd(), 'migrations/034_atomic_closing_stock_save.sql'),
       'utf8',
     );
     const updateGrant = /grant update\s*\(([\s\S]*?)\)\s*on table public\.products/i.exec(migration);
@@ -55,7 +55,7 @@ describe('Supabase migration files', () => {
 
   it('keeps debts and payments append-only for application roles', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/036_financial_integrity_hardening.sql'),
+      resolve(process.cwd(), 'migrations/036_financial_integrity_hardening.sql'),
       'utf8',
     );
 
@@ -70,7 +70,7 @@ describe('Supabase migration files', () => {
 
   it('preserves historical stock snapshots and validates payment methods', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/038_stock_snapshot_and_payment_method_integrity.sql'),
+      resolve(process.cwd(), 'migrations/038_stock_snapshot_and_payment_method_integrity.sql'),
       'utf8',
     );
 
@@ -93,7 +93,7 @@ describe('Supabase migration files', () => {
 
   it('stores finalized monthly average income and reads only the current month live', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/042_monthly_average_income_snapshots.sql'),
+      resolve(process.cwd(), 'migrations/042_monthly_average_income_snapshots.sql'),
       'utf8',
     );
 
@@ -115,7 +115,7 @@ describe('Supabase migration files', () => {
 
   it('limits monthly average income snapshots and live totals to game-club income', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/043_game_club_only_monthly_average_income.sql'),
+      resolve(process.cwd(), 'migrations/043_game_club_only_monthly_average_income.sql'),
       'utf8',
     );
 
@@ -130,7 +130,7 @@ describe('Supabase migration files', () => {
 
   it('returns compact, authorized owner-profit monthly aggregates', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/044_owner_profit_snapshot.sql'),
+      resolve(process.cwd(), 'migrations/044_owner_profit_snapshot.sql'),
       'utf8',
     );
 
@@ -145,7 +145,7 @@ describe('Supabase migration files', () => {
 
   it('adds payment-method balances to the owner-profit snapshot', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/045_owner_profit_payment_method_balances.sql'),
+      resolve(process.cwd(), 'migrations/045_owner_profit_payment_method_balances.sql'),
       'utf8',
     );
 
@@ -157,7 +157,7 @@ describe('Supabase migration files', () => {
 
   it('stores complete Telegram coordinates for expense notifications', () => {
     const migration = readFileSync(
-      resolve(process.cwd(), 'supabase/migrations/046_expense_telegram_message_coordinates.sql'),
+      resolve(process.cwd(), 'migrations/046_expense_telegram_message_coordinates.sql'),
       'utf8',
     );
 

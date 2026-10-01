@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const readMigration = (name: string) => readFileSync(resolve(process.cwd(), 'supabase/migrations', name), 'utf8');
+const readMigration = (name: string) => readFileSync(resolve(process.cwd(), 'migrations', name), 'utf8');
 const original = readMigration('033_club_membership_feature_access.sql');
 const migration = readMigration('054_cache_ledger_read_permissions.sql');
 const tables = ['products', 'daily_cash_entries', 'stock_purchases', 'daily_stock_counts', 'expenses', 'new_debts', 'debt_payments', 'owner_withdrawals'];

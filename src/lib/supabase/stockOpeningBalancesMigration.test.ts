@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildEditableClosingStockRows, buildClosingStockUpserts } from '../closingStock';
 import type { Product } from '../../types';
 
-const migration = (name: string) => readFileSync(resolve('supabase/migrations', name), 'utf8');
+const migration = (name: string) => readFileSync(resolve('migrations', name), 'utf8');
 const club = '10000000-0000-0000-0000-000000000001';
 const otherClub = '10000000-0000-0000-0000-000000000002';
 const actor = '20000000-0000-0000-0000-000000000001';

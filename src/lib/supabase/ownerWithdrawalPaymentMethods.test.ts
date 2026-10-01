@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const readMigration = (name: string) => readFileSync(resolve(process.cwd(), 'supabase/migrations', name), 'utf8');
+const readMigration = (name: string) => readFileSync(resolve(process.cwd(), 'migrations', name), 'utf8');
 const owner = '00000000-0000-0000-0000-000000000001';
 const admin = '00000000-0000-0000-0000-000000000002';
 const club = '10000000-0000-0000-0000-000000000001';
