@@ -7,6 +7,11 @@ Cloudflare R2 bucket under `game-club-finance/db-backups/`, and keeps only the
 newest 14 dumps in that prefix (`BACKUP_KEEP`), deleting older ones. Manual runs
 count toward the 14. GitHub may start scheduled runs a few minutes late.
 
+The first successful dump of each UTC month is also stored under
+`game-club-finance/db-backups/monthly/`, and the newest 24 monthly copies are
+kept (`BACKUP_KEEP_MONTHLY`). Daily pruning never deletes monthly copies, so a
+mistake noticed after two weeks can still be undone from an earlier month.
+
 The job is pinned to `ubuntu-24.04` rather than `ubuntu-latest`: it installs
 `pg_dump` 17 from the PostgreSQL apt repository by Ubuntu codename, which may
 not support a new Ubuntu release right away. Move the pin only after confirming
@@ -48,7 +53,10 @@ ledgers and saved stock snapshots; do that only in a real disaster.
 
 ## Notes
 
-- GitHub pauses scheduled workflows after 60 days without repository activity.
+- GitHub pauses scheduled workflows in public repositories after 60 days without
+  repository activity. The workflow's `keepalive` job re-enables itself on every
+  run to reset that timer. If the Actions tab ever shows the workflow disabled,
+  enable it there and run it once manually.
 - Storage buckets are not included; the app does not use Supabase Storage.
 - Supabase Cron jobs and Vault secrets live outside `public`/`auth` and are not
   in the dump; recreate them from the [Telegram report runbook](telegram-report.md)

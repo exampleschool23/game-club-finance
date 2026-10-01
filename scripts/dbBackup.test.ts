@@ -31,6 +31,24 @@ describe('database backup', () => {
     const script = read('scripts/db-backup.sh');
     expect(script).toMatch(/BACKUP_KEEP:-14/);
     expect(script).toMatch(/sort -r \| tail -n \+"\$\(\(keep \+ 1\)\)"/);
+    expect(script).toMatch(/prune "\$prefix" "\$keep"/);
+  });
+
+  it('keeps one copy per month for the newest 24 months, separate from daily pruning', () => {
+    const script = read('scripts/db-backup.sh');
+    expect(script).toMatch(/BACKUP_KEEP_MONTHLY:-24/);
+    expect(script).toMatch(/monthly_prefix="\$\{prefix\}\/monthly"/);
+    expect(script).toMatch(/--prefix "\$\{monthly_prefix\}\/db-\$\{month\}"/);
+    expect(script).toMatch(/prune "\$monthly_prefix" "\$keep_monthly"/);
+    // Daily pruning matches only keys directly under the prefix, never monthly/ copies.
+    expect(script).toMatch(/grep -E "\^\$\{dir\}\/db-/);
+  });
+
+  it('keeps the schedule alive in a separate job with only actions write access', () => {
+    const flow = read('.github/workflows/db-backup.yml');
+    expect(flow).toMatch(/^permissions:\n  contents: read$/m);
+    expect(flow).toMatch(/keepalive:\n(?:    .*\n)*    permissions:\n      actions: write\n/);
+    expect(flow).toMatch(/actions\/workflows\/db-backup\.yml\/enable/);
   });
 
   it('rejects an invalid copy count before dumping', () => {
@@ -38,6 +56,9 @@ describe('database backup', () => {
       const result = run('scripts/db-backup.sh', [], { ...configured, BACKUP_KEEP: keep });
       expect(result.status).not.toBe(0);
       expect(result.stderr.toString()).toMatch(/BACKUP_KEEP must be a positive whole number/);
+      const monthly = run('scripts/db-backup.sh', [], { ...configured, BACKUP_KEEP_MONTHLY: keep });
+      expect(monthly.status).not.toBe(0);
+      expect(monthly.stderr.toString()).toMatch(/BACKUP_KEEP_MONTHLY must be a positive whole number/);
     }
   });
 
