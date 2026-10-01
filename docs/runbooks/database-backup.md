@@ -1,11 +1,11 @@
 # Nightly database backup
 
 A GitHub Actions workflow (`.github/workflows/db-backup.yml`) dumps the Supabase
-`public` and `auth` schemas every night at 21:47 UTC (02:47 Asia/Tashkent),
+`public` and `auth` schemas every morning at 01:00 UTC (06:00 Asia/Tashkent),
 encrypts the dump with [age](https://github.com/FiloSottile/age), uploads it to a
-Cloudflare R2 bucket under `game-club-finance/db-backups/`, and deletes dumps in
-that prefix older than 30 days (`BACKUP_RETENTION_DAYS`). It runs well clear of
-the 01:00 UTC Telegram report.
+Cloudflare R2 bucket under `game-club-finance/db-backups/`, and keeps only the
+newest 14 dumps in that prefix (`BACKUP_KEEP`), deleting older ones. Manual runs
+count toward the 14. GitHub may start scheduled runs a few minutes late.
 
 ## One-time setup
 
@@ -34,7 +34,7 @@ Create an empty scratch Postgres or Supabase project, download a dump from R2,
 then:
 
 ```bash
-AGE_IDENTITY_FILE=age-key.txt scripts/db-restore.sh db-2026-10-01T214700Z.dump.age "postgresql://scratch-url"
+AGE_IDENTITY_FILE=age-key.txt scripts/db-restore.sh db-2026-10-02T010000Z.dump.age "postgresql://scratch-url"
 ```
 
 Needs `age` and a `pg_restore` of the same major version as the server.

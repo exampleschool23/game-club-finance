@@ -1,7 +1,7 @@
 name: Database backup
 on:
   schedule:
-    - cron: '47 21 * * *'
+    - cron: '0 1 * * *'
   workflow_dispatch:
 permissions:
   contents: read

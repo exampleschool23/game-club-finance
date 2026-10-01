@@ -5,8 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 const path = (relative: string) => fileURLToPath(new URL(`../${relative}`, import.meta.url));
 const read = (relative: string) => readFileSync(path(relative), 'utf8');
-const run = (script: string, args: string[] = []) =>
-  spawnSync('bash', [path(script), ...args], { env: { NODE_ENV: 'test', PATH: process.env.PATH } });
+const run = (script: string, args: string[] = [], env: Record<string, string> = {}) =>
+  spawnSync('bash', [path(script), ...args], { env: { NODE_ENV: 'test', PATH: process.env.PATH, ...env } });
+const configured = Object.fromEntries(
+  ['SUPABASE_DB_URL', 'AGE_PUBLIC_KEY', 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']
+    .map((name) => [name, 'x']),
+);
 
 describe('database backup', () => {
   it('ships valid bash scripts', () => {
@@ -20,6 +24,21 @@ describe('database backup', () => {
     const result = run('scripts/db-backup.sh');
     expect(result.status).not.toBe(0);
     expect(result.stderr.toString()).toMatch(/Missing required variable/);
+  });
+
+  it('runs at 06:00 Tashkent and keeps the newest 14 copies', () => {
+    expect(read('.github/workflows/db-backup.yml')).toMatch(/cron: '0 1 \* \* \*'/);
+    const script = read('scripts/db-backup.sh');
+    expect(script).toMatch(/BACKUP_KEEP:-14/);
+    expect(script).toMatch(/sort -r \| tail -n \+"\$\(\(keep \+ 1\)\)"/);
+  });
+
+  it('rejects an invalid copy count before dumping', () => {
+    for (const keep of ['0', 'abc', '-3']) {
+      const result = run('scripts/db-backup.sh', [], { ...configured, BACKUP_KEEP: keep });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr.toString()).toMatch(/BACKUP_KEEP must be a positive whole number/);
+    }
   });
 
   it('encrypts dumps and passes secrets to the workflow only through env', () => {
