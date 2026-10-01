@@ -9,6 +9,7 @@ import {
   Clock3,
   CreditCard,
   Gamepad2,
+  ReceiptText,
   MonitorSmartphone,
   RotateCw,
   Save,
@@ -17,7 +18,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { calculateFinancialReportTotals } from '@/lib/calculations/dailyReport';
-import { canReadFinancialTotals } from '@/lib/permissions';
+import { canAccessFeature, canReadFinancialTotals } from '@/lib/permissions';
+import ExpenseRegistrationForm from '../reports/ExpensesPanel';
 import { loadDailyCashSummary, emptyDailyCashSummary, type DailyCashSummary } from '@/lib/supabase/dailyCashSummary';
 import { calculateGameClubIncome } from '@/lib/calculations/dailyCash';
 import { canEditEntryForRole, getEditDeadline } from '@/lib/time/editWindow';
@@ -33,6 +35,7 @@ import {
   FormSkeleton,
   InlineAlert,
   MetricGridSkeleton,
+  Modal,
   Money,
   PageHeader,
   SectionHeading,
@@ -128,6 +131,7 @@ function PaymentField({ id, label, value, icon: Icon, currency, disabled, onChan
 export default function DailyCashPage() {
   const t = useTranslations('dailyCash');
   const tc = useTranslations('common');
+  const tr = useTranslations('reports');
   const { selectedClubId, role: currentRole, businessDayStartHour, enabledPaymentMethods, featureAccess } = useClub();
   const { locale } = useAppLocale();
   const { showToast, toastElement } = useToast();
@@ -137,6 +141,7 @@ export default function DailyCashPage() {
   const [entry, setEntry] = useState<DailyCashEntry | null>(null);
   const [createdByName, setCreatedByName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
@@ -144,6 +149,8 @@ export default function DailyCashPage() {
   const [financeSummary, setFinanceSummary] = useState<DailyCashSummary | null>(null);
   const canSeeNetProfit = canReadFinancialTotals(currentRole, featureAccess);
   const loadSequence = useRef(0);
+  // An expense form filled in for one club must never be saved into another.
+  useEffect(() => { setExpenseDialogOpen(false); }, [selectedClubId]);
   const cancelLoads = useCallback(() => { loadSequence.current++; }, []);
   const isOwner = currentRole === 'owner';
   // Guards against double submit (state updates land a render later) and lets
@@ -403,9 +410,16 @@ export default function DailyCashPage() {
       title={t('title')}
       description={t('headerDescription')}
       action={(
-        <ButtonLink href="/reports" iconRight={<TrendingUp size={16} className="text-primary-600" aria-hidden="true" />}>
-          {t('reports')}
-        </ButtonLink>
+        <div className="flex flex-wrap gap-2">
+          {canAccessFeature(currentRole, featureAccess, 'expenses') && (
+            <Button variant="outline" onClick={() => setExpenseDialogOpen(true)} icon={<ReceiptText size={18} aria-hidden="true" />}>
+              {tr('registerExpense')}
+            </Button>
+          )}
+          <ButtonLink href="/reports" iconRight={<TrendingUp size={16} className="text-primary-600" aria-hidden="true" />}>
+            {t('reports')}
+          </ButtonLink>
+        </div>
       )}
     />
   );
@@ -585,6 +599,20 @@ export default function DailyCashPage() {
           </InlineAlert>
         </Card>
       )}
+
+      <Modal
+        open={expenseDialogOpen}
+        onClose={() => setExpenseDialogOpen(false)}
+        title={tr('registerExpense')}
+        size="xl"
+      >
+        <ExpenseRegistrationForm
+          onSaved={() => {
+            setExpenseDialogOpen(false);
+            showToast(tr('expenseRegistered'));
+          }}
+        />
+      </Modal>
 
       {toastElement}
       {confirmDialog}

@@ -64,7 +64,6 @@ import { isMissingDatabaseFunction } from '@/lib/supabase/errors';
 import { cn } from '@/lib/utils';
 import { todayIso } from '@/lib/utils';
 import { canAccessFeature } from '@/lib/permissions';
-import ExpenseRegistrationForm from './ExpensesPanel';
 import { EXPENSE_CATEGORIES, isKnownExpenseCategory } from '@/lib/expenseCategories';
 
 const emptyReportRows = {
@@ -178,7 +177,6 @@ export default function ReportsPage() {
   const { locale } = useAppLocale();
   const { selectedClubId, businessDayStartHour, role, featureAccess } = useClub();
   const hasReportsAccess = canAccessFeature(role, featureAccess, 'reports');
-  const hasExpensesAccess = canAccessFeature(role, featureAccess, 'expenses');
   const businessToday = useMemo(() => todayIso(new Date(), businessDayStartHour), [businessDayStartHour]);
   const [range, setRange] = useState(() => getDashboardRange('month', businessToday));
   const [reportRows, setReportRows] = useState(emptyReportRows);
@@ -192,7 +190,6 @@ export default function ReportsPage() {
   const { confirm, confirmDialog } = useConfirm();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<{ activity: MoneyReportActivity; date: string } | null>(null);
-  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const requestSequence = useRef(0);
   const currentClubId = useRef(selectedClubId);
   const deletePending = useRef(false);
@@ -359,13 +356,10 @@ export default function ReportsPage() {
     return () => { requestSequence.current += 1; };
   }, [loadReport]);
 
-  // Dialogs belong to the club they were opened for: close them on a club
-  // switch so an expense can never be registered into the newly selected club
-  // from a form the user filled in for the previous one.
+  // Dialogs belong to the club they were opened for: close them on a club switch.
   useEffect(() => {
     currentClubId.current = selectedClubId;
     setSelectedEntry(null);
-    setExpenseDialogOpen(false);
     setActionError('');
   }, [selectedClubId]);
 
@@ -584,22 +578,11 @@ export default function ReportsPage() {
     }] : []),
   ];
 
-  async function handleExpenseRegistered() {
-    setExpenseDialogOpen(false);
-    showToast(t('expenseRegistered'));
-    if (hasReportsAccess) await loadReport({ silent: true });
-  }
-
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={hasExpensesAccess ? (
-          <Button variant="outline" onClick={() => setExpenseDialogOpen(true)} icon={<ReceiptText size={18} aria-hidden="true" />}>
-            {t('registerExpense')}
-          </Button>
-        ) : undefined}
       />
 
       {!hasReportsAccess && <InlineAlert variant="info">{tc('accessDeniedDescription')}</InlineAlert>}
@@ -768,17 +751,6 @@ export default function ReportsPage() {
             </dl>
           </div>
         )}
-      </Modal>
-
-      <Modal
-        open={expenseDialogOpen}
-        onClose={() => setExpenseDialogOpen(false)}
-        title={t('registerExpense')}
-        size="xl"
-      >
-        <ExpenseRegistrationForm
-          onSaved={handleExpenseRegistered}
-        />
       </Modal>
 
       {toastElement}
